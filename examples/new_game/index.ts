@@ -20,6 +20,12 @@ export const userState = defineUserState({})
 export type UserStateType = typeof userState
 
 export const symbols = defineSymbols({
+  S: new GameSymbol({
+    id: "S",
+    properties: {
+      isScatter: true,
+    },
+  }),
   W: new GameSymbol({
     id: "W",
     properties: {
@@ -151,7 +157,16 @@ export const game = createSlotGame<GameType>({
   gameModes,
   symbols,
   padSymbols: 1,
-  scatterToFreespins: {},
+  scatterToFreespins: {
+    [SPIN_TYPE.BASE_GAME]: {
+      // Future: 3 scatters will trigger bonus game
+      // Future: 4 scatters will trigger super bonus game  
+      // Future: 5 scatters will trigger hidden bonus game
+    },
+    [SPIN_TYPE.FREE_SPINS]: {
+      // Future: retrigger configuration
+    },
+  },
   userState,
   hooks: {
     onHandleGameFlow,

@@ -6,6 +6,7 @@ type Context = GameContext<GameModesType, SymbolsType, UserStateType>
 export function onHandleGameFlow(ctx: Context) {
   drawBoard(ctx)
   addRevealEvent(ctx)
+  handleAnticipation(ctx)
   const wildReelMultipliers = handleExpandingWilds(ctx)
   handleWins(ctx, wildReelMultipliers)
   ctx.services.wallet.confirmSpinWin()
@@ -67,6 +68,24 @@ function addRevealEvent(ctx: Context) {
       anticipation: anticipationValues,
     },
   })
+}
+
+function handleAnticipation(ctx: Context) {
+  const scatter = ctx.config.symbols.get("S")!
+  const [_, scatterCount] = ctx.services.board.countSymbolsOnBoard(scatter)
+
+  let count = 0
+
+  for (const [i, reel] of ctx.services.board.getBoardReels().entries()) {
+    // If we already have 2 scatters, set anticipation for remaining reels
+    if (count >= 2) {
+      ctx.services.board.setAnticipationForReel(i, true)
+    }
+    // Count scatters on this reel
+    if (scatterCount[i] > 0) {
+      count++
+    }
+  }
 }
 
 function handleExpandingWilds(ctx: Context): Map<number, number> {

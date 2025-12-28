@@ -2,6 +2,7 @@ import { GeneratedReelSet } from "@slot-engine/core"
 
 const SYM_WEIGHTS = {
   base: {
+    S: 8,
     W: 10,
     WR: 5,
     H1: 15,
@@ -26,9 +27,11 @@ export const GENERATORS = {
     },
     spaceBetweenSameSymbols: {
       WR: 5,
+      S: 5
     },
     spaceBetweenSymbols: {
       W: { WR: 5},
+      S: { WR: 5, W: 5},
     },
   }),
 } as const
