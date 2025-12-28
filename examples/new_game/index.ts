@@ -14,37 +14,22 @@ import {
 } from "@slot-engine/core"
 import { GENERATORS } from "./src/reels"
 import { onHandleGameFlow } from "./src/onHandleGameFlow"
-import {
-  freeSpinsUpgradeEvaluation,
-  maxwinReelsEvaluation,
-  superFreespinsReelsEvaluation,
-  upgradeIntoMaxwinReelsEvaluation,
-} from "./src/evaluations"
 
-export const userState = defineUserState({
-  triggeredSuperFreespins: false,
-  freespinsUpgradedToSuper: false,
-})
+export const userState = defineUserState({})
 
 export type UserStateType = typeof userState
 
 export const symbols = defineSymbols({
-  S: new GameSymbol({
-    id: "S",
-    properties: {
-      isScatter: true,
-    },
-  }),
-  SS: new GameSymbol({
-    id: "SS",
-    properties: {
-      isScatter: true,
-      isSuperScatter: true,
-    },
-  }),
   W: new GameSymbol({
     id: "W",
     properties: {
+      isWild: true,
+    },
+  }),
+  WR: new GameSymbol({
+    id: "WR",
+    properties: {
+      isWildReel: true,
       isWild: true,
     },
   }),
@@ -130,128 +115,26 @@ export const gameModes = defineGameModes({
     cost: 1,
     rtp: 0.96,
     reelsAmount: 5,
-    symbolsPerReel: [3, 3, 3, 3, 3],
+    symbolsPerReel: [5, 5, 5, 5, 5],
     isBonusBuy: false,
     reelSets: [...Object.values(GENERATORS)],
     resultSets: [
       new ResultSet({
         criteria: "0",
-        quota: 0.4,
+        quota: 0.3,
         multiplier: 0,
         reelWeights: {
-          [SPIN_TYPE.BASE_GAME]: { base1: 1 },
-          [SPIN_TYPE.FREE_SPINS]: { bonus1: 1 },
+          [SPIN_TYPE.BASE_GAME]: { base: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { base: 1 },
         },
       }),
       new ResultSet({
         criteria: "basegame",
-        quota: 0.4,
+        quota: 0.7,
         reelWeights: {
-          [SPIN_TYPE.BASE_GAME]: { base1: 1 },
-          [SPIN_TYPE.FREE_SPINS]: { bonus1: 1 },
+          [SPIN_TYPE.BASE_GAME]: { base: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { base: 1 },
         },
-      }),
-      new ResultSet({
-        criteria: "freespins",
-        quota: 0.1,
-        forceFreespins: true,
-        reelWeights: {
-          [SPIN_TYPE.BASE_GAME]: { base1: 1 },
-          [SPIN_TYPE.FREE_SPINS]: { bonus1: 3, bonus2: 1 },
-        },
-      }),
-      new ResultSet({
-        criteria: "freespinsUpgradeToSuper",
-        quota: 0.01,
-        forceFreespins: true,
-        reelWeights: {
-          [SPIN_TYPE.BASE_GAME]: { base1: 1 },
-          [SPIN_TYPE.FREE_SPINS]: { bonus1: 3, bonus2: 1 },
-          evaluate: superFreespinsReelsEvaluation,
-        },
-        userData: { upgradeFreespins: true },
-        evaluate: freeSpinsUpgradeEvaluation,
-      }),
-      new ResultSet({
-        criteria: "superFreespins",
-        quota: 0.01,
-        forceFreespins: true,
-        reelWeights: {
-          [SPIN_TYPE.BASE_GAME]: { base1: 1 },
-          [SPIN_TYPE.FREE_SPINS]: { bonus1: 3, bonus2: 1 },
-          evaluate: superFreespinsReelsEvaluation,
-        },
-        userData: { forceSuperFreespins: true },
-      }),
-      new ResultSet({
-        criteria: "freespinsUpgradeToSuperMaxwin",
-        quota: 0.0005,
-        forceMaxWin: true,
-        forceFreespins: true,
-        reelWeights: {
-          [SPIN_TYPE.BASE_GAME]: { base1: 1 },
-          [SPIN_TYPE.FREE_SPINS]: { bonus1: 1, bonus2: 3 },
-          evaluate: upgradeIntoMaxwinReelsEvaluation,
-        },
-        userData: { upgradeFreespins: true },
-        evaluate: freeSpinsUpgradeEvaluation,
-      }),
-      new ResultSet({
-        criteria: "maxwin",
-        quota: 0.0005,
-        forceMaxWin: true,
-        forceFreespins: true,
-        reelWeights: {
-          [SPIN_TYPE.BASE_GAME]: { base1: 1 },
-          [SPIN_TYPE.FREE_SPINS]: { bonus1: 1, bonus2: 3 },
-          evaluate: maxwinReelsEvaluation,
-        },
-        userData: { forceSuperFreespins: true },
-      }),
-    ],
-  }),
-  bonus: new GameMode({
-    name: "bonus",
-    cost: 70,
-    rtp: 0.96,
-    reelsAmount: 5,
-    symbolsPerReel: [3, 3, 3, 3, 3],
-    isBonusBuy: true,
-    reelSets: [...Object.values(GENERATORS)],
-    resultSets: [
-      new ResultSet({
-        criteria: "freespins",
-        quota: 0.9,
-        forceFreespins: true,
-        reelWeights: {
-          [SPIN_TYPE.BASE_GAME]: { base1: 1 },
-          [SPIN_TYPE.FREE_SPINS]: { bonus1: 3, bonus2: 1 },
-        },
-      }),
-      new ResultSet({
-        criteria: "freespinsUpgradeToSuper",
-        quota: 0.05,
-        forceFreespins: true,
-        reelWeights: {
-          [SPIN_TYPE.BASE_GAME]: { base1: 1 },
-          [SPIN_TYPE.FREE_SPINS]: { bonus1: 1, bonus2: 2 },
-          evaluate: superFreespinsReelsEvaluation,
-        },
-        userData: { upgradeFreespins: true },
-        evaluate: freeSpinsUpgradeEvaluation,
-      }),
-      new ResultSet({
-        criteria: "freespinsUpgradeToSuperMaxwin",
-        quota: 0.005,
-        forceMaxWin: true,
-        forceFreespins: true,
-        reelWeights: {
-          [SPIN_TYPE.BASE_GAME]: { base1: 1 },
-          [SPIN_TYPE.FREE_SPINS]: { bonus1: 1, bonus2: 3 },
-          evaluate: upgradeIntoMaxwinReelsEvaluation,
-        },
-        userData: { upgradeFreespins: true },
-        evaluate: freeSpinsUpgradeEvaluation,
       }),
     ],
   }),
@@ -262,24 +145,13 @@ export type GameModesType = typeof gameModes
 export type GameType = InferGameType<GameModesType, SymbolsType, UserStateType>
 
 export const game = createSlotGame<GameType>({
-  id: "example-01",
-  name: "Example Lines Game",
-  maxWinX: 2000,
+  id: "new-game",
+  name: "New Slot Game",
+  maxWinX: 10000,
   gameModes,
   symbols,
   padSymbols: 1,
-  scatterToFreespins: {
-    [SPIN_TYPE.BASE_GAME]: {
-      3: 10,
-      4: 12,
-      5: 15,
-    },
-    [SPIN_TYPE.FREE_SPINS]: {
-      3: 6,
-      4: 8,
-      5: 10,
-    },
-  },
+  scatterToFreespins: {},
   userState,
   hooks: {
     onHandleGameFlow,
@@ -289,7 +161,6 @@ export const game = createSlotGame<GameType>({
 game.configureSimulation({
   simRunsAmount: {
     base: 10000,
-    bonus: 10000,
   },
   concurrency: 8,
 })
@@ -298,85 +169,15 @@ game.configureOptimization({
   gameModes: {
     base: {
       conditions: {
-        freespinsUpgradeToSuperMaxwin: new OptimizationConditions({
-          rtp: 0.002,
-          avgWin: 2000,
-          searchConditions: {
-            criteria: "freespinsUpgradeToSuperMaxwin",
-          },
-          priority: 10,
-        }),
-        maxwin: new OptimizationConditions({
-          rtp: 0.008,
-          avgWin: 2000,
-          searchConditions: {
-            criteria: "maxwin",
-          },
-          priority: 8,
-        }),
         "0": new OptimizationConditions({
           rtp: 0,
           avgWin: 0,
           searchConditions: 0,
-          priority: 6,
-        }),
-        freespinsUpgradeToSuper: new OptimizationConditions({
-          rtp: 0.03,
-          hitRate: 500,
-          searchConditions: {
-            criteria: "freespinsUpgradeToSuper",
-          },
-          priority: 4,
-        }),
-        superFreespins: new OptimizationConditions({
-          rtp: 0.02,
-          hitRate: 500,
-          searchConditions: {
-            criteria: "superFreespins",
-          },
-          priority: 3,
-        }),
-        freespins: new OptimizationConditions({
-          rtp: 0.38,
-          hitRate: 150,
-          searchConditions: {
-            criteria: "freespins",
-          },
           priority: 2,
         }),
         basegame: new OptimizationConditions({
-          rtp: 0.52,
+          rtp: 0.96,
           hitRate: 4,
-          priority: 1,
-        }),
-      },
-      scaling: new OptimizationScaling([]),
-      parameters: new OptimizationParameters(),
-    },
-    bonus: {
-      conditions: {
-        freespinsUpgradeToSuperMaxwin: new OptimizationConditions({
-          rtp: 0.12,
-          avgWin: 2000,
-          searchConditions: {
-            criteria: "freespinsUpgradeToSuperMaxwin",
-          },
-          priority: 10,
-        }),
-        freespinsUpgradeToSuper: new OptimizationConditions({
-          rtp: 0.24,
-          hitRate: 25,
-          searchConditions: {
-            criteria: "freespinsUpgradeToSuper",
-          },
-          priority: 5,
-        }),
-        freespins: new OptimizationConditions({
-          rtp: 0.6,
-          hitRate: "x",
-          searchConditions: {
-            criteria: "freespins",
-          },
           priority: 1,
         }),
       },
@@ -388,12 +189,12 @@ game.configureOptimization({
 
 game.runTasks({
   doSimulation: true,
-  doOptimization: false,
+  doOptimization: true,
   optimizationOpts: {
     gameModes: ["base"],
   },
   doAnalysis: true,
   analysisOpts: {
-    gameModes: ["base", "bonus"],
+    gameModes: ["base"],
   },
 })

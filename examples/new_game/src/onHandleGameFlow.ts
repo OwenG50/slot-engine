@@ -1,311 +1,312 @@
-import {
-  GameContext,
-  GameSymbol,
-  LinesWinType,
-  Reels,
-  SPIN_TYPE,
-} from "@slot-engine/core"
+import { GameContext, GameSymbol, LinesWinType } from "@slot-engine/core"
 import { GameModesType, SymbolsType, UserStateType } from ".."
 
 type Context = GameContext<GameModesType, SymbolsType, UserStateType>
 
 export function onHandleGameFlow(ctx: Context) {
   drawBoard(ctx)
-  ctx.services.data.addBookEvent({
-    type: "test",
-    data: { test: 123 },
-  })
-  handleAnticipation(ctx)
-  handleWins(ctx)
+  addRevealEvent(ctx)
+  const wildReelMultipliers = handleExpandingWilds(ctx)
+  handleWins(ctx, wildReelMultipliers)
   ctx.services.wallet.confirmSpinWin()
-  checkFreespins(ctx)
 }
 
 function drawBoard(ctx: Context) {
   const reels = ctx.services.board.getRandomReelset()
-  const scatter = ctx.config.symbols.get("S")!
-  const superScatter = ctx.config.symbols.get("SS")!
+  ctx.services.board.resetBoard()
+  ctx.services.board.drawBoardWithRandomStops(reels)
+}
 
-  let numScatters = Number(
-    ctx.services.rng.weightedRandom(
-      getScatterWeights(ctx.state.currentResultSet.criteria),
-    ),
-  )
-  numScatters = ctx.services.game.verifyScatterCount(numScatters)
+function addRevealEvent(ctx: Context) {
+  const boardReels = ctx.services.board.getBoardReels()
+  const paddingTop = ctx.services.board.getPaddingTop()
+  const paddingBottom = ctx.services.board.getPaddingBottom()
+  const anticipation = ctx.services.board.getAnticipation()
 
-  if (
-    // If super free spins are forced via the result set, draw board with one super scatter
-    ctx.state.currentResultSet.forceFreespins &&
-    ctx.state.currentResultSet.userData?.forceSuperFreespins &&
-    ctx.state.currentSpinType == SPIN_TYPE.BASE_GAME
-  ) {
-    drawSuperFSTriggerBoard(ctx, reels, scatter, superScatter, numScatters)
-  } else if (
-    // If free spins are forced via the result set, draw board with scatters
-    ctx.state.currentResultSet.forceFreespins &&
-    ctx.state.currentSpinType == SPIN_TYPE.BASE_GAME
-  ) {
-    while (true) {
-      ctx.services.board.resetBoard()
+  // Build the board data structure with symbol info, including padding
+  // Each reel array contains: [paddingTop symbols, main symbols, paddingBottom symbols]
+  const board = boardReels.map((reel, reelIndex) => {
+    const allSymbols: GameSymbol[] = [
+      ...(paddingTop[reelIndex] || []),
+      ...reel,
+      ...(paddingBottom[reelIndex] || []),
+    ]
 
-      const reelStops = ctx.services.board.getReelStopsForSymbol(reels, scatter)
-      const scatterReelStops = ctx.services.board.getRandomReelStops(
-        reels,
-        reelStops,
-        numScatters,
-      )
-
-      ctx.services.board.drawBoardWithForcedStops({
-        reels,
-        forcedStops: scatterReelStops,
-      })
-
-      const scatInvalid = ctx.services.board.isSymbolOnAnyReelMultipleTimes(scatter)
-      const [scatCount] = ctx.services.board.countSymbolsOnBoard(scatter)
-      const [superScatCount] = ctx.services.board.countSymbolsOnBoard(superScatter)
-
-      if (superScatCount > 0) continue
-      if (scatCount == numScatters && !scatInvalid) break
-    }
-  } else if (
-    // If spin should NOT trigger free spins, draw board with up to 2 scatters
-    !ctx.state.currentResultSet.forceFreespins &&
-    ctx.state.currentSpinType == SPIN_TYPE.BASE_GAME
-  ) {
-    while (true) {
-      ctx.services.board.resetBoard()
-      ctx.services.board.drawBoardWithRandomStops(reels)
-
-      const scatInvalid = ctx.services.board.isSymbolOnAnyReelMultipleTimes(scatter)
-      const superScatInvalid =
-        ctx.services.board.isSymbolOnAnyReelMultipleTimes(superScatter)
-      const [scatCount] = ctx.services.board.countSymbolsOnBoard(scatter)
-      const [superScatCount] = ctx.services.board.countSymbolsOnBoard(superScatter)
-      const scatters = scatCount + superScatCount
-
-      if (
-        scatters > ctx.config.anticipationTriggers[ctx.state.currentSpinType] ||
-        superScatCount > 1
-      ) {
-        continue
+    return allSymbols.map((symbol: GameSymbol) => {
+      const symbolData: Record<string, any> = {
+        name: symbol.id,
       }
 
-      if (!scatInvalid && !superScatInvalid) break
+      // Add symbol properties if they exist
+      if (symbol.properties.get("isWild")) {
+        symbolData["Wild"] = true
+      }
+      if (symbol.properties.get("isScatter")) {
+        symbolData["Scatter"] = true
+      }
+      if (symbol.properties.get("isWildReel")) {
+        symbolData["Wild Reel"] = true
+      }
+
+      return symbolData
+    })
+  })
+
+  // Get the padding positions (reel stops used for drawing)
+  const paddingPositions = new Array(boardReels.length).fill(0)
+
+  // Convert anticipation from boolean to 0/1
+  const anticipationValues = anticipation.map((value) => (value ? 1 : 0))
+
+  ctx.services.data.addBookEvent({
+    type: "reveal",
+    data: {
+      board,
+      paddingPositions,
+      gameType: ctx.state.currentResultSet.criteria,
+      anticipation: anticipationValues,
+    },
+  })
+}
+
+function handleExpandingWilds(ctx: Context): Map<number, number> {
+  const boardReels = ctx.services.board.getBoardReels()
+  const wildReelMultipliers = new Map<number, number>()
+  const MULTIPLIER_VALUES = [2, 3, 4, 5, 6, 8, 10, 15, 20, 25]
+
+  // Find all wild reel positions
+  const wildReelIndices: number[] = []
+  boardReels.forEach((reel, reelIndex) => {
+    const hasWildReel = reel.some((symbol) => symbol.properties.get("isWildReel"))
+    if (hasWildReel) {
+      wildReelIndices.push(reelIndex)
+      wildReelMultipliers.set(reelIndex, 1) // Start with base multiplier of 1
     }
-  } else if (
-    // If FS should upgrade to super FS, increase chance of upgrade withing the current freespins batch.
-    // We do this to improve performance of matching ResultSets.
-    ctx.state.currentSpinType == SPIN_TYPE.FREE_SPINS &&
-    ctx.state.currentResultSet.userData?.upgradeFreespins &&
-    !ctx.state.userData.freespinsUpgradedToSuper
-  ) {
-    const result = Math.round(ctx.services.rng.randomFloat(1, 100))
-    const shouldUpgrade = result <= 15
-    if (shouldUpgrade) {
-      drawSuperFSTriggerBoard(ctx, reels, scatter, superScatter, numScatters)
-    } else {
-      drawDefaultBoard(ctx, reels, scatter, superScatter)
-    }
+  })
+
+  // Find all regular wild positions
+  const regularWilds: Array<{ reel: number; row: number; collectibleMult: number }> = []
+  boardReels.forEach((reel, reelIndex) => {
+    reel.forEach((symbol, rowIndex) => {
+      if (
+        symbol.properties.get("isWild") &&
+        !symbol.properties.get("isWildReel")
+      ) {
+        regularWilds.push({
+          reel: reelIndex,
+          row: rowIndex,
+          collectibleMult: 0, // Will be assigned if wild reels are present
+        })
+      }
+    })
+  })
+
+  // If both wild reels and regular wilds exist, assign multipliers
+  let totalMultiplier = 0
+  if (wildReelIndices.length > 0 && regularWilds.length > 0) {
+    // Assign random multipliers to each regular wild
+    regularWilds.forEach((wild) => {
+      const randomMult =
+        MULTIPLIER_VALUES[
+          Math.floor(ctx.services.rng.randomFloat(0, 1) * MULTIPLIER_VALUES.length)
+        ]!
+      wild.collectibleMult = randomMult
+      totalMultiplier += randomMult
+    })
+
+    // Assign total multiplier to all wild reels
+    wildReelIndices.forEach((reelIndex) => {
+      wildReelMultipliers.set(reelIndex, totalMultiplier)
+    })
+
+    // Create expanding wilds with multipliers
+    const expandingWilds: Array<{ reel: number; row: number; mult: number }> = []
+    wildReelIndices.forEach((reelIndex) => {
+      boardReels[reelIndex]!.forEach((symbol, rowIndex) => {
+        if (!symbol.properties.get("isWildReel")) {
+          expandingWilds.push({
+            reel: reelIndex,
+            row: rowIndex,
+            mult: totalMultiplier,
+          })
+        }
+      })
+    })
+
+    // Add incrementExpandingWildMultipliers event
+    ctx.services.data.addBookEvent({
+      type: "incrementExpandingWildMultipliers",
+      data: {
+        expandingWilds,
+        wilds: regularWilds,
+      },
+    })
   } else {
-    drawDefaultBoard(ctx, reels, scatter, superScatter)
+    // No multipliers, just record positions with mult: 0
+    const newWilds: Array<{ reel: number; row: number; mult: number }> = []
+    wildReelIndices.forEach((reelIndex) => {
+      boardReels[reelIndex]!.forEach((symbol, rowIndex) => {
+        if (!symbol.properties.get("isWildReel")) {
+          newWilds.push({
+            reel: reelIndex,
+            row: rowIndex,
+            mult: 0,
+          })
+        }
+      })
+    })
+
+    // Add expanding wilds event if any wilds were created
+    if (newWilds.length > 0) {
+      ctx.services.data.addBookEvent({
+        type: "newExpandingWilds",
+        data: {
+          newWilds,
+        },
+      })
+    }
   }
+
+  return wildReelMultipliers
 }
 
-function handleAnticipation(ctx: Context) {
-  const scatter = ctx.config.symbols.get("S")!
-  const superScatter = ctx.config.symbols.get("SS")!
+function handleWins(ctx: Context, wildReelMultipliers: Map<number, number>) {
+  const boardReels = ctx.services.board.getBoardReels()
+  const wildSymbol = ctx.config.symbols.get("W")!
 
-  const [_, scatCount] = ctx.services.board.countSymbolsOnBoard(scatter)
-  const [__, superScatCount] = ctx.services.board.countSymbolsOnBoard(superScatter)
+  // Create a modified board for win evaluation where WR reels are replaced with wilds
+  const modifiedBoardReels = boardReels.map((reel, reelIndex) => {
+    const hasWildReel = reel.some((symbol) => symbol.properties.get("isWildReel"))
 
-  let count = 0
-
-  for (const [i, reel] of ctx.services.board.getBoardReels().entries()) {
-    if (count >= ctx.config.anticipationTriggers[ctx.state.currentSpinType]) {
-      ctx.services.board.setAnticipationForReel(i, true)
+    if (hasWildReel) {
+      // Replace all symbols on this reel with wild symbols for win calculation
+      return reel.map(() => wildSymbol)
     }
-    if (scatCount[i] > 0 || superScatCount[i] > 0) {
-      count++
-    }
-  }
-}
 
-function handleWins(ctx: Context) {
+    return reel
+  })
+
   const lines = new LinesWinType({
     ctx,
     lines: {
       1: [0, 0, 0, 0, 0],
       2: [1, 1, 1, 1, 1],
       3: [2, 2, 2, 2, 2],
-      4: [2, 1, 0, 1, 2],
-      5: [0, 1, 2, 1, 0],
-      6: [2, 1, 2, 1, 2],
-      7: [0, 1, 0, 1, 0],
-      8: [2, 2, 1, 0, 0],
-      9: [0, 0, 1, 2, 2],
-      10: [1, 0, 0, 0, 1],
-      11: [1, 2, 2, 2, 1],
-      12: [0, 1, 1, 1, 0],
-      13: [2, 1, 1, 1, 2],
-      14: [1, 0, 1, 0, 1],
-      15: [1, 2, 1, 2, 1],
+      4: [3, 3, 3, 3, 3],
+      5: [4, 4, 4, 4, 4],
+      6: [0, 1, 0, 1, 0],
+      7: [1, 2, 1, 2, 1],
+      8: [2, 3, 2, 3, 2],
+      9: [3, 4, 3, 4, 3],
+      10: [1, 0, 1, 0, 1],
+      11: [2, 1, 2, 1, 2],
+      12: [3, 2, 3, 2, 3],
+      13: [4, 3, 4, 3, 4],
+      14: [0, 1, 2, 3, 4],
+      15: [4, 3, 2, 1, 0],
     },
     wildSymbol: { isWild: true },
   })
 
   const { payout, winCombinations } = lines
-    .evaluateWins(ctx.services.board.getBoardReels())
+    .evaluateWins(modifiedBoardReels)
     .getWins()
 
-  ctx.services.wallet.addSpinWin(payout)
-}
+  // Apply wild reel multipliers to wins
+  let totalPayout = 0
+  const processedWins = winCombinations.map((combo) => {
+    // Check if this win uses any wild reel positions and sum their multipliers
+    let wildReelMultiplier = 1
+    const usedWildReels = new Set<number>()
 
-function checkFreespins(ctx: Context) {
-  const scatter = ctx.config.symbols.get("S")!
-  const superScatter = ctx.config.symbols.get("SS")!
-
-  const [scatCount] = ctx.services.board.countSymbolsOnBoard(scatter)
-  const [superScatCount] = ctx.services.board.countSymbolsOnBoard(superScatter)
-
-  const scatters = scatCount + superScatCount
-
-  const freespinsAwarded = ctx.services.game.getFreeSpinsForScatters(
-    ctx.state.currentSpinType,
-    scatters,
-  )
-
-  // no freespins, return early
-  if (freespinsAwarded <= 0) return
-
-  ctx.services.game.awardFreespins(freespinsAwarded)
-
-  if (ctx.state.currentSpinType == SPIN_TYPE.BASE_GAME) {
-    ctx.services.data.recordSymbolOccurrence({
-      kind: scatters,
-      symbolId: scatter.id,
-      spinType: ctx.state.currentSpinType,
+    combo.symbols.forEach((sym) => {
+      if (wildReelMultipliers.has(sym.reelIndex)) {
+        usedWildReels.add(sym.reelIndex)
+      }
     })
 
-    ctx.services.data.record({
-      triggeredFS: true,
-    })
-
-    // TODO FS triggered event
-    if (superScatCount > 0) {
-      ctx.state.userData.triggeredSuperFreespins = true
-      ctx.services.data.record({
-        triggeredSuperFS: true,
+    // If the win uses wild reels, sum all their multipliers
+    if (usedWildReels.size > 0) {
+      wildReelMultiplier = 0
+      usedWildReels.forEach((reelIndex) => {
+        wildReelMultiplier += wildReelMultipliers.get(reelIndex) || 0
       })
-    }
-    ctx.state.currentSpinType = SPIN_TYPE.FREE_SPINS
-    playFreeSpins(ctx) // only call while in base game to avoid recursion
-    return // return to avoid checking freespins again after they were played
-  }
-
-  if (ctx.state.currentSpinType == SPIN_TYPE.FREE_SPINS) {
-    // TODO FS retrigger event
-    if (superScatCount > 0) {
-      // TODO Super FS upgrade event
-      ctx.state.userData.triggeredSuperFreespins = true
-      ctx.state.userData.freespinsUpgradedToSuper = true
-      ctx.services.data.record({
-        fsUpgradeToSuper: true,
-      })
-    }
-  }
-}
-
-function playFreeSpins(ctx: Context) {
-  while (ctx.state.currentFreespinAmount > 0) {
-    ctx.state.currentFreespinAmount--
-    drawBoard(ctx)
-    handleAnticipation(ctx)
-    handleWins(ctx)
-    ctx.services.wallet.confirmSpinWin()
-    checkFreespins(ctx)
-  }
-}
-
-function getScatterWeights(key: string) {
-  const SCATTER_WEIGHTS = {
-    freespins: {
-      3: 70,
-      4: 25,
-      5: 5,
-    },
-    superFreespins: {
-      3: 70,
-      4: 15,
-      5: 3,
-    },
-    maxwin: {
-      4: 1,
-      5: 2,
-    },
-  }
-
-  if (key in SCATTER_WEIGHTS) {
-    return SCATTER_WEIGHTS[key as keyof typeof SCATTER_WEIGHTS]
-  }
-
-  return SCATTER_WEIGHTS.freespins
-}
-
-function drawDefaultBoard(
-  ctx: Context,
-  reels: Reels,
-  scatter: GameSymbol,
-  superScatter: GameSymbol,
-) {
-  while (true) {
-    ctx.services.board.resetBoard()
-    ctx.services.board.drawBoardWithRandomStops(reels)
-
-    const scatInvalid = ctx.services.board.isSymbolOnAnyReelMultipleTimes(scatter)
-    const superScatInvalid =
-      ctx.services.board.isSymbolOnAnyReelMultipleTimes(superScatter)
-    const [superScatCount] = ctx.services.board.countSymbolsOnBoard(superScatter)
-
-    if (superScatCount > 1) {
-      continue
+      // Ensure at least 1x if something went wrong
+      if (wildReelMultiplier === 0) wildReelMultiplier = 1
     }
 
-    if (!scatInvalid && !superScatInvalid) break
-  }
-}
+    const multipliedPayout = combo.payout * wildReelMultiplier
+    totalPayout += multipliedPayout
 
-function drawSuperFSTriggerBoard(
-  ctx: Context,
-  reels: Reels,
-  scatter: GameSymbol,
-  superScatter: GameSymbol,
-  numScatters: number,
-) {
-  while (true) {
-    ctx.services.board.resetBoard()
+    return {
+      symbol: combo.baseSymbol.id,
+      kind: combo.kind,
+      win: multipliedPayout,
+      positions: combo.symbols.map((sym) => ({
+        reel: sym.reelIndex,
+        row: sym.posIndex,
+      })),
+      meta: {
+        lineIndex: combo.lineNumber,
+        multiplier: wildReelMultiplier,
+        winWithoutMult: combo.payout,
+        globalMult: 1,
+        lineMultiplier: wildReelMultiplier,
+      },
+    }
+  })
 
-    const reelStops = ctx.services.board.combineReelStops(
-      ctx.services.board.getReelStopsForSymbol(reels, scatter),
-      ctx.services.board.getReelStopsForSymbol(reels, superScatter),
-    )
-    const scatterReelStops = ctx.services.board.getRandomReelStops(
-      reels,
-      reelStops,
-      numScatters,
-    )
-
-    ctx.services.board.drawBoardWithForcedStops({
-      reels,
-      forcedStops: scatterReelStops,
+  // Add winInfo event if there are any wins
+  if (totalPayout > 0 && processedWins.length > 0) {
+    ctx.services.data.addBookEvent({
+      type: "winInfo",
+      data: {
+        totalWin: totalPayout,
+        wins: processedWins,
+      },
     })
 
-    const scatInvalid = ctx.services.board.isSymbolOnAnyReelMultipleTimes(scatter)
-    const superScatInvalid =
-      ctx.services.board.isSymbolOnAnyReelMultipleTimes(superScatter)
-    const [superScatCount] = ctx.services.board.countSymbolsOnBoard(superScatter)
+    // Calculate win level (simple example based on win amount)
+    const currentGameMode = ctx.services.game.getCurrentGameMode()
+    const winLevel = calculateWinLevel(totalPayout, currentGameMode.cost)
 
-    if (superScatCount == 1 && !scatInvalid && !superScatInvalid) {
-      break
-    }
+    // Add setWin event
+    ctx.services.data.addBookEvent({
+      type: "setWin",
+      data: {
+        amount: totalPayout,
+        winLevel,
+      },
+    })
+
+    // Add setTotalWin event
+    ctx.services.data.addBookEvent({
+      type: "setTotalWin",
+      data: {
+        amount: totalPayout,
+      },
+    })
+
+    // Add finalWin event
+    ctx.services.data.addBookEvent({
+      type: "finalWin",
+      data: {
+        amount: totalPayout,
+      },
+    })
   }
+
+  ctx.services.wallet.addSpinWin(totalPayout)
+}
+
+function calculateWinLevel(payout: number, betCost: number): number {
+  const multiplier = payout / betCost
+
+  if (multiplier >= 1000) return 5
+  if (multiplier >= 100) return 4
+  if (multiplier >= 10) return 3
+  if (multiplier >= 5) return 2
+  if (multiplier > 0) return 1
+
+  return 0
 }
