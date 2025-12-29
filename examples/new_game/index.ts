@@ -15,7 +15,10 @@ import {
 import { GENERATORS } from "./src/reels"
 import { onHandleGameFlow } from "./src/onHandleGameFlow"
 
-export const userState = defineUserState({})
+export const userState = defineUserState({
+  persistentWildReels: new Map<number, number>(), // reelIndex -> multiplier
+  totalFreeSpinsWin: 0,
+})
 
 export type UserStateType = typeof userState
 
@@ -131,15 +134,24 @@ export const gameModes = defineGameModes({
         multiplier: 0,
         reelWeights: {
           [SPIN_TYPE.BASE_GAME]: { base: 1 },
-          [SPIN_TYPE.FREE_SPINS]: { base: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { freespin: 1 },
         },
       }),
       new ResultSet({
         criteria: "basegame",
-        quota: 0.7,
+        quota: 0.6,
         reelWeights: {
           [SPIN_TYPE.BASE_GAME]: { base: 1 },
-          [SPIN_TYPE.FREE_SPINS]: { base: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { freespin: 1 },
+        },
+      }),
+      new ResultSet({
+        criteria: "freespins",
+        quota: 0.1,
+        forceFreespins: true,
+        reelWeights: {
+          [SPIN_TYPE.BASE_GAME]: { base: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { freespin: 1 },
         },
       }),
     ],
@@ -159,12 +171,10 @@ export const game = createSlotGame<GameType>({
   padSymbols: 1,
   scatterToFreespins: {
     [SPIN_TYPE.BASE_GAME]: {
-      // Future: 3 scatters will trigger bonus game
-      // Future: 4 scatters will trigger super bonus game  
-      // Future: 5 scatters will trigger hidden bonus game
+      3: 10,
     },
     [SPIN_TYPE.FREE_SPINS]: {
-      // Future: retrigger configuration
+      // No retriggering in this implementation
     },
   },
   userState,
@@ -188,12 +198,20 @@ game.configureOptimization({
           rtp: 0,
           avgWin: 0,
           searchConditions: 0,
-          priority: 2,
+          priority: 3,
         }),
         basegame: new OptimizationConditions({
-          rtp: 0.96,
+          rtp: 0.7,
           hitRate: 4,
           priority: 1,
+        }),
+        freespins: new OptimizationConditions({
+          rtp: 0.26,
+          hitRate: 150,
+          searchConditions: {
+            criteria: "freespins",
+          },
+          priority: 2,
         }),
       },
       scaling: new OptimizationScaling([]),
@@ -204,7 +222,7 @@ game.configureOptimization({
 
 game.runTasks({
   doSimulation: true,
-  doOptimization: true,
+  doOptimization: false,
   optimizationOpts: {
     gameModes: ["base"],
   },
