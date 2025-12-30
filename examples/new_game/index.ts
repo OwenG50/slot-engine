@@ -181,6 +181,165 @@ export const gameModes = defineGameModes({
       }),
     ],
   }),
+  extraChance: new GameMode({
+    name: "extraChance",
+    cost: 2,
+    rtp: 0.96,
+    reelsAmount: 5,
+    symbolsPerReel: [5, 5, 5, 5, 5],
+    isBonusBuy: false,
+    reelSets: [...Object.values(GENERATORS)],
+    resultSets: [
+      new ResultSet({
+        criteria: "0",
+        quota: 0.2,
+        multiplier: 0,
+        reelWeights: {
+          [SPIN_TYPE.BASE_GAME]: { base: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { freespin: 1 },
+        },
+      }),
+      new ResultSet({
+        criteria: "basegame",
+        quota: 0.5,
+        reelWeights: {
+          [SPIN_TYPE.BASE_GAME]: { base: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { freespin: 1 },
+        },
+      }),
+      new ResultSet({
+        criteria: "freespins",
+        quota: 0.225,
+        forceFreespins: true,
+        reelWeights: {
+          [SPIN_TYPE.BASE_GAME]: { base: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { freespin: 1 },
+        },
+      }),
+      new ResultSet({
+        criteria: "superfreespins",
+        quota: 0.045,
+        forceFreespins: true,
+        reelWeights: {
+          [SPIN_TYPE.BASE_GAME]: { base: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { superfreespin: 1 },
+        },
+      }),
+      new ResultSet({
+        criteria: "hiddenfreespins",
+        quota: 0.03,
+        forceFreespins: true,
+        reelWeights: {
+          [SPIN_TYPE.BASE_GAME]: { base: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { hiddenfreespin: 1 },
+        },
+      }),
+    ],
+  }),
+  guaranteedWildReelAndWild: new GameMode({
+    name: "guaranteedWildReelAndWild",
+    cost: 50,
+    rtp: 0.96,
+    reelsAmount: 5,
+    symbolsPerReel: [5, 5, 5, 5, 5],
+    isBonusBuy: false,
+    reelSets: [...Object.values(GENERATORS)],
+    resultSets: [
+      new ResultSet({
+        criteria: "0",
+        quota: 0.3,
+        multiplier: 0,
+        reelWeights: {
+          [SPIN_TYPE.BASE_GAME]: { base: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { freespin: 1 },
+        },
+      }),
+      new ResultSet({
+        criteria: "basegame",
+        quota: 0.6,
+        reelWeights: {
+          [SPIN_TYPE.BASE_GAME]: { base: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { freespin: 1 },
+        },
+      }),
+      new ResultSet({
+        criteria: "freespins",
+        quota: 0.075,
+        forceFreespins: true,
+        reelWeights: {
+          [SPIN_TYPE.BASE_GAME]: { base: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { freespin: 1 },
+        },
+      }),
+      new ResultSet({
+        criteria: "superfreespins",
+        quota: 0.015,
+        forceFreespins: true,
+        reelWeights: {
+          [SPIN_TYPE.BASE_GAME]: { base: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { superfreespin: 1 },
+        },
+      }),
+      new ResultSet({
+        criteria: "hiddenfreespins",
+        quota: 0.01,
+        forceFreespins: true,
+        reelWeights: {
+          [SPIN_TYPE.BASE_GAME]: { base: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { hiddenfreespin: 1 },
+        },
+      }),
+    ],
+  }),
+  bonusbuy: new GameMode({
+    name: "bonusbuy",
+    cost: 100,
+    rtp: 0.96,
+    reelsAmount: 5,
+    symbolsPerReel: [5, 5, 5, 5, 5],
+    isBonusBuy: true,
+    reelSets: [...Object.values(GENERATORS)],
+    resultSets: [
+      new ResultSet({
+        criteria: "freespins",
+        quota: 1,
+        forceFreespins: true,
+        reelWeights: {
+          [SPIN_TYPE.BASE_GAME]: { base: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { freespin: 1 },
+        },
+      }),
+    ],
+  }),
+  superBonusBuy: new GameMode({
+    name: "superBonusBuy",
+    cost: 300,
+    rtp: 0.96,
+    reelsAmount: 5,
+    symbolsPerReel: [5, 5, 5, 5, 5],
+    isBonusBuy: true,
+    reelSets: [...Object.values(GENERATORS)],
+    resultSets: [
+      new ResultSet({
+        criteria: "superfreespins",
+        quota: 0.95,
+        forceFreespins: true,
+        reelWeights: {
+          [SPIN_TYPE.BASE_GAME]: { base: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { superfreespin: 1 },
+        },
+      }),
+      new ResultSet({
+        criteria: "hiddenfreespins",
+        quota: 0.05,
+        forceFreespins: true,
+        reelWeights: {
+          [SPIN_TYPE.BASE_GAME]: { base: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { hiddenfreespin: 1 },
+        },
+      }),
+    ],
+  }),
 })
 
 export type GameModesType = typeof gameModes
@@ -212,7 +371,11 @@ export const game = createSlotGame<GameType>({
 
 game.configureSimulation({
   simRunsAmount: {
-    base: 10000,
+    base: 100000,
+    extraChance: 100000,
+    guaranteedWildReelAndWild: 100000,
+    bonusbuy: 100000,
+    superBonusBuy: 100000,
   },
   concurrency: 8,
 })
@@ -260,17 +423,135 @@ game.configureOptimization({
       scaling: new OptimizationScaling([]),
       parameters: new OptimizationParameters(),
     },
+    extraChance: {
+      conditions: {
+        "0": new OptimizationConditions({
+          rtp: 0,
+          avgWin: 0,
+          searchConditions: 0,
+          priority: 3,
+        }),
+        basegame: new OptimizationConditions({
+          rtp: 0.56,
+          hitRate: 4,
+          priority: 1,
+        }),
+        freespins: new OptimizationConditions({
+          rtp: 0.32,
+          hitRate: 50,
+          searchConditions: {
+            criteria: "freespins",
+          },
+          priority: 2,
+        }),
+        superfreespins: new OptimizationConditions({
+          rtp: 0.06,
+          hitRate: 100,
+          searchConditions: {
+            criteria: "superfreespins",
+          },
+          priority: 4,
+        }),
+        hiddenfreespins: new OptimizationConditions({
+          rtp: 0.02,
+          hitRate: 150,
+          searchConditions: {
+            criteria: "hiddenfreespins",
+          },
+          priority: 5,
+        }),
+      },
+      scaling: new OptimizationScaling([]),
+      parameters: new OptimizationParameters(),
+    },
+    guaranteedWildReelAndWild: {
+      conditions: {
+        "0": new OptimizationConditions({
+          rtp: 0,
+          avgWin: 0,
+          searchConditions: 0,
+          priority: 3,
+        }),
+        basegame: new OptimizationConditions({
+          rtp: 0.68,
+          hitRate: 2,
+          priority: 1,
+        }),
+        freespins: new OptimizationConditions({
+          rtp: 0.22,
+          hitRate: 150,
+          searchConditions: {
+            criteria: "freespins",
+          },
+          priority: 2,
+        }),
+        superfreespins: new OptimizationConditions({
+          rtp: 0.04,
+          hitRate: 300,
+          searchConditions: {
+            criteria: "superfreespins",
+          },
+          priority: 4,
+        }),
+        hiddenfreespins: new OptimizationConditions({
+          rtp: 0.02,
+          hitRate: 500,
+          searchConditions: {
+            criteria: "hiddenfreespins",
+          },
+          priority: 5,
+        }),
+      },
+      scaling: new OptimizationScaling([]),
+      parameters: new OptimizationParameters(),
+    },
+    bonusbuy: {
+      conditions: {
+        freespins: new OptimizationConditions({
+          rtp: 0.96,
+          hitRate: 1,
+          searchConditions: {
+            criteria: "freespins",
+          },
+          priority: 1,
+        }),
+      },
+      scaling: new OptimizationScaling([]),
+      parameters: new OptimizationParameters(),
+    },
+    superBonusBuy: {
+      conditions: {
+        superfreespins: new OptimizationConditions({
+          rtp: 0.91,
+          hitRate: 1.05,
+          searchConditions: {
+            criteria: "superfreespins",
+          },
+          priority: 1,
+        }),
+        hiddenfreespins: new OptimizationConditions({
+          rtp: 0.05,
+          hitRate: 20,
+          searchConditions: {
+            criteria: "hiddenfreespins",
+          },
+          priority: 2,
+        }),
+      },
+      scaling: new OptimizationScaling([]),
+      parameters: new OptimizationParameters(),
+    },
   },
 })
 
 game.runTasks({
   doSimulation: true,
-  doOptimization: false,
+  doOptimization: true,
   optimizationOpts: {
-    gameModes: ["base"],
+    gameModes: ["base", "extraChance", "guaranteedWildReelAndWild", "bonusbuy", "superBonusBuy"],
   },
   doAnalysis: true,
   analysisOpts: {
-    gameModes: ["base"],
+    gameModes: ["base", "extraChance", "guaranteedWildReelAndWild", "bonusbuy", "superBonusBuy"],
   },
 })

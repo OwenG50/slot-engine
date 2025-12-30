@@ -74,6 +74,10 @@ function drawBoard(ctx: Context) {
       if (scatCount === targetScatters && !scatInvalid) break
     }
   } else {
+    // Check if this is the guaranteed wild reel and wild mode
+    const currentGameMode = ctx.services.game.getCurrentGameMode()
+    const isGuaranteedMode = currentGameMode.name === "guaranteedWildReelAndWild"
+    
     // Normal base game - limit to max 2 scatters
     while (true) {
       ctx.services.board.resetBoard()
@@ -82,7 +86,32 @@ function drawBoard(ctx: Context) {
       const scatInvalid = ctx.services.board.isSymbolOnAnyReelMultipleTimes(scatter)
       const [scatCount] = ctx.services.board.countSymbolsOnBoard(scatter)
 
-      if (scatCount <= 2 && !scatInvalid) break
+      // Base validation: max 2 scatters
+      if (scatCount > 2 || scatInvalid) continue
+
+      // Additional validation for guaranteed wild reel and wild mode
+      if (isGuaranteedMode) {
+        const wildReel = ctx.config.symbols.get("WR")!
+        const wild = ctx.config.symbols.get("W")!
+        const boardReels = ctx.services.board.getBoardReels()
+        
+        // Check if at least one wild reel exists
+        const hasWildReel = boardReels.some((reel) =>
+          reel.some((symbol) => symbol.properties.get("isWildReel"))
+        )
+        
+        // Check if at least one regular wild exists (not wild reel)
+        const hasRegularWild = boardReels.some((reel) =>
+          reel.some((symbol) => 
+            symbol.properties.get("isWild") && !symbol.properties.get("isWildReel")
+          )
+        )
+        
+        // Only break if both conditions are met
+        if (!hasWildReel || !hasRegularWild) continue
+      }
+      
+      break
     }
   }
 }
