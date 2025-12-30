@@ -28,7 +28,7 @@ export function onHandleGameFlow(ctx: Context) {
   
   // Only add finalWin if we're in base game and free spins weren't triggered
   if (spinTypeBeforeCheck === SPIN_TYPE.BASE_GAME && ctx.state.currentSpinType === SPIN_TYPE.BASE_GAME) {
-    const totalPayout = ctx.services.wallet.getCurrentWin()
+    const totalPayout = roundToDecimal(ctx.services.wallet.getCurrentWin())
     if (totalPayout > 0) {
       ctx.services.data.addBookEvent({
         type: "finalWin",
@@ -447,6 +447,7 @@ function handleWins(ctx: Context, wildReelMultipliers: Map<number, number>, isFr
     // Update total win tracking
     if (isFreeSpin) {
       ctx.state.userData.totalFreeSpinsWin += totalPayout
+      ctx.state.userData.totalFreeSpinsWin = roundToDecimal(ctx.state.userData.totalFreeSpinsWin)
       
       // Add setTotalWin event with accumulated total
       ctx.services.data.addBookEvent({
@@ -566,7 +567,7 @@ function playFreeSpins(ctx: Context) {
   }
 
   // Free spins ended
-  const totalWin = ctx.state.userData.totalFreeSpinsWin
+  const totalWin = roundToDecimal(ctx.state.userData.totalFreeSpinsWin)
   const currentGameMode = ctx.services.game.getCurrentGameMode()
   const winLevel = calculateWinLevel(totalWin, currentGameMode.cost)
 
