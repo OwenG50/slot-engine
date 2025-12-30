@@ -3,6 +3,12 @@ import { GameModesType, SymbolsType, UserStateType } from ".."
 
 type Context = GameContext<GameModesType, SymbolsType, UserStateType>
 
+// Helper function to round to 1 decimal places to avoid floating point precision issues
+function roundToDecimal(value: number, decimals: number = 1): number {
+  const multiplier = Math.pow(10, decimals)
+  return Math.round(value * multiplier) / multiplier
+}
+
 export function onHandleGameFlow(ctx: Context) {
   const isFreeSpin = ctx.state.currentSpinType === SPIN_TYPE.FREE_SPINS
   
@@ -362,7 +368,7 @@ function handleWins(ctx: Context, wildReelMultipliers: Map<number, number>, isFr
       })
     }
 
-    const multipliedPayout = combo.payout * wildReelMultiplier
+    const multipliedPayout = roundToDecimal(combo.payout * wildReelMultiplier)
     totalPayout += multipliedPayout
 
     return {
@@ -376,12 +382,15 @@ function handleWins(ctx: Context, wildReelMultipliers: Map<number, number>, isFr
       meta: {
         lineIndex: combo.lineNumber,
         multiplier: wildReelMultiplier,
-        winWithoutMult: combo.payout,
+        winWithoutMult: roundToDecimal(combo.payout),
         globalMult: 1,
         lineMultiplier: wildReelMultiplier,
       },
     }
   })
+
+  // Round the total payout to avoid floating point precision issues
+  totalPayout = roundToDecimal(totalPayout)
 
   // Add winInfo event if there are any wins
   if (totalPayout > 0 && processedWins.length > 0) {
