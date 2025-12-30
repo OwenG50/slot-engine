@@ -18,6 +18,10 @@ import { onHandleGameFlow } from "./src/onHandleGameFlow"
 export const userState = defineUserState({
   persistentWildReels: new Map<number, number>(), // reelIndex -> multiplier
   totalFreeSpinsWin: 0,
+  isSuperFreeSpins: false,
+  isFirstSuperFreeSpin: false,
+  isHiddenFreeSpins: false,
+  isFirstHiddenFreeSpin: false,
 })
 
 export type UserStateType = typeof userState
@@ -34,6 +38,9 @@ export const symbols = defineSymbols({
     properties: {
       isWild: true,
     },
+    pays: {
+      5: 14,
+    },
   }),
   WR: new GameSymbol({
     id: "WR",
@@ -45,73 +52,73 @@ export const symbols = defineSymbols({
   H1: new GameSymbol({
     id: "H1",
     pays: {
-      3: 20,
-      4: 75,
-      5: 200,
+      3: 3,
+      4: 6,
+      5: 14,
     },
   }),
   H2: new GameSymbol({
     id: "H2",
     pays: {
-      3: 10,
-      4: 35,
-      5: 150,
+      3: 1.2,
+      4: 2,
+      5: 4,
     },
   }),
   H3: new GameSymbol({
     id: "H3",
     pays: {
-      3: 5,
-      4: 10,
-      5: 50,
+      3: 1.2,
+      4: 2,
+      5: 4,
     },
   }),
   H4: new GameSymbol({
     id: "H4",
     pays: {
-      3: 3,
-      4: 5,
-      5: 10,
+      3: 1,
+      4: 1.5,
+      5: 2,
     },
   }),
   L1: new GameSymbol({
     id: "L1",
     pays: {
-      3: 1,
-      4: 2,
-      5: 4,
+      3: 2,
+      4: 1.5,
+      5: 1,
     },
   }),
   L2: new GameSymbol({
     id: "L2",
     pays: {
-      3: 0.6,
-      4: 0.8,
+      3: 0.2,
+      4: 0.6,
       5: 1.2,
     },
   }),
   L3: new GameSymbol({
     id: "L3",
     pays: {
-      3: 0.5,
-      4: 0.8,
-      5: 1,
+      3: 0.2,
+      4: 0.6,
+      5: 1.2,
     },
   }),
   L4: new GameSymbol({
     id: "L4",
     pays: {
-      3: 0.2,
+      3: 0.1,
       4: 0.5,
-      5: 0.8,
+      5: 1,
     },
   }),
   L5: new GameSymbol({
     id: "L5",
     pays: {
-      3: 0.2,
+      3: 0.1,
       4: 0.5,
-      5: 0.8,
+      5: 1,
     },
   }),
 })
@@ -147,11 +154,29 @@ export const gameModes = defineGameModes({
       }),
       new ResultSet({
         criteria: "freespins",
-        quota: 0.1,
+        quota: 0.075,
         forceFreespins: true,
         reelWeights: {
           [SPIN_TYPE.BASE_GAME]: { base: 1 },
           [SPIN_TYPE.FREE_SPINS]: { freespin: 1 },
+        },
+      }),
+      new ResultSet({
+        criteria: "superfreespins",
+        quota: 0.015,
+        forceFreespins: true,
+        reelWeights: {
+          [SPIN_TYPE.BASE_GAME]: { base: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { superfreespin: 1 },
+        },
+      }),
+      new ResultSet({
+        criteria: "hiddenfreespins",
+        quota: 0.01,
+        forceFreespins: true,
+        reelWeights: {
+          [SPIN_TYPE.BASE_GAME]: { base: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { hiddenfreespin: 1 },
         },
       }),
     ],
@@ -165,13 +190,15 @@ export type GameType = InferGameType<GameModesType, SymbolsType, UserStateType>
 export const game = createSlotGame<GameType>({
   id: "new-game",
   name: "New Slot Game",
-  maxWinX: 10000,
+  maxWinX: 15000,
   gameModes,
   symbols,
   padSymbols: 1,
   scatterToFreespins: {
     [SPIN_TYPE.BASE_GAME]: {
       3: 10,
+      4: 10,
+      5: 10,
     },
     [SPIN_TYPE.FREE_SPINS]: {
       // No retriggering in this implementation
@@ -201,17 +228,33 @@ game.configureOptimization({
           priority: 3,
         }),
         basegame: new OptimizationConditions({
-          rtp: 0.7,
+          rtp: 0.68,
           hitRate: 4,
           priority: 1,
         }),
         freespins: new OptimizationConditions({
-          rtp: 0.26,
+          rtp: 0.22,
           hitRate: 150,
           searchConditions: {
             criteria: "freespins",
           },
           priority: 2,
+        }),
+        superfreespins: new OptimizationConditions({
+          rtp: 0.04,
+          hitRate: 300,
+          searchConditions: {
+            criteria: "superfreespins",
+          },
+          priority: 4,
+        }),
+        hiddenfreespins: new OptimizationConditions({
+          rtp: 0.02,
+          hitRate: 500,
+          searchConditions: {
+            criteria: "hiddenfreespins",
+          },
+          priority: 5,
         }),
       },
       scaling: new OptimizationScaling([]),

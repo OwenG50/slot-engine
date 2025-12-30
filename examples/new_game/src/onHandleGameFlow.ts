@@ -16,7 +16,22 @@ export function onHandleGameFlow(ctx: Context) {
     
   handleWins(ctx, wildReelMultipliers, isFreeSpin)
   ctx.services.wallet.confirmSpinWin()
+  
+  const spinTypeBeforeCheck = ctx.state.currentSpinType
   checkFreespins(ctx)
+  
+  // Only add finalWin if we're in base game and free spins weren't triggered
+  if (spinTypeBeforeCheck === SPIN_TYPE.BASE_GAME && ctx.state.currentSpinType === SPIN_TYPE.BASE_GAME) {
+    const totalPayout = ctx.services.wallet.getCurrentWin()
+    if (totalPayout > 0) {
+      ctx.services.data.addBookEvent({
+        type: "finalWin",
+        data: {
+          amount: totalPayout,
+        },
+      })
+    }
+  }
 }
 
 function drawBoard(ctx: Context) {
@@ -29,6 +44,9 @@ function drawBoard(ctx: Context) {
     drawBoardWithPersistentReels(ctx, reels)
   } else if (ctx.state.currentResultSet.forceFreespins) {
     // Force scatter trigger in base game
+    const criteria = ctx.state.currentResultSet.criteria
+    const targetScatters = criteria === "hiddenfreespins" ? 5 : criteria === "superfreespins" ? 4 : 3
+    
     while (true) {
       ctx.services.board.resetBoard()
 
@@ -36,7 +54,7 @@ function drawBoard(ctx: Context) {
       const scatterReelStops = ctx.services.board.getRandomReelStops(
         reels,
         reelStops,
-        3, // Force 3 scatters
+        targetScatters, // Force 3 or 4 scatters depending on mode
       )
 
       ctx.services.board.drawBoardWithForcedStops({
@@ -47,7 +65,7 @@ function drawBoard(ctx: Context) {
       const scatInvalid = ctx.services.board.isSymbolOnAnyReelMultipleTimes(scatter)
       const [scatCount] = ctx.services.board.countSymbolsOnBoard(scatter)
 
-      if (scatCount === 3 && !scatInvalid) break
+      if (scatCount === targetScatters && !scatInvalid) break
     }
   } else {
     // Normal base game - limit to max 2 scatters
@@ -67,13 +85,33 @@ function drawBoardWithPersistentReels(ctx: Context, reels: any) {
   ctx.services.board.resetBoard()
   
   const persistentReels = ctx.state.userData.persistentWildReels
+  const wildSymbol = ctx.config.symbols.get("W")!
+  const wildReelSymbol = ctx.config.symbols.get("WR")!
   
-  // Draw all reels normally first
-  ctx.services.board.drawBoardWithRandomStops(reels)
+  // For first super/hidden free spin, guarantee a wild reel appears
+  if (ctx.state.userData.isFirstSuperFreeSpin || ctx.state.userData.isFirstHiddenFreeSpin) {
+    // Draw board until we get at least one wild reel
+    while (true) {
+      ctx.services.board.resetBoard()
+      ctx.services.board.drawBoardWithRandomStops(reels)
+      
+      const boardReels = ctx.services.board.getBoardReels()
+      const hasWildReel = boardReels.some((reel) => 
+        reel.some((symbol) => symbol.properties.get("isWildReel"))
+      )
+      
+      if (hasWildReel) break
+    }
+    
+    ctx.state.userData.isFirstSuperFreeSpin = false
+    ctx.state.userData.isFirstHiddenFreeSpin = false
+  } else {
+    // Draw all reels normally first
+    ctx.services.board.drawBoardWithRandomStops(reels)
+  }
   
   // Then restore persistent wild reels
   const boardReels = ctx.services.board.getBoardReels()
-  const wildSymbol = ctx.config.symbols.get("W")!
   
   persistentReels.forEach((multiplier: number, reelIndex: number) => {
     // Replace entire reel with wilds
@@ -380,17 +418,9 @@ function handleWins(ctx: Context, wildReelMultipliers: Map<number, number>, isFr
         },
       })
     } else {
-      // Add setTotalWin event for base game
+      // Add setTotalWin event for base game - finalWin comes later if no free spins triggered
       ctx.services.data.addBookEvent({
         type: "setTotalWin",
-        data: {
-          amount: totalPayout,
-        },
-      })
-      
-      // Add finalWin event for base game
-      ctx.services.data.addBookEvent({
-        type: "finalWin",
         data: {
           amount: totalPayout,
         },
@@ -425,6 +455,10 @@ function checkFreespins(ctx: Context) {
   // No freespins, return early
   if (freespinsAwarded <= 0) return
 
+  // Determine the free spins type based on scatter count
+  const isSuperFreeSpins = scatCount === 4
+  const isHiddenFreeSpins = scatCount === 5
+
   ctx.services.game.awardFreespins(freespinsAwarded)
 
   if (ctx.state.currentSpinType === SPIN_TYPE.BASE_GAME) {
@@ -452,6 +486,10 @@ function checkFreespins(ctx: Context) {
     // Initialize free spins state
     ctx.state.userData.persistentWildReels = new Map()
     ctx.state.userData.totalFreeSpinsWin = 0
+    ctx.state.userData.isSuperFreeSpins = isSuperFreeSpins
+    ctx.state.userData.isFirstSuperFreeSpin = isSuperFreeSpins
+    ctx.state.userData.isHiddenFreeSpins = isHiddenFreeSpins
+    ctx.state.userData.isFirstHiddenFreeSpin = isHiddenFreeSpins
 
     ctx.state.currentSpinType = SPIN_TYPE.FREE_SPINS
     playFreeSpins(ctx) // Play free spins immediately
@@ -513,12 +551,19 @@ function playFreeSpins(ctx: Context) {
   // Clear persistent state
   ctx.state.userData.persistentWildReels = new Map()
   ctx.state.userData.totalFreeSpinsWin = 0
+  ctx.state.userData.isSuperFreeSpins = false
+  ctx.state.userData.isFirstSuperFreeSpin = false
+  ctx.state.userData.isHiddenFreeSpins = false
+  ctx.state.userData.isFirstHiddenFreeSpin = false
 }
 
 function handleExpandingWildsForFreeSpins(ctx: Context): Map<number, number> {
   const boardReels = ctx.services.board.getBoardReels()
   const wildReelMultipliers = new Map<number, number>()
-  const MULTIPLIER_VALUES = [2, 3, 4, 5, 6, 8, 10, 15, 20, 25]
+  // Use higher minimum multipliers for hidden free spins (5x min instead of 2x)
+  const MULTIPLIER_VALUES = ctx.state.userData.isHiddenFreeSpins 
+    ? [5, 6, 8, 10, 15, 20, 25]
+    : [2, 3, 4, 5, 6, 8, 10, 15, 20, 25]
   
   // Start with existing persistent wild reels and their multipliers
   const persistentReels = ctx.state.userData.persistentWildReels
