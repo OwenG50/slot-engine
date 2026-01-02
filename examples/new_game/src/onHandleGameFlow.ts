@@ -20,11 +20,16 @@ export function onHandleGameFlow(ctx: Context) {
     ? handleExpandingWildsForFreeSpins(ctx)
     : handleExpandingWilds(ctx)
     
-  handleWins(ctx, wildReelMultipliers, isFreeSpin)
+  const currentSpinWin = handleWins(ctx, wildReelMultipliers, isFreeSpin)
   ctx.services.wallet.confirmSpinWin()
   
   const spinTypeBeforeCheck = ctx.state.currentSpinType
   checkFreespins(ctx)
+  
+  // If free spins were just triggered from base game, add the base game win to the free spins total
+  if (spinTypeBeforeCheck === SPIN_TYPE.BASE_GAME && ctx.state.currentSpinType === SPIN_TYPE.FREE_SPINS && currentSpinWin > 0) {
+    ctx.state.userData.totalFreeSpinsWin = roundToDecimal(currentSpinWin)
+  }
   
   // Only add finalWin if we're in base game and free spins weren't triggered
   if (spinTypeBeforeCheck === SPIN_TYPE.BASE_GAME && ctx.state.currentSpinType === SPIN_TYPE.BASE_GAME) {
@@ -332,7 +337,7 @@ function handleExpandingWilds(ctx: Context): Map<number, number> {
   return wildReelMultipliers
 }
 
-function handleWins(ctx: Context, wildReelMultipliers: Map<number, number>, isFreeSpin = false) {
+function handleWins(ctx: Context, wildReelMultipliers: Map<number, number>, isFreeSpin = false): number {
   const boardReels = ctx.services.board.getBoardReels()
   const wildSymbol = ctx.config.symbols.get("W")!
 
@@ -468,6 +473,7 @@ function handleWins(ctx: Context, wildReelMultipliers: Map<number, number>, isFr
   }
 
   ctx.services.wallet.addSpinWin(totalPayout)
+  return totalPayout
 }
 
 function calculateWinLevel(payout: number, betCost: number): number {
