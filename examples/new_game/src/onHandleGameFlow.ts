@@ -24,12 +24,14 @@ export function onHandleGameFlow(ctx: Context) {
   ctx.services.wallet.confirmSpinWin()
   
   const spinTypeBeforeCheck = ctx.state.currentSpinType
-  checkFreespins(ctx)
   
-  // If free spins were just triggered from base game, add the base game win to the free spins total
-  if (spinTypeBeforeCheck === SPIN_TYPE.BASE_GAME && ctx.state.currentSpinType === SPIN_TYPE.FREE_SPINS && currentSpinWin > 0) {
+  // If we're in base game and have a win, initialize totalFreeSpinsWin before checking for freespins
+  // This ensures the base game win is included if free spins are triggered
+  if (spinTypeBeforeCheck === SPIN_TYPE.BASE_GAME && currentSpinWin > 0) {
     ctx.state.userData.totalFreeSpinsWin = roundToDecimal(currentSpinWin)
   }
+  
+  checkFreespins(ctx)
   
   // Only add finalWin if we're in base game and free spins weren't triggered
   if (spinTypeBeforeCheck === SPIN_TYPE.BASE_GAME && ctx.state.currentSpinType === SPIN_TYPE.BASE_GAME) {
@@ -530,7 +532,7 @@ function checkFreespins(ctx: Context) {
 
     // Initialize free spins state
     ctx.state.userData.persistentWildReels = new Map()
-    ctx.state.userData.totalFreeSpinsWin = 0
+    // totalFreeSpinsWin is already initialized in onHandleGameFlow with base game win if any
     ctx.state.userData.isSuperFreeSpins = isSuperFreeSpins
     ctx.state.userData.isFirstSuperFreeSpin = isSuperFreeSpins
     ctx.state.userData.isHiddenFreeSpins = isHiddenFreeSpins
