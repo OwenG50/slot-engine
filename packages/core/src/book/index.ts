@@ -22,7 +22,7 @@ export class Book {
    * Adds an event to the book.
    */
   addEvent(event: Omit<BookEvent, "index">) {
-    const index = this.events.length + 1
+    const index = this.events.length
     this.events.push({ index, ...event })
   }
 

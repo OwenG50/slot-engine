@@ -84,9 +84,9 @@ export const symbols = defineSymbols({
   L1: new GameSymbol({
     id: "L1",
     pays: {
-      3: 2,
+      3: 1,
       4: 1.5,
-      5: 1,
+      5: 2,
     },
   }),
   L2: new GameSymbol({
@@ -247,46 +247,19 @@ export const gameModes = defineGameModes({
     resultSets: [
       new ResultSet({
         criteria: "0",
-        quota: 0.3,
+        quota: 0.2,
         multiplier: 0,
         reelWeights: {
-          [SPIN_TYPE.BASE_GAME]: { base: 1 },
-          [SPIN_TYPE.FREE_SPINS]: { freespin: 1 },
+          [SPIN_TYPE.BASE_GAME]: { guaranteedWildReelAndWild: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { },
         },
       }),
       new ResultSet({
         criteria: "basegame",
-        quota: 0.6,
+        quota: 0.8,
         reelWeights: {
-          [SPIN_TYPE.BASE_GAME]: { base: 1 },
-          [SPIN_TYPE.FREE_SPINS]: { freespin: 1 },
-        },
-      }),
-      new ResultSet({
-        criteria: "freespins",
-        quota: 0.075,
-        forceFreespins: true,
-        reelWeights: {
-          [SPIN_TYPE.BASE_GAME]: { base: 1 },
-          [SPIN_TYPE.FREE_SPINS]: { freespin: 1 },
-        },
-      }),
-      new ResultSet({
-        criteria: "superfreespins",
-        quota: 0.015,
-        forceFreespins: true,
-        reelWeights: {
-          [SPIN_TYPE.BASE_GAME]: { base: 1 },
-          [SPIN_TYPE.FREE_SPINS]: { superfreespin: 1 },
-        },
-      }),
-      new ResultSet({
-        criteria: "hiddenfreespins",
-        quota: 0.01,
-        forceFreespins: true,
-        reelWeights: {
-          [SPIN_TYPE.BASE_GAME]: { base: 1 },
-          [SPIN_TYPE.FREE_SPINS]: { hiddenfreespin: 1 },
+          [SPIN_TYPE.BASE_GAME]: { guaranteedWildReelAndWild: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { },
         },
       }),
     ],
@@ -369,6 +342,7 @@ export const game = createSlotGame<GameType>({
   },
 })
 
+// Add or remove from this to choose what gets simulated or not.
 game.configureSimulation({
   simRunsAmount: {
     base: 100000,
@@ -473,33 +447,9 @@ game.configureOptimization({
           priority: 3,
         }),
         basegame: new OptimizationConditions({
-          rtp: 0.68,
+          rtp: 0.96,
           hitRate: 2,
           priority: 1,
-        }),
-        freespins: new OptimizationConditions({
-          rtp: 0.22,
-          hitRate: 150,
-          searchConditions: {
-            criteria: "freespins",
-          },
-          priority: 2,
-        }),
-        superfreespins: new OptimizationConditions({
-          rtp: 0.04,
-          hitRate: 300,
-          searchConditions: {
-            criteria: "superfreespins",
-          },
-          priority: 4,
-        }),
-        hiddenfreespins: new OptimizationConditions({
-          rtp: 0.02,
-          hitRate: 500,
-          searchConditions: {
-            criteria: "hiddenfreespins",
-          },
-          priority: 5,
         }),
       },
       scaling: new OptimizationScaling([]),
@@ -522,15 +472,15 @@ game.configureOptimization({
     superBonusBuy: {
       conditions: {
         superfreespins: new OptimizationConditions({
-          rtp: 0.91,
-          hitRate: 1.05,
+          rtp: 0.81,
+          hitRate: "x",
           searchConditions: {
             criteria: "superfreespins",
           },
           priority: 1,
         }),
         hiddenfreespins: new OptimizationConditions({
-          rtp: 0.05,
+          rtp: 0.15,
           hitRate: 20,
           searchConditions: {
             criteria: "hiddenfreespins",

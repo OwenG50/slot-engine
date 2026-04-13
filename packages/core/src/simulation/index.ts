@@ -741,7 +741,7 @@ export class Simulation {
     const remainder = total % realChunks
     const result: [number, number][] = []
 
-    let current = 1
+    let current = 0
     for (let i = 0; i < realChunks; i++) {
       const size = base + (i < remainder ? 1 : 0)
       const start = current

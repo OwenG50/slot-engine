@@ -1,4 +1,4 @@
-import { GameContext, GameSymbol, LinesWinType, SPIN_TYPE } from "@slot-engine/core"
+import { GameContext, GameSymbol, LinesWinType, Reels, SPIN_TYPE } from "@slot-engine/core"
 import { GameModesType, SymbolsType, UserStateType } from ".."
 
 type Context = GameContext<GameModesType, SymbolsType, UserStateType>
@@ -25,17 +25,32 @@ export function onHandleGameFlow(ctx: Context) {
   
   const spinTypeBeforeCheck = ctx.state.currentSpinType
   
-  // If we're in base game and have a win, initialize totalFreeSpinsWin before checking for freespins
-  // This ensures the base game win is included if free spins are triggered
-  if (spinTypeBeforeCheck === SPIN_TYPE.BASE_GAME && currentSpinWin > 0) {
+  // Initialize the free-spin running total from the current base spin before checking triggers.
+  if (spinTypeBeforeCheck === SPIN_TYPE.BASE_GAME) {
     ctx.state.userData.totalFreeSpinsWin = roundToDecimal(currentSpinWin)
+  }
+
+  if (hasReachedMaxWin(ctx)) {
+    if (spinTypeBeforeCheck === SPIN_TYPE.BASE_GAME) {
+      const totalPayout = capToMaxWin(ctx, ctx.services.wallet.getCurrentWin())
+      if (totalPayout > 0) {
+        ctx.services.data.addBookEvent({
+          type: "finalWin",
+          data: {
+            amount: totalPayout,
+          },
+        })
+      }
+    }
+
+    return
   }
   
   checkFreespins(ctx)
   
   // Only add finalWin if we're in base game and free spins weren't triggered
   if (spinTypeBeforeCheck === SPIN_TYPE.BASE_GAME && ctx.state.currentSpinType === SPIN_TYPE.BASE_GAME) {
-    const totalPayout = roundToDecimal(ctx.services.wallet.getCurrentWin())
+    const totalPayout = capToMaxWin(ctx, ctx.services.wallet.getCurrentWin())
     if (totalPayout > 0) {
       ctx.services.data.addBookEvent({
         type: "finalWin",
@@ -55,6 +70,8 @@ function drawBoard(ctx: Context) {
   if (isFreeSpin) {
     // During free spins, handle persistent wild reels
     drawBoardWithPersistentReels(ctx, reels)
+  } else if (ctx.state.currentGameMode === "guaranteedWildReelAndWild") {
+    drawGuaranteedWildReelAndWildBoard(ctx, reels)
   } else if (ctx.state.currentResultSet.forceFreespins) {
     // Force scatter trigger in base game
     const criteria = ctx.state.currentResultSet.criteria
@@ -81,10 +98,6 @@ function drawBoard(ctx: Context) {
       if (scatCount === targetScatters && !scatInvalid) break
     }
   } else {
-    // Check if this is the guaranteed wild reel and wild mode
-    const currentGameMode = ctx.services.game.getCurrentGameMode()
-    const isGuaranteedMode = currentGameMode.name === "guaranteedWildReelAndWild"
-    
     // Normal base game - limit to max 2 scatters
     while (true) {
       ctx.services.board.resetBoard()
@@ -95,32 +108,206 @@ function drawBoard(ctx: Context) {
 
       // Base validation: max 2 scatters
       if (scatCount > 2 || scatInvalid) continue
-
-      // Additional validation for guaranteed wild reel and wild mode
-      if (isGuaranteedMode) {
-        const wildReel = ctx.config.symbols.get("WR")!
-        const wild = ctx.config.symbols.get("W")!
-        const boardReels = ctx.services.board.getBoardReels()
-        
-        // Check if at least one wild reel exists
-        const hasWildReel = boardReels.some((reel) =>
-          reel.some((symbol) => symbol.properties.get("isWildReel"))
-        )
-        
-        // Check if at least one regular wild exists (not wild reel)
-        const hasRegularWild = boardReels.some((reel) =>
-          reel.some((symbol) => 
-            symbol.properties.get("isWild") && !symbol.properties.get("isWildReel")
-          )
-        )
-        
-        // Only break if both conditions are met
-        if (!hasWildReel || !hasRegularWild) continue
-      }
       
       break
     }
   }
+}
+
+function drawGuaranteedWildReelAndWildBoard(ctx: Context, reels: Reels) {
+  const scatter = ctx.config.symbols.get("S")!
+  const wild = ctx.config.symbols.get("W")!
+  const wildReel = ctx.config.symbols.get("WR")!
+  const maxAttempts = 1000
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    ctx.services.board.resetBoard()
+
+    const forcedStops = getGuaranteedWildAndWildReelStops(ctx, reels, wild, wildReel)
+
+    if (forcedStops) {
+      ctx.services.board.drawBoardWithForcedStops({
+        reels,
+        forcedStops,
+      })
+    } else {
+      ctx.services.board.drawBoardWithRandomStops(reels)
+    }
+
+    const boardReels = ctx.services.board.getBoardReels()
+    const [scatterCount] = ctx.services.board.countSymbolsOnBoard(scatter)
+    const hasWildReel = boardReels.some((reel) =>
+      reel.some((symbol) => symbol.properties.get("isWildReel")),
+    )
+    const hasRegularWild = boardReels.some((reel) =>
+      reel.some(
+        (symbol) =>
+          symbol.properties.get("isWild") && !symbol.properties.get("isWildReel"),
+      ),
+    )
+
+    if (scatterCount > 0) continue
+    if (!hasWildReel || !hasRegularWild) continue
+
+    return
+  }
+
+  throw new Error(
+    "Failed to draw guaranteedWildReelAndWild board with both a visible wild reel and regular wild.",
+  )
+}
+
+function getGuaranteedWildAndWildReelStops(
+  ctx: Context,
+  reels: Reels,
+  wild: GameSymbol,
+  wildReel: GameSymbol,
+) {
+  const wildStops = ctx.services.board.getReelStopsForSymbol(reels, wild)
+  const wildReelStops = ctx.services.board.getReelStopsForSymbol(reels, wildReel)
+
+  const wildReelCandidates = wildReelStops
+    .map((stops, reelIndex) => ({ reelIndex, stops }))
+    .filter(({ stops }) => stops.length > 0)
+    .filter(({ reelIndex }) =>
+      wildStops.some((candidateStops, candidateReelIndex) => {
+        return candidateReelIndex !== reelIndex && candidateStops.length > 0
+      }),
+    )
+
+  if (wildReelCandidates.length === 0) {
+    return null
+  }
+
+  const chosenWildReel = ctx.services.rng.randomItem(wildReelCandidates)
+  const regularWildCandidates = wildStops
+    .map((stops, reelIndex) => ({ reelIndex, stops }))
+    .filter(({ reelIndex, stops }) => reelIndex !== chosenWildReel.reelIndex && stops.length > 0)
+
+  if (regularWildCandidates.length === 0) {
+    return null
+  }
+
+  const chosenRegularWild = ctx.services.rng.randomItem(regularWildCandidates)
+
+  return {
+    [chosenWildReel.reelIndex]: ctx.services.rng.randomItem(chosenWildReel.stops),
+    [chosenRegularWild.reelIndex]: ctx.services.rng.randomItem(chosenRegularWild.stops),
+  }
+}
+
+function capToMaxWin(ctx: Context, value: number) {
+  return roundToDecimal(Math.min(value, ctx.config.maxWinX))
+}
+
+function hasReachedMaxWin(ctx: Context) {
+  return roundToDecimal(ctx.services.wallet.getCurrentWin()) >= ctx.config.maxWinX
+}
+
+function getRemainingMaxWin(ctx: Context) {
+  const remaining = ctx.config.maxWinX - ctx.services.wallet.getCurrentWin()
+  return roundToDecimal(Math.max(0, remaining))
+}
+
+function trimWinsToMaxWin(
+  wins: Array<{
+    symbol: string
+    kind: number
+    win: number
+    positions: Array<{ reel: number; row: number }>
+    meta: {
+      lineIndex: number
+      multiplier: number
+      winWithoutMult: number
+      globalMult: number
+      lineMultiplier: number
+    }
+  }>,
+  remainingMaxWin: number,
+) {
+  if (remainingMaxWin <= 0 || wins.length === 0) return []
+
+  let accumulated = 0
+  const keptWins: typeof wins = []
+
+  for (const win of wins) {
+    const nextAccumulated = roundToDecimal(accumulated + win.win)
+
+    if (nextAccumulated < remainingMaxWin) {
+      keptWins.push(win)
+      accumulated = nextAccumulated
+      continue
+    }
+
+    if (nextAccumulated === remainingMaxWin) {
+      keptWins.push(win)
+      return keptWins
+    }
+
+    if (nextAccumulated > remainingMaxWin) {
+      const triggerWinAmount = roundToDecimal(remainingMaxWin - accumulated)
+      if (triggerWinAmount <= 0) return keptWins
+
+      const originalWin = win.win <= 0 ? 1 : win.win
+      const ratio = triggerWinAmount / originalWin
+
+      keptWins.push(
+        {
+          ...win,
+          win: triggerWinAmount,
+          meta: {
+            ...win.meta,
+            winWithoutMult: roundToDecimal(win.meta.winWithoutMult * ratio),
+          },
+        },
+      )
+
+      return keptWins
+    }
+  }
+
+  return keptWins
+}
+
+function scaleWinsToCap(
+  wins: Array<{
+    symbol: string
+    kind: number
+    win: number
+    positions: Array<{ reel: number; row: number }>
+    meta: {
+      lineIndex: number
+      multiplier: number
+      winWithoutMult: number
+      globalMult: number
+      lineMultiplier: number
+    }
+  }>,
+  rawTotal: number,
+  cappedTotal: number,
+) {
+  if (rawTotal <= 0 || cappedTotal >= rawTotal) return wins
+
+  const ratio = cappedTotal / rawTotal
+  let accumulated = 0
+
+  return wins.map((win, index) => {
+    const isLast = index === wins.length - 1
+    const cappedWin = isLast
+      ? roundToDecimal(cappedTotal - accumulated)
+      : roundToDecimal(win.win * ratio)
+
+    accumulated = roundToDecimal(accumulated + cappedWin)
+
+    return {
+      ...win,
+      win: cappedWin,
+      meta: {
+        ...win.meta,
+        winWithoutMult: roundToDecimal(win.meta.winWithoutMult * ratio),
+      },
+    }
+  })
 }
 
 function drawBoardWithPersistentReels(ctx: Context, reels: any) {
@@ -383,7 +570,7 @@ function handleWins(ctx: Context, wildReelMultipliers: Map<number, number>, isFr
 
   // Apply wild reel multipliers to wins
   let totalPayout = 0
-  const processedWins = winCombinations.map((combo) => {
+  let processedWins = winCombinations.map((combo) => {
     // Check if this win uses any wild reel positions and add their multipliers
     let wildReelMultiplier = 1
     const usedWildReels: number[] = []
@@ -428,6 +615,17 @@ function handleWins(ctx: Context, wildReelMultipliers: Map<number, number>, isFr
   // Round the total payout to avoid floating point precision issues
   totalPayout = roundToDecimal(totalPayout)
 
+  const remainingMaxWin = getRemainingMaxWin(ctx)
+  const cappedTotalPayout = capToMaxWin(ctx, Math.min(totalPayout, remainingMaxWin))
+
+  if (totalPayout >= remainingMaxWin && cappedTotalPayout > 0) {
+    processedWins = trimWinsToMaxWin(processedWins, remainingMaxWin)
+  } else {
+    processedWins = scaleWinsToCap(processedWins, totalPayout, cappedTotalPayout)
+  }
+
+  totalPayout = cappedTotalPayout
+
   // Add winInfo event if there are any wins
   if (totalPayout > 0 && processedWins.length > 0) {
     ctx.services.data.addBookEvent({
@@ -453,8 +651,10 @@ function handleWins(ctx: Context, wildReelMultipliers: Map<number, number>, isFr
 
     // Update total win tracking
     if (isFreeSpin) {
-      ctx.state.userData.totalFreeSpinsWin += totalPayout
-      ctx.state.userData.totalFreeSpinsWin = roundToDecimal(ctx.state.userData.totalFreeSpinsWin)
+      ctx.state.userData.totalFreeSpinsWin = capToMaxWin(
+        ctx,
+        ctx.state.userData.totalFreeSpinsWin + totalPayout,
+      )
       
       // Add setTotalWin event with accumulated total
       ctx.services.data.addBookEvent({
@@ -571,11 +771,23 @@ function playFreeSpins(ctx: Context) {
     const wildReelMultipliers = handleExpandingWildsForFreeSpins(ctx)
     handleWins(ctx, wildReelMultipliers, true)
     ctx.services.wallet.confirmSpinWin()
+
+    if (hasReachedMaxWin(ctx)) {
+      endFreeSpins(ctx)
+      return
+    }
+
     checkFreespins(ctx) // Check for retriggering
   }
 
+  endFreeSpins(ctx)
+}
+
+function endFreeSpins(ctx: Context) {
+  ctx.state.currentFreespinAmount = 0
+
   // Free spins ended
-  const totalWin = roundToDecimal(ctx.state.userData.totalFreeSpinsWin)
+  const totalWin = capToMaxWin(ctx, ctx.state.userData.totalFreeSpinsWin)
   const currentGameMode = ctx.services.game.getCurrentGameMode()
   const winLevel = calculateWinLevel(totalWin, currentGameMode.cost)
 
