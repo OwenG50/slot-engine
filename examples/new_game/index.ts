@@ -137,7 +137,7 @@ export const gameModes = defineGameModes({
     resultSets: [
       new ResultSet({
         criteria: "0",
-        quota: 0.3,
+        quota: 0.20,
         multiplier: 0,
         reelWeights: {
           [SPIN_TYPE.BASE_GAME]: { base: 1 },
@@ -146,37 +146,37 @@ export const gameModes = defineGameModes({
       }),
       new ResultSet({
         criteria: "basegame",
-        quota: 0.6,
+        quota: 0.40,
         reelWeights: {
           [SPIN_TYPE.BASE_GAME]: { base: 1 },
-          [SPIN_TYPE.FREE_SPINS]: { freespin: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { freespin: 1, freespin2: 1, freespin3: 1 },
         },
       }),
       new ResultSet({
         criteria: "freespins",
-        quota: 0.075,
+        quota: 0.144,
         forceFreespins: true,
         reelWeights: {
           [SPIN_TYPE.BASE_GAME]: { base: 1 },
-          [SPIN_TYPE.FREE_SPINS]: { freespin: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { freespin: 55, maxwin: 30 },
         },
       }),
       new ResultSet({
         criteria: "superfreespins",
-        quota: 0.015,
+        quota: 0.133,
         forceFreespins: true,
         reelWeights: {
           [SPIN_TYPE.BASE_GAME]: { base: 1 },
-          [SPIN_TYPE.FREE_SPINS]: { superfreespin: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { superfreespin: 40, maxwin: 10 },
         },
       }),
       new ResultSet({
         criteria: "hiddenfreespins",
-        quota: 0.01,
+        quota: 0.113,
         forceFreespins: true,
         reelWeights: {
           [SPIN_TYPE.BASE_GAME]: { base: 1 },
-          [SPIN_TYPE.FREE_SPINS]: { hiddenfreespin: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { hiddenfreespin: 30, maxwin: 10 },
         },
       }),
     ],
@@ -192,7 +192,7 @@ export const gameModes = defineGameModes({
     resultSets: [
       new ResultSet({
         criteria: "0",
-        quota: 0.2,
+        quota: 0.14,
         multiplier: 0,
         reelWeights: {
           [SPIN_TYPE.BASE_GAME]: { base: 1 },
@@ -201,7 +201,7 @@ export const gameModes = defineGameModes({
       }),
       new ResultSet({
         criteria: "basegame",
-        quota: 0.5,
+        quota: 0.367,
         reelWeights: {
           [SPIN_TYPE.BASE_GAME]: { base: 1 },
           [SPIN_TYPE.FREE_SPINS]: { freespin: 1 },
@@ -209,29 +209,29 @@ export const gameModes = defineGameModes({
       }),
       new ResultSet({
         criteria: "freespins",
-        quota: 0.225,
+        quota: 0.254,
         forceFreespins: true,
         reelWeights: {
           [SPIN_TYPE.BASE_GAME]: { base: 1 },
-          [SPIN_TYPE.FREE_SPINS]: { freespin: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { freespin: 250, maxwin: 55 },
         },
       }),
       new ResultSet({
         criteria: "superfreespins",
-        quota: 0.045,
+        quota: 0.133,
         forceFreespins: true,
         reelWeights: {
           [SPIN_TYPE.BASE_GAME]: { base: 1 },
-          [SPIN_TYPE.FREE_SPINS]: { superfreespin: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { superfreespin: 130, maxwin: 22 },
         },
       }),
       new ResultSet({
         criteria: "hiddenfreespins",
-        quota: 0.03,
+        quota: 0.096,
         forceFreespins: true,
         reelWeights: {
           [SPIN_TYPE.BASE_GAME]: { base: 1 },
-          [SPIN_TYPE.FREE_SPINS]: { hiddenfreespin: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { hiddenfreespin: 90, maxwin: 22 },
         },
       }),
     ],
@@ -279,7 +279,7 @@ export const gameModes = defineGameModes({
         forceFreespins: true,
         reelWeights: {
           [SPIN_TYPE.BASE_GAME]: { base: 1 },
-          [SPIN_TYPE.FREE_SPINS]: { freespin: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { freespin: 1, freespin2: 3},
         },
       }),
     ],
@@ -295,7 +295,7 @@ export const gameModes = defineGameModes({
     resultSets: [
       new ResultSet({
         criteria: "superfreespins",
-        quota: 0.95,
+        quota: 0.90,
         forceFreespins: true,
         reelWeights: {
           [SPIN_TYPE.BASE_GAME]: { base: 1 },
@@ -304,7 +304,7 @@ export const gameModes = defineGameModes({
       }),
       new ResultSet({
         criteria: "hiddenfreespins",
-        quota: 0.05,
+        quota: 0.10,
         forceFreespins: true,
         reelWeights: {
           [SPIN_TYPE.BASE_GAME]: { base: 1 },
@@ -322,7 +322,7 @@ export type GameType = InferGameType<GameModesType, SymbolsType, UserStateType>
 export const game = createSlotGame<GameType>({
   id: "new-game",
   name: "New Slot Game",
-  maxWinX: 15000,
+  maxWinX: 10000,
   gameModes,
   symbols,
   padSymbols: 1,
@@ -362,15 +362,15 @@ game.configureOptimization({
           rtp: 0,
           avgWin: 0,
           searchConditions: 0,
-          priority: 3,
+          priority: 10,
         }),
         basegame: new OptimizationConditions({
-          rtp: 0.68,
+          rtp: 0.29,
           hitRate: 4,
           priority: 1,
         }),
         freespins: new OptimizationConditions({
-          rtp: 0.22,
+          rtp: 0.30,
           hitRate: 150,
           searchConditions: {
             criteria: "freespins",
@@ -378,20 +378,20 @@ game.configureOptimization({
           priority: 2,
         }),
         superfreespins: new OptimizationConditions({
-          rtp: 0.04,
+          rtp: 0.17,
           hitRate: 300,
           searchConditions: {
             criteria: "superfreespins",
           },
-          priority: 4,
+          priority: 3,
         }),
         hiddenfreespins: new OptimizationConditions({
-          rtp: 0.02,
-          hitRate: 500,
+          rtp: 0.20,
+          hitRate: 450,
           searchConditions: {
             criteria: "hiddenfreespins",
           },
-          priority: 5,
+          priority: 4,
         }),
       },
       scaling: new OptimizationScaling([]),
@@ -403,15 +403,15 @@ game.configureOptimization({
           rtp: 0,
           avgWin: 0,
           searchConditions: 0,
-          priority: 3,
+          priority: 10,
         }),
         basegame: new OptimizationConditions({
-          rtp: 0.56,
-          hitRate: 4,
+          rtp: 0.30,
+          hitRate: 5,
           priority: 1,
         }),
         freespins: new OptimizationConditions({
-          rtp: 0.32,
+          rtp: 0.31,
           hitRate: 50,
           searchConditions: {
             criteria: "freespins",
@@ -419,20 +419,20 @@ game.configureOptimization({
           priority: 2,
         }),
         superfreespins: new OptimizationConditions({
-          rtp: 0.06,
+          rtp: 0.18,
           hitRate: 100,
           searchConditions: {
             criteria: "superfreespins",
           },
-          priority: 4,
+          priority: 3,
         }),
         hiddenfreespins: new OptimizationConditions({
-          rtp: 0.02,
+          rtp: 0.17,
           hitRate: 150,
           searchConditions: {
             criteria: "hiddenfreespins",
           },
-          priority: 5,
+          priority: 4,
         }),
       },
       scaling: new OptimizationScaling([]),
@@ -444,11 +444,11 @@ game.configureOptimization({
           rtp: 0,
           avgWin: 0,
           searchConditions: 0,
-          priority: 3,
+          priority: 4,
         }),
         basegame: new OptimizationConditions({
           rtp: 0.96,
-          hitRate: 2,
+          hitRate: 3,
           priority: 1,
         }),
       },
@@ -481,7 +481,7 @@ game.configureOptimization({
         }),
         hiddenfreespins: new OptimizationConditions({
           rtp: 0.15,
-          hitRate: 20,
+          hitRate: 40,
           searchConditions: {
             criteria: "hiddenfreespins",
           },

@@ -9,6 +9,70 @@ function roundToDecimal(value: number, decimals: number = 1): number {
   return Math.round(value * multiplier) / multiplier
 }
 
+// Weighted multiplier tables — higher values have lower weights so they feel rarer
+// Approximate hit rates (total weight 139):
+// 2x~6%  3x~6%  4x~6%  5x~6%  6x~6%  8x~6%  10x~6%  12x~5%  15x~5%
+// 20x~5%  25x~4%  30x~4%  35x~4%  45x~4%  50x~4%  65x~4%  75x~4%  100x~4%  125x~4%  150x~4%
+const MULTIPLIER_TABLE: Array<{ value: number; weight: number }> = [
+  { value: 2,   weight: 9  },
+  { value: 3,   weight: 9  },
+  { value: 4,   weight: 9  },
+  { value: 5,   weight: 9  },
+  { value: 6,   weight: 8  },
+  { value: 8,   weight: 8  },
+  { value: 10,  weight: 8  },
+  { value: 12,  weight: 7  },
+  { value: 15,  weight: 7  },
+  { value: 20,  weight: 7  },
+  { value: 25,  weight: 6  },
+  { value: 30,  weight: 6  },
+  { value: 35,  weight: 6  },
+  { value: 45,  weight: 5  },
+  { value: 50,  weight: 5  },
+  { value: 65,  weight: 5  },
+  { value: 75,  weight: 5  },
+  { value: 100, weight: 5  },
+  { value: 125, weight: 5  },
+  { value: 150, weight: 5  },
+]
+
+// Same table but minimum 5x for hidden free spins
+// Approximate hit rates (total weight 112):
+// 5x~8%  6x~8%  8x~7%  10x~7%  12x~7%  15x~6%  20x~6%  25x~6%  30x~5%
+// 35x~5%  45x~5%  50x~5%  65x~4%  75x~4%  100x~4%  125x~4%  150x~4%
+const HIDDEN_MULTIPLIER_TABLE: Array<{ value: number; weight: number }> = [
+  { value: 5,   weight: 9  },
+  { value: 6,   weight: 9  },
+  { value: 8,   weight: 8  },
+  { value: 10,  weight: 8  },
+  { value: 12,  weight: 8  },
+  { value: 15,  weight: 7  },
+  { value: 20,  weight: 7  },
+  { value: 25,  weight: 7  },
+  { value: 30,  weight: 6  },
+  { value: 35,  weight: 6  },
+  { value: 45,  weight: 6  },
+  { value: 50,  weight: 6  },
+  { value: 65,  weight: 5  },
+  { value: 75,  weight: 5  },
+  { value: 100, weight: 5  },
+  { value: 125, weight: 5  },
+  { value: 150, weight: 5  },
+]
+
+function pickWeightedMultiplier(
+  table: Array<{ value: number; weight: number }>,
+  randomFloat: () => number,
+): number {
+  const totalWeight = table.reduce((sum, entry) => sum + entry.weight, 0)
+  let roll = randomFloat() * totalWeight
+  for (const entry of table) {
+    roll -= entry.weight
+    if (roll <= 0) return entry.value
+  }
+  return table[table.length - 1]!.value
+}
+
 export function onHandleGameFlow(ctx: Context) {
   const isFreeSpin = ctx.state.currentSpinType === SPIN_TYPE.FREE_SPINS
   
@@ -75,7 +139,7 @@ function drawBoard(ctx: Context) {
   } else if (ctx.state.currentResultSet.forceFreespins) {
     // Force scatter trigger in base game
     const criteria = ctx.state.currentResultSet.criteria
-    const targetScatters = criteria === "hiddenfreespins" ? 5 : criteria === "superfreespins" ? 4 : 3
+    const targetScatters = criteria.includes("hidden") ? 5 : criteria.includes("super") ? 4 : 3
     
     while (true) {
       ctx.services.board.resetBoard()
@@ -423,7 +487,6 @@ function handleAnticipation(ctx: Context) {
 function handleExpandingWilds(ctx: Context): Map<number, number> {
   const boardReels = ctx.services.board.getBoardReels()
   const wildReelMultipliers = new Map<number, number>()
-  const MULTIPLIER_VALUES = [2, 3, 4, 5, 6, 8, 10, 15, 20, 25]
 
   // Find all wild reel positions
   const wildReelIndices: number[] = []
@@ -457,10 +520,7 @@ function handleExpandingWilds(ctx: Context): Map<number, number> {
   if (wildReelIndices.length > 0 && regularWilds.length > 0) {
     // Assign random multipliers to each regular wild
     regularWilds.forEach((wild) => {
-      const randomMult =
-        MULTIPLIER_VALUES[
-          Math.floor(ctx.services.rng.randomFloat(0, 1) * MULTIPLIER_VALUES.length)
-        ]!
+      const randomMult = pickWeightedMultiplier(MULTIPLIER_TABLE, () => ctx.services.rng.randomFloat(0, 1))
       wild.collectibleMult = randomMult
       totalMultiplier += randomMult
     })
@@ -820,9 +880,7 @@ function handleExpandingWildsForFreeSpins(ctx: Context): Map<number, number> {
   const boardReels = ctx.services.board.getBoardReels()
   const wildReelMultipliers = new Map<number, number>()
   // Use higher minimum multipliers for hidden free spins (5x min instead of 2x)
-  const MULTIPLIER_VALUES = ctx.state.userData.isHiddenFreeSpins 
-    ? [5, 6, 8, 10, 15, 20, 25]
-    : [2, 3, 4, 5, 6, 8, 10, 15, 20, 25]
+  const activeMultiplierTable = ctx.state.userData.isHiddenFreeSpins ? HIDDEN_MULTIPLIER_TABLE : MULTIPLIER_TABLE
   
   // Start with existing persistent wild reels and their multipliers
   const persistentReels = ctx.state.userData.persistentWildReels
@@ -868,10 +926,7 @@ function handleExpandingWildsForFreeSpins(ctx: Context): Map<number, number> {
     // Assign random multipliers to each regular wild
     let totalNewMultiplier = 0
     regularWilds.forEach((wild) => {
-      const randomMult =
-        MULTIPLIER_VALUES[
-          Math.floor(ctx.services.rng.randomFloat(0, 1) * MULTIPLIER_VALUES.length)
-        ]!
+      const randomMult = pickWeightedMultiplier(activeMultiplierTable, () => ctx.services.rng.randomFloat(0, 1))
       wild.collectibleMult = randomMult
       totalNewMultiplier += randomMult
     })
