@@ -2,7 +2,7 @@ import fs from "fs"
 import path from "path"
 import { isMainThread } from "worker_threads"
 import { ReelSet, ReelSetOptions } from "."
-import { GameConfig } from "../game-config"
+import { GameConfig, GameMetadata } from "../game-config"
 import { GameSymbol } from "../game-symbol"
 import { createDirIfNotExists } from "../../utils"
 
@@ -190,7 +190,7 @@ export class GeneratedReelSet extends ReelSet {
     return false
   }
 
-  generateReels(config: GameConfig) {
+  generateReels(config: GameConfig & GameMetadata) {
     this.validateConfig(config)
 
     const gameMode = config.gameModes[this.associatedGameModeName]
@@ -201,7 +201,9 @@ export class GeneratedReelSet extends ReelSet {
       )
     }
 
-    const outputDir = path.join(config.rootDir, config.outputDir)
+    const outputDir = config.rootDir.endsWith(config.outputDir)
+      ? config.rootDir
+      : path.join(config.rootDir, config.outputDir)
 
     const filePath = path.join(
       outputDir,
@@ -410,7 +412,7 @@ export class GeneratedReelSet extends ReelSet {
         `Generated reelset ${this.id} for game mode ${this.associatedGameModeName}`,
       )
     }
-    
+
     this.reels = this.parseReelsetCSV(filePath, config)
 
     return this

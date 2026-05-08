@@ -27,6 +27,7 @@ out/
 build
 dist
 dist-client
+dist-serverdist-client
 
 # Debug
 npm-debug.log*
@@ -38,3 +39,4 @@ yarn-error.log*
 *.pem
 **/__build__
 **/Cargo.lock
+**/.panel-config.json

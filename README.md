@@ -15,7 +15,13 @@ Library for configuring and simulating slot games. Produces output compatible wi
 
 [📖 Documentation](https://slot-engine.dev/docs/core)  
 
-### `@slot-engine/lgs`
+### `@slot-engine/panel`
+
+Web GUI for interacting with Slot Engine. Run simulations, view statistics, explore game files.
+
+[📖 Documentation](https://slot-engine.dev/docs/panel)
+
+### (WIP) `@slot-engine/lgs`
 
 Local gaming server. Test your game locally without uploading to Stake Engine and save time during development.
 

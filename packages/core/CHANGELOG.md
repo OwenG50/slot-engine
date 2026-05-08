@@ -1,5 +1,219 @@
 # @slot-engine/core
 
+## 0.2.12
+
+### Patch Changes
+
+- Generate frontend config JSON file - Thanks @nordowl
+
+  A new configuration file is now always generated (even when no tasks are enabled).
+  This `frontend_config.json` file is useful for reading game information in the frontend, e.g. for displaying the paytable.
+
+  It has the following structure:
+
+  ```json
+  {
+    "name": "Example Cluster Game",
+    "maxWin": 5000,
+    "padSymbols": 1,
+    "symbols": [
+      {
+        "id": "S"
+      },
+      {
+        "id": "W",
+        "pays": {
+          "3": 1,
+          "4": 1.5,
+          "5": 1.75
+        }
+      }
+      // ...
+    ],
+    "gameModes": [
+      {
+        "name": "base",
+        "cost": 1,
+        "rtp": 0.96
+      }
+      // ...
+    ],
+    "reelSets": {
+      "base": [
+        [
+          "L3",
+          "L3",
+          "H4",
+          "H4",
+          "H1"
+          // ...
+        ]
+      ]
+      // ...
+    }
+  }
+  ```
+
+## 0.2.11
+
+### Patch Changes
+
+- Notable performance improvements to internal book handling - Thanks @nordowl
+
+## 0.2.10
+
+### Patch Changes
+
+- Improve performance of symbol comparisons - Thanks @nordowl
+
+- Improve performance of ManywaysWinType - Thanks @nordowl
+
+- Improve performance of ClusterWinType - Thanks @nordowl
+
+- Improve performance of LinesWinType - Thanks @nordowl
+
+## 0.2.9
+
+### Patch Changes
+
+- Minor optimizations - Thanks @nordowl
+
+- Slightly improve RNG performance - Thanks @nordowl
+
+## 0.2.8
+
+### Patch Changes
+
+- Add `hitRatePercentage` to items in `stats_records.json` - Thanks @nordowl
+
+## 0.2.7
+
+### Patch Changes
+
+- Internal: batch write to files - Thanks @nordowl
+
+## 0.2.6
+
+### Patch Changes
+
+- Export `WinType` class, `WinPostProcessFn` type, `WinTypeOpts` type - Thanks @nordowl
+
+## 0.2.5
+
+### Patch Changes
+
+- Fix symbol instances being shared across boards - Thanks @nordowl
+
+- Symbols on the board are now auto-assigned the `position` property to retrieve reel index and row index - Thanks @nordowl
+
+  This is useful if you need to retrieve the position on the board directly from a `GameSymbol` instance.
+
+## 0.2.4
+
+### Patch Changes
+
+- Setting `spinType` manually when calling `recordSymbolOccurrence` is no longer required - Thanks @nordowl
+
+- Introduce `stats_records.json` file to analyze hit rates of tagged simulations - Thanks @nordowl
+
+## 0.2.3
+
+### Patch Changes
+
+- Add option `jumpGaps` to `ManywaysWinType.evaluateWins()` - Thanks @nordowl
+
+- Add `ctx.services.board.updateSymbol()` method to update symbol properties on the board - Thanks @nordowl
+
+## 0.2.2
+
+### Patch Changes
+
+- Add ability to lock reels via `ctx.services.board.setReelLocked()` - Thanks @nordowl
+
+## 0.2.1
+
+### Patch Changes
+
+- TUI can now be quit with "q"; Limit number of logs in memory - Thanks @nordowl
+
+- Add option to enable creation of uncompressed books - Thanks @nordowl
+
+## 0.2.0
+
+### Minor Changes
+
+- Omit generation of uncompressed book files. Generate compressed book chunks instead. ([#45](https://github.com/slot-engine/slot-engine/pull/45)) - Thanks @nordowl
+
+  This will add some minor memory overhead during simulation, but significantly reduces the disk space required for storing book files.
+  Compressed books can be inspected with `@slot-engine/panel`.
+
+- **[BREAKING]** Slot Engine now requires a flag to run! ([#45](https://github.com/slot-engine/slot-engine/pull/45)) - Thanks @nordowl
+
+  To enable compatibility with `@slot-engine/panel`, it is now required to use the `--slot-engine-run` flag
+  when running simulations for your game.
+
+  ```sh
+  pnpm tsx ./path-to/your-game.ts --slot-engine-run
+  ```
+
+  A Slot Engine game is typically run by having a `runTasks()` call at the top level of your game file.
+  Due to the nature of JavaScript modules, when exporting and importing your game
+  to connect it with `@slot-engine/panel`, `runTasks()` would be called immediately upon import
+  causing unintended simulations to run.
+
+  To prevent this, Slot Engine now requires the explicit flag to run simulations.
+
+  Multiple approaches to tackle this have been considered, but this approach was chosen
+  to minimize friction for existing users while ensuring compatibility with `@slot-engine/panel`.
+
+### Patch Changes
+
+- Enhance summary in stats_payouts.json ([#45](https://github.com/slot-engine/slot-engine/pull/45)) - Thanks @nordowl
+
+- Enable importing types directly from @slot-engine/core/types ([#45](https://github.com/slot-engine/slot-engine/pull/45)) - Thanks @nordowl
+
+- Implement interactive terminal UI ([#45](https://github.com/slot-engine/slot-engine/pull/45)) - Thanks @nordowl
+
+- Add `ctx.services.data.log()` method for logging messages to the TUI ([#45](https://github.com/slot-engine/slot-engine/pull/45)) - Thanks @nordowl
+
+  Developer note:
+  - Since `console.log` was not working reliably in worker threads, this service method was added
+
+- Internal restructure, enabling panel compatibility ([#45](https://github.com/slot-engine/slot-engine/pull/45)) - Thanks @nordowl
+
+- `force_keys_<mode>.json` is now generated ([#45](https://github.com/slot-engine/slot-engine/pull/45)) - Thanks @nordowl
+
+- Fix non-maxwin result sets being able to hit max wins. ([#45](https://github.com/slot-engine/slot-engine/pull/45)) - Thanks @nordowl
+
+  Developer note:
+  - A result set _without_ explicit `multiplier` (and `maxwin: false`), will _always_ accept results with payouts > 0 and < max win.
+
+- Improve simulation summary in console. This is also written to `__build__/simulation_summary.json`. ([#45](https://github.com/slot-engine/slot-engine/pull/45)) - Thanks @nordowl
+
+## 0.1.14
+
+### Patch Changes
+
+- Fix services not working in ResultSet evaluate function - Thanks @nordowl
+
+- Fix crash that could occurr when writing lookup tables - Thanks @nordowl
+
+## 0.1.13
+
+### Patch Changes
+
+- Fix bug in GeneratedReelSet - Thanks @nordowl
+
+## 0.1.12
+
+### Patch Changes
+
+- Properly terminate the simulation workers event loop ([#41](https://github.com/slot-engine/slot-engine/pull/41)) - Thanks @jordanamr
+
+- Destroy object reference when writing event data - Thanks @nordowl
+
+- Suppress warning in console ([#40](https://github.com/slot-engine/slot-engine/pull/40)) - Thanks @jordanamr
+
 ## 0.1.11
 
 ### Patch Changes

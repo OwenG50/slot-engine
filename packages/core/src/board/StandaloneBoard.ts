@@ -42,6 +42,14 @@ export class StandaloneBoard {
   getPaddingBottom() {
     return this.board.paddingBottom
   }
+  
+  getAnticipation() {
+    return this.board.anticipation
+  }
+
+  getLockedReels() {
+    return this.board.reelsLocked
+  }
 
   /**
    * Gets the symbol at the specified reel and row index.
@@ -64,6 +72,13 @@ export class StandaloneBoard {
     this.board.removeSymbol(reelIndex, rowIndex)
   }
 
+  /**
+   * Updates properties of the symbol at the specified reel and row index.
+   */
+  updateSymbol(reelIndex: number, rowIndex: number, properties: Record<string, any>) {
+    this.board.updateSymbol(reelIndex, rowIndex, properties)
+  }
+
   private resetReels() {
     this.board.resetReels({
       ctx: this.ctx,
@@ -75,6 +90,13 @@ export class StandaloneBoard {
    */
   setAnticipationForReel(reelIndex: number, value: boolean) {
     this.board.anticipation[reelIndex] = value
+  }
+
+  /**
+   * Sets the locked state for a specific reel.
+   */
+  setReelLocked(reelIndex: number, value: boolean) {
+    this.board.reelsLocked[reelIndex] = value
   }
 
   /**

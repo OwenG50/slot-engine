@@ -2,9 +2,7 @@ import assert from "assert"
 import { AnyGameModes, AnySymbols, AnyUserData } from "../types"
 import { GameContext } from "../game-context"
 import { Simulation } from "../simulation"
-import { RandomNumberGenerator } from "../service/rng"
-import { copy } from "../../utils"
-import { Wallet } from "../wallet"
+import { RandomNumberGenerator } from "../rng"
 import { SPIN_TYPE } from "../constants"
 
 export class ResultSet<TUserState extends AnyUserData> {
@@ -87,27 +85,28 @@ export class ResultSet<TUserState extends AnyUserData> {
    */
   meetsCriteria(ctx: GameContext) {
     // @ts-ignore TODO: Fix type errors with AnyTypes
-    const customEval = this.evaluate?.(copy(ctx))
+    const customEval = this.evaluate?.(ctx)
 
     const freespinsMet = this.forceFreespins ? ctx.state.triggeredFreespins : true
 
     const wallet = ctx.services.wallet._getWallet()
 
-    const multiplierMet =
-      this.multiplier !== undefined
-        ? wallet.getCurrentWin() === this.multiplier && !this.forceMaxWin
-        : wallet.getCurrentWin() > 0 && (!this.forceMaxWin || true)
+    const multiplierMet = this.forceMaxWin
+      ? true
+      : this.multiplier !== undefined
+        ? wallet.getCurrentWin() === this.multiplier
+        : wallet.getCurrentWin() > 0
 
-    const maxWinMet = this.forceMaxWin
+    const respectsMaxWin = this.forceMaxWin
       ? wallet.getCurrentWin() >= ctx.config.maxWinX
-      : true
+      : wallet.getCurrentWin() < ctx.config.maxWinX
 
-    const coreCriteriaMet = freespinsMet && multiplierMet && maxWinMet
+    const coreCriteriaMet = freespinsMet && multiplierMet && respectsMaxWin
 
     const finalResult =
       customEval !== undefined ? coreCriteriaMet && customEval === true : coreCriteriaMet
 
-    if (this.forceMaxWin && maxWinMet) {
+    if (this.forceMaxWin && respectsMaxWin) {
       ctx.services.data.record({
         maxwin: true,
       })

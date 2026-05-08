@@ -1,9 +1,9 @@
-import assert from "assert"
 import { AbstractService } from "."
 import { GameContext } from "../game-context"
 import { Recorder } from "../recorder"
 import { AnyGameModes, AnySymbols, AnyUserData, SpinType } from "../types"
 import { Book, BookEvent } from "../book"
+import { isMainThread, parentPort } from "worker_threads"
 
 export class DataService<
   TGameModes extends AnyGameModes = AnyGameModes,
@@ -16,14 +16,6 @@ export class DataService<
   constructor(ctx: () => GameContext<TGameModes, TSymbols, TUserState>) {
     // @ts-ignore TODO: Fix type errors with AnyTypes
     super(ctx)
-  }
-
-  private ensureRecorder() {
-    assert(this.recorder, "Recorder not set in DataService. Call setRecorder() first.")
-  }
-
-  private ensureBook() {
-    assert(this.book, "Book not set in DataService. Call setBook() first.")
   }
 
   /**
@@ -58,7 +50,6 @@ export class DataService<
    * Intended for internal use only.
    */
   _getRecords() {
-    this.ensureRecorder()
     return this.recorder.records
   }
 
@@ -66,13 +57,14 @@ export class DataService<
    * Record data for statistical analysis.
    */
   record(data: Record<string, string | number | boolean>) {
-    this.ensureRecorder()
+    const properties: Record<string, string> = {}
+    for (const key in data) {
+      properties[key] = String(data[key])
+    }
 
     this.recorder.pendingRecords.push({
       bookId: this.ctx().state.currentSimulationId,
-      properties: Object.fromEntries(
-        Object.entries(data).map(([k, v]) => [k, String(v)]),
-      ),
+      properties,
     })
   }
 
@@ -81,28 +73,32 @@ export class DataService<
    *
    * Calls `ctx.services.data.record()` with the provided data.
    */
-  recordSymbolOccurrence(data: {
-    kind: number
-    symbolId: string
-    spinType: SpinType
-    [key: string]: any
-  }) {
-    this.record(data)
+  recordSymbolOccurrence(data: { kind: number; symbolId: string; [key: string]: any }) {
+    this.record({
+      ...data,
+      spinType: this.ctx().state.currentSpinType,
+    })
   }
 
   /**
    * Adds an event to the book.
    */
   addBookEvent(event: Omit<BookEvent, "index">) {
-    this.ensureBook()
     this.book.addEvent(event)
+  }
+
+  /**
+   * Write a log message to the terminal UI.
+   */
+  log(message: string) {
+    if (isMainThread) return
+    parentPort?.postMessage({ type: "user-log", message })
   }
 
   /**
    * Intended for internal use only.
    */
   _clearPendingRecords() {
-    this.ensureRecorder()
     this.recorder.pendingRecords = []
   }
 }

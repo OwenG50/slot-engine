@@ -1,5 +1,4 @@
 import fs from "fs"
-import readline from "readline"
 import { BoardService } from "./src/service/board"
 
 export function createDirIfNotExists(dirPath: string): void {
@@ -97,51 +96,6 @@ export function weightedAverage(dist: Record<number, number>) {
   const weightedSum = keys.reduce((sum, key, i) => sum + key * values[i]!, 0)
 
   return weightedSum / totalWeight
-}
-
-export class JSONL {
-  public static stringify(array: object[]): string {
-    return array.map((object) => JSON.stringify(object)).join("\n")
-  }
-
-  public static parse<T>(jsonl: string): Array<T> {
-    return jsonl
-      .split("\n")
-      .filter((s) => s !== "")
-      .map((str) => JSON.parse(str))
-  }
-
-  public static async convertToJson(
-    inputPath: string,
-    outputPath: string,
-  ): Promise<void> {
-    const writeStream = fs.createWriteStream(outputPath, { encoding: "utf-8" })
-    writeStream.write("[\n")
-
-    const rl = readline.createInterface({
-      input: fs.createReadStream(inputPath),
-      crlfDelay: Infinity,
-    })
-
-    let isFirst = true
-
-    for await (const line of rl) {
-      if (line.trim() === "") continue
-      if (!isFirst) {
-        writeStream.write(",\n")
-      }
-      writeStream.write(line)
-      isFirst = false
-    }
-
-    writeStream.write("\n]")
-    writeStream.end()
-
-    return new Promise<void>((resolve, reject) => {
-      writeStream.on("finish", () => resolve())
-      writeStream.on("error", reject)
-    })
-  }
 }
 
 export function round(value: number, decimals: number) {

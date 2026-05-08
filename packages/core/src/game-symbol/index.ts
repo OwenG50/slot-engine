@@ -6,7 +6,11 @@ export class GameSymbol {
   constructor(opts: GameSymbolOpts) {
     this.id = opts.id
     this.pays = opts.pays
-    this.properties = new Map<string, any>(Object.entries(opts.properties || {}))
+    this.properties = new Map<string, any>()
+
+    for (const prop in opts.properties) {
+      this.properties.set(prop, opts.properties[prop])
+    }
 
     if (this.pays && Object.keys(this.pays).length === 0) {
       throw new Error(`GameSymbol "${this.id}" must have pays defined.`)
@@ -24,8 +28,8 @@ export class GameSymbol {
     if (symbolOrProperties instanceof GameSymbol) {
       return this.id === symbolOrProperties.id
     } else {
-      for (const [key, value] of Object.entries(symbolOrProperties)) {
-        if (!this.properties.has(key) || this.properties.get(key) !== value) {
+      for (const prop in symbolOrProperties) {
+        if (!this.properties.has(prop) || this.properties.get(prop) !== symbolOrProperties[prop]) {
           return false
         }
       }
@@ -36,12 +40,12 @@ export class GameSymbol {
   /**
    * Creates a clone of this GameSymbol.
    */
-  clone() {
-    return new GameSymbol({
-      id: this.id,
-      pays: this.pays ? { ...this.pays } : undefined,
-      properties: Object.fromEntries(this.properties),
-    })
+  clone(): GameSymbol {
+    const cloned = Object.create(GameSymbol.prototype)
+    cloned.id = this.id
+    cloned.pays = this.pays
+    cloned.properties = this.properties.size > 0 ? new Map(this.properties) : new Map()
+    return cloned
   }
 }
 
@@ -58,10 +62,10 @@ export interface GameSymbolOpts {
    * Additional properties for the symbol, e.g. `multiplier` or `isWild`.
    *
    * Properties can help identify special symbols.
-   * 
+   *
    * @example
    * If your game has a "normal" scatter and a "super" scatter, you can define them like this:
-   * 
+   *
    * ```ts
    * properties: {
    *   isScatter: true,

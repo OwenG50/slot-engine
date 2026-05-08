@@ -28,8 +28,18 @@ export class Board {
    * Used for triggering anticipation effects.
    */
   anticipation: boolean[]
+  /**
+   * The most recent stop positions for the reels.
+   */
   lastDrawnReelStops: number[]
+  /**
+   * The reel set used in the most recent draw.
+   */
   lastUsedReels: Reels
+  /**
+   * Indicates whether each reel is locked or not.
+   */
+  reelsLocked: boolean[]
 
   constructor() {
     this.reels = []
@@ -38,6 +48,7 @@ export class Board {
     this.anticipation = []
     this.lastDrawnReelStops = []
     this.lastUsedReels = []
+    this.reelsLocked = []
   }
 
   getSymbol(reelIndex: number, rowIndex: number) {
@@ -47,11 +58,23 @@ export class Board {
   setSymbol(reelIndex: number, rowIndex: number, symbol: GameSymbol) {
     this.reels[reelIndex] = this.reels[reelIndex] || []
     this.reels[reelIndex]![rowIndex] = symbol
+    this.updateSymbol(reelIndex, rowIndex, {
+      position: [reelIndex, rowIndex],
+    })
   }
 
   removeSymbol(reelIndex: number, rowIndex: number) {
     if (this.reels[reelIndex]) {
       this.reels[reelIndex]!.splice(rowIndex, 1)
+    }
+  }
+
+  updateSymbol(reelIndex: number, rowIndex: number, properties: Record<string, any>) {
+    const symbol = this.getSymbol(reelIndex, rowIndex)
+    if (symbol) {
+      for (const prop in properties) {
+        symbol.properties.set(prop, properties[prop])
+      }
     }
   }
 
@@ -75,8 +98,8 @@ export class Board {
       if (symbolOrProperties instanceof GameSymbol) {
         if (symbol.id !== symbolOrProperties.id) matches = false
       } else {
-        for (const [key, value] of Object.entries(symbolOrProperties)) {
-          if (!symbol.properties.has(key) || symbol.properties.get(key) !== value) {
+        for (const prop in symbolOrProperties) {
+          if (!symbol.properties.has(prop) || symbol.properties.get(prop) !== symbolOrProperties[prop]) {
             matches = false
             break
           }
@@ -96,29 +119,25 @@ export class Board {
     let total = 0
     const onReel: Record<number, number> = {}
 
+    const isGameSymbol = symbolOrProperties instanceof GameSymbol
+
     for (const [ridx, reel] of this.reels.entries()) {
       for (const symbol of reel) {
-        let matches = true
-
-        if (symbolOrProperties instanceof GameSymbol) {
-          if (symbol.id !== symbolOrProperties.id) matches = false
+        if (isGameSymbol) {
+          if (symbol.id !== symbolOrProperties.id) continue
         } else {
-          for (const [key, value] of Object.entries(symbolOrProperties)) {
-            if (!symbol.properties.has(key) || symbol.properties.get(key) !== value) {
+          let matches = true
+          for (const prop in symbolOrProperties) {
+            if (!symbol.properties.has(prop) || symbol.properties.get(prop) !== symbolOrProperties[prop]) {
               matches = false
               break
             }
           }
+          if (!matches) continue
         }
 
-        if (matches) {
-          total++
-          if (onReel[ridx] === undefined) {
-            onReel[ridx] = 1
-          } else {
-            onReel[ridx]++
-          }
-        }
+        total++
+        onReel[ridx] = (onReel[ridx] || 0) + 1
       }
     }
 
@@ -233,12 +252,14 @@ export class Board {
     return reelSet
   }
 
-  resetReels(opts: { ctx: GameContext; reelsAmount?: number }) {
-    const length =
-      opts.reelsAmount ?? opts.ctx.services.game.getCurrentGameMode().reelsAmount
+  resetReels(opts: { ctx: GameContext; reelsAmount?: number; reelsLocked?: boolean[] }) {
+    const { ctx, reelsAmount, reelsLocked } = opts
+
+    const length = reelsAmount ?? ctx.services.game.getCurrentGameMode().reelsAmount
 
     this.reels = this.makeEmptyReels(opts)
     this.anticipation = Array.from({ length }, () => false)
+    this.reelsLocked = reelsLocked ?? Array.from({ length }, () => false)
     this.paddingTop = this.makeEmptyReels(opts)
     this.paddingBottom = this.makeEmptyReels(opts)
   }
@@ -252,12 +273,14 @@ export class Board {
     symbolsPerReel?: number[]
     padSymbols?: number
   }) {
-    this.resetReels(opts)
+    this.resetReels({
+      ...opts,
+      ...(this.reelsLocked.length && { reelsLocked: this.reelsLocked }),
+    })
 
-    const reelsAmount =
-      opts.reelsAmount ?? opts.ctx.services.game.getCurrentGameMode().reelsAmount
-    const symbolsPerReel =
-      opts.symbolsPerReel ?? opts.ctx.services.game.getCurrentGameMode().symbolsPerReel
+    const gameMode = opts.ctx.services.game.getCurrentGameMode()
+    const reelsAmount = opts.reelsAmount ?? gameMode.reelsAmount
+    const symbolsPerReel = opts.symbolsPerReel ?? gameMode.symbolsPerReel
     const padSymbols = opts.padSymbols ?? opts.ctx.config.padSymbols
 
     const finalReelStops: (number | null)[] = Array.from(
@@ -294,28 +317,50 @@ export class Board {
       }
     }
 
+    if (
+      this.reelsLocked.some((locked) => locked) &&
+      this.lastDrawnReelStops.length == 0
+    ) {
+      throw new Error(
+        "Cannot draw board with locked reels before drawing it at least once.",
+      )
+    }
+
+    if (this.reelsLocked.some((locked) => locked)) {
+      for (let ridx = 0; ridx < reelsAmount; ridx++) {
+        if (this.reelsLocked[ridx]) {
+          finalReelStops[ridx] = this.lastDrawnReelStops[ridx]!
+        }
+      }
+    }
+
     this.lastDrawnReelStops = finalReelStops.map((pos) => pos!) as number[]
     this.lastUsedReels = opts.reels
 
     for (let ridx = 0; ridx < reelsAmount; ridx++) {
       const reelPos = finalReelStops[ridx]!
-      const reelLength = opts.reels[ridx]!.length
+      const reel = opts.reels[ridx]!
+      const reelLength = reel.length
 
       for (let p = padSymbols - 1; p >= 0; p--) {
         const topPos = (((reelPos - (p + 1)) % reelLength) + reelLength) % reelLength
-        this.paddingTop[ridx]!.push(opts.reels[ridx]![topPos]!)
+        this.paddingTop[ridx]!.push(reel[topPos]!.clone())
         const bottomPos = (reelPos + symbolsPerReel[ridx]! + p) % reelLength
-        this.paddingBottom[ridx]!.unshift(opts.reels[ridx]![bottomPos]!)
+        this.paddingBottom[ridx]!.unshift(reel[bottomPos]!.clone())
       }
 
       for (let row = 0; row < symbolsPerReel[ridx]!; row++) {
-        const symbol = opts.reels[ridx]![(reelPos + row) % reelLength]
+        const symbol = reel[(reelPos + row) % reelLength]
 
         if (!symbol) {
           throw new Error(`Failed to get symbol at pos ${reelPos + row} on reel ${ridx}`)
         }
 
-        this.reels[ridx]![row] = symbol
+        this.reels[ridx]![row] = symbol.clone()
+
+        this.updateSymbol(ridx, row, {
+          position: [ridx, row],
+        })
       }
     }
 
@@ -335,10 +380,9 @@ export class Board {
   }) {
     assert(this.lastDrawnReelStops.length > 0, "Cannot tumble board before drawing it.")
 
-    const reelsAmount =
-      opts.reelsAmount ?? opts.ctx.services.game.getCurrentGameMode().reelsAmount
-    const symbolsPerReel =
-      opts.symbolsPerReel ?? opts.ctx.services.game.getCurrentGameMode().symbolsPerReel
+    const gameMode = opts.ctx.services.game.getCurrentGameMode()
+    const reelsAmount = opts.reelsAmount ?? gameMode.reelsAmount
+    const symbolsPerReel = opts.symbolsPerReel ?? gameMode.symbolsPerReel
     const padSymbols = opts.padSymbols ?? opts.ctx.config.padSymbols
 
     // Some context:
@@ -412,13 +456,14 @@ export class Board {
       const symbolsNeeded = symbolsPerReel[ridx]! - this.reels[ridx]!.length
       // Drop rest of symbols
       for (let s = 0; s < symbolsNeeded; s++) {
-        const symbolPos = (stopBeforePad - s + reels[ridx]!.length) % reels[ridx]!.length
-        let newSymbol = reels[ridx]![symbolPos]
+        const reel = reels[ridx]!
+        const symbolPos = (stopBeforePad - s + reel.length) % reel.length
+        let newSymbol = reel[symbolPos]
 
         // If we have starting stops, try to get the symbol from there
         const startStops = opts.startingStops
         if (startStops) {
-          const forcedSym = reels[ridx]![startStops?.[ridx]!]
+          const forcedSym = reel[startStops?.[ridx]!]
           assert(
             forcedSym,
             `Failed to get forced symbol for tumbling. Tried to get symbol for position ${startStops?.[ridx]!} on reel ${ridx}.`,
@@ -428,6 +473,7 @@ export class Board {
 
         assert(newSymbol, "Failed to get new symbol for tumbling.")
 
+        newSymbol = newSymbol.clone()
         this.reels[ridx]!.unshift(newSymbol)
         newFirstSymbolPositions[ridx] = symbolPos
 
@@ -446,8 +492,9 @@ export class Board {
       if (firstSymbolPos === undefined) continue
 
       for (let p = 1; p <= padSymbols; p++) {
-        const topPos = (firstSymbolPos - p + reels[ridx]!.length) % reels[ridx]!.length
-        const padSymbol = reels[ridx]![topPos]
+        const reel = reels[ridx]!
+        const topPos = (firstSymbolPos - p + reel.length) % reel.length
+        const padSymbol = reel[topPos]?.clone()
 
         assert(padSymbol, "Failed to get new padding symbol for tumbling.")
 
@@ -467,6 +514,16 @@ export class Board {
       this.lastDrawnReelStops = this.lastDrawnReelStops.map((stop, ridx) => {
         return newFirstSymbolPositions[ridx] ?? stop
       })
+    }
+
+    // Update all symbol positions
+    for (let ridx = 0; ridx < reelsAmount; ridx++) {
+      const reel = this.reels[ridx]!
+      for (let rowIdx = 0; rowIdx < reel.length; rowIdx++) {
+        this.updateSymbol(ridx, rowIdx, {
+          position: [ridx, rowIdx],
+        })
+      }
     }
 
     return {

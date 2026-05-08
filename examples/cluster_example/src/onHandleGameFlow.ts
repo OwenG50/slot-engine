@@ -48,9 +48,12 @@ export function onHandleGameFlow(ctx: Context) {
   ctx.services.data.addBookEvent({
     type: "show-final-win",
     data: {
-      payout: ctx.services.wallet.getCurrentWin(),
+      payout: Math.min(ctx.services.wallet.getCurrentWin(), ctx.config.maxWinX),
     },
   })
+
+  // If we reach max win in base game we can skip free spins entirely
+  if (ctx.state.triggeredMaxWin) return
 
   // Maybe enter free spins loop
   checkFreespins(ctx)
@@ -110,7 +113,7 @@ function drawBoard(ctx: Context) {
       if (!scatInvalid) break
     }
   } else {
-    // If no special ResultSet criteria, draw board normally
+    // If no special ResultSet criteria, or we are in FS, draw board normally
     while (true) {
       ctx.services.board.resetBoard()
       ctx.services.board.drawBoardWithRandomStops(reels)
@@ -130,7 +133,7 @@ function handleAnticipation(ctx: Context) {
     if (count >= ctx.config.anticipationTriggers[ctx.state.currentSpinType]) {
       ctx.services.board.setAnticipationForReel(i, true)
     }
-    if (scatCount[i] > 0) {
+    if (scatCount[i]! > 0) {
       count++
     }
   }
@@ -178,9 +181,9 @@ function handleTumbles(ctx: Context) {
 
     // Double board multipliers after win, capped at 128x
     for (const sym of winSymbols) {
-      const currentMulti = ctx.state.userData.boardMultis[sym.reelIdx][sym.rowIdx]
+      const currentMulti = ctx.state.userData.boardMultis[sym.reelIdx]![sym.rowIdx]!
       const newMulti = Math.max(1, Math.min(currentMulti * 2, 128))
-      ctx.state.userData.boardMultis[sym.reelIdx][sym.rowIdx] = newMulti
+      ctx.state.userData.boardMultis[sym.reelIdx]![sym.rowIdx] = newMulti
     }
 
     ctx.services.data.addBookEvent({
@@ -213,6 +216,12 @@ function handleTumbles(ctx: Context) {
         ),
       },
     })
+
+    // Reached max win, stop win calculation
+    if (payout >= ctx.config.maxWinX) {
+      ctx.state.triggeredMaxWin = true
+      break
+    }
   }
 }
 
@@ -233,6 +242,14 @@ function checkFreespins(ctx: Context) {
   // Ensure we only trigger free spins from base game.
   // Our playFreeSpins function handles the free spins loop already and we don't want recursion.
   if (ctx.state.currentSpinType == SPIN_TYPE.BASE_GAME) {
+    // In some cases, free spins might be triggered in a non-freespins result set,
+    // for example when the third scatter drops in during tumbling.
+    // Make this simulation invalid to skip it.
+    const forbiddenResultSets = ["0", "basegame"]
+    if (forbiddenResultSets.includes(ctx.state.currentResultSet.criteria)) {
+      ctx.services.wallet.addSpinWin(-999999999)
+    }
+
     ctx.services.data.addBookEvent({
       type: "fs-triggered",
       data: {
@@ -305,11 +322,14 @@ function playFreeSpins(ctx: Context) {
     ctx.services.data.addBookEvent({
       type: "show-fs-spin-win",
       data: {
-        payout: ctx.services.wallet.getCurrentSpinWin(),
+        payout: Math.min(ctx.services.wallet.getCurrentSpinWin(), ctx.config.maxWinX),
       },
     })
 
     ctx.services.wallet.confirmSpinWin()
+
+    // We don't want to play more free spins if max win was reached
+    if (ctx.state.triggeredMaxWin) break
 
     checkFreespins(ctx)
   }
@@ -318,7 +338,7 @@ function playFreeSpins(ctx: Context) {
   ctx.services.data.addBookEvent({
     type: "show-fs-win",
     data: {
-      payout: ctx.services.wallet.getCurrentWin(),
+      payout: Math.min(ctx.services.wallet.getCurrentWin(), ctx.config.maxWinX),
     },
   })
 }
@@ -356,7 +376,7 @@ function makeInitialBoardMultis(ctx: Context) {
 
   for (let r = 0; r < reelsNum; r++) {
     const reelMultis: number[] = []
-    for (let s = 0; s < symbolsPerReel[r]; s++) {
+    for (let s = 0; s < symbolsPerReel[r]!; s++) {
       reelMultis.push(0)
     }
     boardMultis.push(reelMultis)
@@ -368,7 +388,7 @@ function makeInitialBoardMultis(ctx: Context) {
 function processWins(wins: WinCombination[], ctx: Context) {
   const winCombinations = wins.map((wc) => {
     const multiForCluster = wc.symbols.reduce((multi, s) => {
-      const multiOnPos = ctx.state.userData.boardMultis[s.reelIndex][s.posIndex]
+      const multiOnPos = ctx.state.userData.boardMultis[s.reelIndex]![s.posIndex]!
       // A winning cluster must first "activate" the multiplier on a position (multi 0 -> 1).
       // Only on the next win does the multiplier apply (multi 1 -> 2).
       // Multipliers themselves are updated in `handleTumbles()`.

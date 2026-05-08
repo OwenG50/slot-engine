@@ -1,5 +1,7 @@
+import { copy } from "../../utils"
+
 export class Book {
-  readonly id: number
+  id: number
   criteria: string = "N/A"
   events: BookEvent[] = []
   payout: number = 0
@@ -14,7 +16,19 @@ export class Book {
   /**
    * Intended for internal use only.
    */
-  setCriteria(criteria: string) {
+  _reset(id: number, criteria: string) {
+    this.id = id
+    this.criteria = criteria
+    this.events = []
+    this.payout = 0
+    this.basegameWins = 0
+    this.freespinsWins = 0
+  }
+
+  /**
+   * Intended for internal use only.
+   */
+  _setCriteria(criteria: string) {
     this.criteria = criteria
   }
 
@@ -22,22 +36,11 @@ export class Book {
    * Adds an event to the book.
    */
   addEvent(event: Omit<BookEvent, "index">) {
-    const index = this.events.length
-    this.events.push({ index, ...event })
-  }
-
-  /**
-   * Intended for internal use only.
-   */
-  serialize() {
-    return {
-      id: this.id,
-      criteria: this.criteria,
-      events: this.events,
-      payout: this.payout,
-      basegameWins: this.basegameWins,
-      freespinsWins: this.freespinsWins,
-    }
+    this.events.push({
+      index: this.events.length + 1,
+      type: event.type,
+      data: copy(event.data),
+    })
   }
 }
 
@@ -50,4 +53,10 @@ export interface BookEvent {
 interface BookOpts {
   id: number
   criteria: string
+}
+
+export interface WrittenBook {
+  id: number
+  payoutMultiplier: number
+  events: BookEvent[]
 }
