@@ -97,6 +97,22 @@ importers:
         specifier: 5.9.3
         version: 5.9.3
 
+  examples/cabin_fever:
+    dependencies:
+      '@slot-engine/core':
+        specifier: 0.1.11
+        version: 0.1.11
+    devDependencies:
+      '@types/node':
+        specifier: ^24.7.2
+        version: 24.10.1
+      esbuild:
+        specifier: 0.25.9
+        version: 0.25.9
+      tsx:
+        specifier: ^4.20.6
+        version: 4.20.6
+
   examples/cluster_example:
     dependencies:
       '@slot-engine/core':
@@ -123,21 +139,11 @@ importers:
         specifier: 4.20.6
         version: 4.20.6
 
-  examples/panel:
-    dependencies:
-      '@slot-engine/panel':
-        specifier: 0.1.14
-        version: link:../../packages/panel
-    devDependencies:
-      tsx:
-        specifier: 4.20.6
-        version: 4.20.6
-
   examples/new_game:
     dependencies:
       '@slot-engine/core':
         specifier: 0.1.11
-        version: link:../../packages/core
+        version: 0.1.11
     devDependencies:
       '@types/node':
         specifier: ^24.7.2
@@ -147,6 +153,16 @@ importers:
         version: 0.25.9
       tsx:
         specifier: ^4.20.6
+        version: 4.20.6
+
+  examples/panel:
+    dependencies:
+      '@slot-engine/panel':
+        specifier: 0.1.14
+        version: link:../../packages/panel
+    devDependencies:
+      tsx:
+        specifier: 4.20.6
         version: 4.20.6
 
   packages/core:
@@ -1845,6 +1861,9 @@ packages:
 
   '@shikijs/vscode-textmate@10.0.2':
     resolution: {integrity: sha512-83yeghZ2xxin3Nj8z1NMd/NCuca+gsYXswywDy5bHvwlWL8tpTQmzGeUuHd9FC3E/SBEMvzJRwWEOz5gGes9Qg==}
+
+  '@slot-engine/core@0.1.11':
+    resolution: {integrity: sha512-NnO3CWIkBa8uVySXGVRUYUD06UoFfBOxAdO7Qhf8Us6c8ovqnjNp1eh5qE+k05UNAFeP+Rpl4YxxOL0owpOd/A==}
 
   '@socket.io/component-emitter@3.1.2':
     resolution: {integrity: sha512-9BCxFwvbGg/RsZK9tjXd8s4UcwR0MWeFQ1XEKIQVVvAGJyINdrqKMcTRyLoK8Rse1GjzLV9cwjWV1olXRWEXVA==}
@@ -6059,6 +6078,10 @@ snapshots:
       '@types/hast': 3.0.4
 
   '@shikijs/vscode-textmate@10.0.2': {}
+
+  '@slot-engine/core@0.1.11':
+    dependencies:
+      esbuild: 0.25.9
 
   '@socket.io/component-emitter@3.1.2': {}
 
