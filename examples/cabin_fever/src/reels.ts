@@ -3,7 +3,7 @@ import { GeneratedReelSet } from "@slot-engine/core"
 const SYM_WEIGHTS = {
   base: {
     S: 5,
-    W: 20,
+    W: 7,
     H1: 30,
     H2: 35,
     H3: 40,
@@ -15,8 +15,8 @@ const SYM_WEIGHTS = {
     L5: 70,
   },
   freespin: {
-    S: 5,
-    W: 20,
+    S: 4,
+    W: 7,
     H1: 30,
     H2: 35,
     H3: 40,
@@ -28,8 +28,8 @@ const SYM_WEIGHTS = {
     L5: 70,
   },
   superfreespin: {
-    S: 5,
-    W: 20,
+    S: 4,
+    W: 7,
     H1: 30,
     H2: 35,
     H3: 40,

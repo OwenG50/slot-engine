@@ -9,39 +9,43 @@ function roundToDecimal(value: number, decimals: number = 1): number {
   return Math.round(value * multiplier) / multiplier
 }
 
-// Weighted multiplier tables — higher values have lower weights so they feel rarer
+// Weighted multiplier tables — higher values have lower weights so they feel rarer.
+// Low-to-mid weights boosted significantly so high multipliers (30–50) are
+// proportionally much rarer, reducing the frequency of max-win simulation books.
 const MULTIPLIER_TABLE: Array<{ value: number; weight: number }> = [
-  { value: 2,   weight: 50 },
-  { value: 3,   weight: 40 },
-  { value: 4,   weight: 30 },
-  { value: 5,   weight: 25 },
-  { value: 6,   weight: 20 },
-  { value: 8,   weight: 15 },
-  { value: 10,  weight: 10 },
-  { value: 12,  weight: 7  },
-  { value: 15,  weight: 5  },
-  { value: 20,  weight: 3  },
-  { value: 25,  weight: 2  },
-  { value: 30,  weight: 1  },
-  { value: 35,  weight: 1  },
-  { value: 45,  weight: 1  },
-  { value: 50,  weight: 1  },
+  { value: 2,   weight: 250 },
+  { value: 3,   weight: 200 },
+  { value: 4,   weight: 150 },
+  { value: 5,   weight: 120 },
+  { value: 6,   weight: 90  },
+  { value: 8,   weight: 50  },
+  { value: 10,  weight: 25  },
+  { value: 12,  weight: 10  },
+  { value: 15,  weight: 5   },
+  { value: 20,  weight: 2   },
+  { value: 25,  weight: 1   },
+  { value: 30,  weight: 1   },
+  { value: 35,  weight: 1   },
+  { value: 45,  weight: 1   },
+  { value: 50,  weight: 1   },
 ]
 
-// Super free spins table — minimum 5x multiplier
+// Super free spins table — minimum 5x multiplier.
+// Same approach as MULTIPLIER_TABLE: low-to-mid weights boosted to dilute
+// the probability of extreme multipliers and reduce max-win book frequency.
 const SUPER_MULTIPLIER_TABLE: Array<{ value: number; weight: number }> = [
-  { value: 5,   weight: 50 },
-  { value: 6,   weight: 40 },
-  { value: 8,   weight: 30 },
-  { value: 10,  weight: 20 },
-  { value: 12,  weight: 12 },
-  { value: 15,  weight: 8  },
-  { value: 20,  weight: 5  },
-  { value: 25,  weight: 3  },
-  { value: 30,  weight: 2  },
-  { value: 35,  weight: 1  },
-  { value: 45,  weight: 1  },
-  { value: 50,  weight: 1  },
+  { value: 5,   weight: 250 },
+  { value: 6,   weight: 200 },
+  { value: 8,   weight: 150 },
+  { value: 10,  weight: 100 },
+  { value: 12,  weight: 60  },
+  { value: 15,  weight: 30  },
+  { value: 20,  weight: 10  },
+  { value: 25,  weight: 3   },
+  { value: 30,  weight: 1   },
+  { value: 35,  weight: 1   },
+  { value: 45,  weight: 1   },
+  { value: 50,  weight: 1   },
 ]
 
 function posKey(reel: number, row: number): string {
