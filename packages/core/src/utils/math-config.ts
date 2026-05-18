@@ -21,29 +21,34 @@ export function makeMathConfig(
       rtp: mode.rtp,
       max_win: game.maxWinX,
     })),
-    fences: Object.entries(gameModesCfg).map(([gameModeName, modeCfg]) => ({
-      bet_mode: gameModeName,
-      fences: Object.entries(modeCfg.conditions)
-        .map(([fenceName, fence]) => ({
-          name: fenceName,
-          avg_win: isDefined(fence.getAvgWin())
-            ? fence.getAvgWin()!.toString()
-            : undefined,
-          hr: isDefined(fence.getHitRate()) ? fence.getHitRate()!.toString() : undefined,
-          rtp: isDefined(fence.getRtp()) ? fence.getRtp()!.toString() : undefined,
-          identity_condition: {
-            search: Object.entries(fence.getForceSearch()).map(([k, v]) => ({
-              name: k,
-              value: v,
-            })),
-            win_range_start: fence.getSearchRange()[0]!,
-            win_range_end: fence.getSearchRange()[1]!,
-            opposite: false,
-          },
-          priority: fence.priority,
-        }))
-        .sort((a, b) => b.priority - a.priority),
-    })),
+    fences: Object.entries(gameModesCfg).map(([gameModeName, modeCfg]) => {
+      const { minMeanToMedian, maxMeanToMedian } = modeCfg.parameters.getParameters()
+      return {
+        bet_mode: gameModeName,
+        fences: Object.entries(modeCfg.conditions)
+          .map(([fenceName, fence]) => ({
+            name: fenceName,
+            avg_win: isDefined(fence.getAvgWin())
+              ? fence.getAvgWin()!.toString()
+              : undefined,
+            hr: isDefined(fence.getHitRate()) ? fence.getHitRate()!.toString() : undefined,
+            rtp: isDefined(fence.getRtp()) ? fence.getRtp()!.toString() : undefined,
+            identity_condition: {
+              search: Object.entries(fence.getForceSearch()).map(([k, v]) => ({
+                name: k,
+                value: v,
+              })),
+              win_range_start: fence.getSearchRange()[0]!,
+              win_range_end: fence.getSearchRange()[1]!,
+              opposite: false,
+            },
+            priority: fence.priority,
+            min_mean_to_median: minMeanToMedian.toString(),
+            max_mean_to_median: maxMeanToMedian.toString(),
+          }))
+          .sort((a, b) => b.priority - a.priority),
+      }
+    }),
     dresses: Object.entries(gameModesCfg).flatMap(([gameModeName, modeCfg]) => ({
       bet_mode: gameModeName,
       dresses: modeCfg.scaling.getConfig().map((s) => ({
@@ -100,6 +105,8 @@ interface Fence {
   hr?: string
   identity_condition: IdentityCondition
   priority: number
+  min_mean_to_median?: string
+  max_mean_to_median?: string
 }
 
 interface Dress {

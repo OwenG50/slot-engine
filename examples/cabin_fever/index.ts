@@ -329,11 +329,11 @@ export const game = createSlotGame<GameType>({
 // Add or remove from this to choose what gets simulated or not.
 game.configureSimulation({
   simRunsAmount: {
-    base: 100000,
-    bonusHunt: 100000,
-    bonusHuntPlus: 100000,
-    bonusFeature: 100000,
-    superBonusFeature: 100000,
+    base: 300000,
+    bonusHunt: 300000,
+    bonusHuntPlus: 300000,
+    bonusFeature: 300000,
+    superBonusFeature: 300000,
   },
   concurrency: 24
 })
@@ -689,14 +689,15 @@ game.configureOptimization({
       },
       scaling: new OptimizationScaling([
         // ── Base game ──────────────────────────────────────────────────────
-        // Matches base mode: sub-1x near-zero, peak at 1–5x, steep taper above.
-        { criteria: "basegame", scaleFactor: 0.18, winRange: [0.01,  1],     probability: 1 },
-        { criteria: "basegame", scaleFactor: 10.0, winRange: [1,     2],     probability: 1 },
-        { criteria: "basegame", scaleFactor: 7.0,  winRange: [2,     5],     probability: 1 },
-        { criteria: "basegame", scaleFactor: 4.0,  winRange: [5,     10],    probability: 1 },
-        { criteria: "basegame", scaleFactor: 1.5,  winRange: [10,    20],    probability: 1 },
-        { criteria: "basegame", scaleFactor: 0.06, winRange: [20,    50],    probability: 1 },
-        { criteria: "basegame", scaleFactor: 0.02, winRange: [50,    100],   probability: 1 },
+        // BG avgWin ≈ 0.8x — natural home is 0.5–2x. Gently suppress mid-range
+        // so the optimizer doesn't over-represent BG in 5–50x territory.
+        { criteria: "basegame", scaleFactor: 1.0,  winRange: [0.01,  1],     probability: 1 },
+        { criteria: "basegame", scaleFactor: 1.3,  winRange: [1,     2],     probability: 1 },
+        { criteria: "basegame", scaleFactor: 0.7,  winRange: [2,     5],     probability: 1 },
+        { criteria: "basegame", scaleFactor: 0.4,  winRange: [5,     10],    probability: 1 },
+        { criteria: "basegame", scaleFactor: 0.2,  winRange: [10,    20],    probability: 1 },
+        { criteria: "basegame", scaleFactor: 0.08, winRange: [20,    50],    probability: 1 },
+        { criteria: "basegame", scaleFactor: 0.03, winRange: [50,    100],   probability: 1 },
         { criteria: "basegame", scaleFactor: 0.01, winRange: [100,   200],   probability: 1 },
         { criteria: "basegame", scaleFactor: 0.005,winRange: [200,   500],   probability: 1 },
         { criteria: "basegame", scaleFactor: 0.003,winRange: [500,   1000],  probability: 1 },
@@ -706,50 +707,44 @@ game.configureOptimization({
         { criteria: "basegame", scaleFactor: 0.002,winRange: [10000, 15000], probability: 1 },
         { criteria: "basegame", scaleFactor: 1,    winRange: [15000, 15000], probability: 1 },
         // ── Free spins ─────────────────────────────────────────────────────
-        // Goal: Extreme volatility — bimodal strategy.
-        // FS avgWin ≈ 4.5x; accept many small wins to anchor the mean, hard-crush
-        // the mediocre 5-50x middle, strongly boost 50x+ so rare hits are genuinely big.
-        { criteria: "freespins", scaleFactor: 1.5,  winRange: [0.01,  1],     probability: 1 },  // accept — anchors mean
-        { criteria: "freespins", scaleFactor: 1.5,  winRange: [1,     2],     probability: 1 },
-        { criteria: "freespins", scaleFactor: 1.2,  winRange: [2,     5],     probability: 1 },
-        { criteria: "freespins", scaleFactor: 0.15, winRange: [5,     10],    probability: 1 },  // crush dead middle
-        { criteria: "freespins", scaleFactor: 0.1,  winRange: [10,    20],    probability: 1 },  // crush — main cause of 7% peak
-        { criteria: "freespins", scaleFactor: 0.15, winRange: [20,    50],    probability: 1 },  // crush
-        { criteria: "freespins", scaleFactor: 4.0,  winRange: [50,    100],   probability: 1 },  // boost — "good" FS win
-        { criteria: "freespins", scaleFactor: 6.0,  winRange: [100,   200],   probability: 1 },  // strong boost
-        { criteria: "freespins", scaleFactor: 5.0,  winRange: [200,   500],   probability: 1 },
-        { criteria: "freespins", scaleFactor: 3.0,  winRange: [500,   1000],  probability: 1 },
-        { criteria: "freespins", scaleFactor: 2.0,  winRange: [1000,  2000],  probability: 1 },
-        { criteria: "freespins", scaleFactor: 0.8,  winRange: [2000,  5000],  probability: 1 },
-        { criteria: "freespins", scaleFactor: 0.3,  winRange: [5000,  10000], probability: 1 },
-        { criteria: "freespins", scaleFactor: 0.1,  winRange: [10000, 15000], probability: 1 },
+        // FS avgWin ≈ 4.5x. Gradual ramp: keep mid-range (2–50x) alive so
+        // median stays ~1–2x → ratio ≈ 2–4.5 fits default constraint.
+        // Boost 500x+ to pull EV into the tail without destroying the median.
+        { criteria: "freespins", scaleFactor: 0.9,  winRange: [0.01,  1],     probability: 1 },
+        { criteria: "freespins", scaleFactor: 1.0,  winRange: [1,     2],     probability: 1 },
+        { criteria: "freespins", scaleFactor: 0.8,  winRange: [2,     5],     probability: 1 },
+        { criteria: "freespins", scaleFactor: 0.7,  winRange: [5,     10],    probability: 1 },
+        { criteria: "freespins", scaleFactor: 0.7,  winRange: [10,    20],    probability: 1 },
+        { criteria: "freespins", scaleFactor: 0.8,  winRange: [20,    50],    probability: 1 },
+        { criteria: "freespins", scaleFactor: 1.1,  winRange: [50,    100],   probability: 1 },
+        { criteria: "freespins", scaleFactor: 1.6,  winRange: [100,   200],   probability: 1 },
+        { criteria: "freespins", scaleFactor: 2.2,  winRange: [200,   500],   probability: 1 },
+        { criteria: "freespins", scaleFactor: 4.0,  winRange: [500,   1000],  probability: 1 },
+        { criteria: "freespins", scaleFactor: 3.5,  winRange: [1000,  2000],  probability: 1 },
+        { criteria: "freespins", scaleFactor: 2.0,  winRange: [2000,  5000],  probability: 1 },
+        { criteria: "freespins", scaleFactor: 1.0,  winRange: [5000,  10000], probability: 1 },
+        { criteria: "freespins", scaleFactor: 0.5,  winRange: [10000, 15000], probability: 1 },
         { criteria: "freespins", scaleFactor: 1,    winRange: [15000, 15000], probability: 1 },
         // ── Super free spins ───────────────────────────────────────────────
-        // Goal: Extreme volatility — bimodal strategy.
-        // Super-FS avgWin ≈ 14.3x. Accept sub-10x wins to anchor the mean,
-        // hard-crush 10-50x (the natural clustering zone for avg ~14x),
-        // heavily boost 50x+ to create the extreme upper tail.
+        // Super-FS avgWin ≈ 14.3x. Gradual ramp peaking at 500–1000x.
+        // Mid-range (2–50x) kept alive so median sits ~2–3x → ratio ≈ 5–7.
         { criteria: "superfreespins", scaleFactor: 0.5,  winRange: [0.01,  1],     probability: 1 },
-        { criteria: "superfreespins", scaleFactor: 0.8,  winRange: [1,     2],     probability: 1 },
-        { criteria: "superfreespins", scaleFactor: 1.2,  winRange: [2,     5],     probability: 1 },  // moderate — helps anchor mean
-        { criteria: "superfreespins", scaleFactor: 1.0,  winRange: [5,     10],    probability: 1 },
-        { criteria: "superfreespins", scaleFactor: 0.1,  winRange: [10,    20],    probability: 1 },  // hard crush — natural peak zone
-        { criteria: "superfreespins", scaleFactor: 0.1,  winRange: [20,    50],    probability: 1 },  // hard crush
-        { criteria: "superfreespins", scaleFactor: 3.0,  winRange: [50,    100],   probability: 1 },  // boost
-        { criteria: "superfreespins", scaleFactor: 5.0,  winRange: [100,   200],   probability: 1 },  // strong boost
-        { criteria: "superfreespins", scaleFactor: 6.0,  winRange: [200,   500],   probability: 1 },  // peak
-        { criteria: "superfreespins", scaleFactor: 5.0,  winRange: [500,   1000],  probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 0.7,  winRange: [1,     2],     probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 0.7,  winRange: [2,     5],     probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 0.8,  winRange: [5,     10],    probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 0.9,  winRange: [10,    20],    probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 1.0,  winRange: [20,    50],    probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 1.2,  winRange: [50,    100],   probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 1.6,  winRange: [100,   200],   probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 2.2,  winRange: [200,   500],   probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 4.5,  winRange: [500,   1000],  probability: 1 },
         { criteria: "superfreespins", scaleFactor: 4.0,  winRange: [1000,  2000],  probability: 1 },
-        { criteria: "superfreespins", scaleFactor: 2.0,  winRange: [2000,  5000],  probability: 1 },
-        { criteria: "superfreespins", scaleFactor: 1.0,  winRange: [5000,  10000], probability: 1 },
-        { criteria: "superfreespins", scaleFactor: 0.5,  winRange: [10000, 15000], probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 2.5,  winRange: [2000,  5000],  probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 1.2,  winRange: [5000,  10000], probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 0.6,  winRange: [10000, 15000], probability: 1 },
         { criteria: "superfreespins", scaleFactor: 1,    winRange: [15000, 15000], probability: 1 },
       ]),
-      parameters: new OptimizationParameters({
-        // Allow more right skew than bonusHunt to produce the extreme upper tail.
-        minMeanToMedian: 3,
-        maxMeanToMedian: 8,
-      }),
+      parameters: new OptimizationParameters(),
     },
     bonusFeature: {
       conditions: {
@@ -773,24 +768,24 @@ game.configureOptimization({
         }),
       },
       scaling: new OptimizationScaling([
-        // ── Free spins (bonus-buy entry) ────────────────────────────────────────
-        // Slightly more aggressive than the natural-FS curve since the player
-        // paid 100x to enter — small results feel especially bad here, big
-        // results are the whole reason they bought.
-        { criteria: "freespins", scaleFactor: 0.35, winRange: [0.01,  1],     probability: 1 },
-        { criteria: "freespins", scaleFactor: 0.55, winRange: [1,     2],     probability: 1 },
-        { criteria: "freespins", scaleFactor: 0.8,  winRange: [2,     5],     probability: 1 },
-        { criteria: "freespins", scaleFactor: 1.0,  winRange: [5,     10],    probability: 1 },
-        { criteria: "freespins", scaleFactor: 1.25, winRange: [10,    20],    probability: 1 },
-        { criteria: "freespins", scaleFactor: 1.45, winRange: [20,    50],    probability: 1 },
-        { criteria: "freespins", scaleFactor: 1.4,  winRange: [50,    100],   probability: 1 },
-        { criteria: "freespins", scaleFactor: 1.25, winRange: [100,   200],   probability: 1 },
-        { criteria: "freespins", scaleFactor: 1.05, winRange: [200,   500],   probability: 1 },
-        { criteria: "freespins", scaleFactor: 0.85, winRange: [500,   1000],  probability: 1 },
-        { criteria: "freespins", scaleFactor: 0.6,  winRange: [1000,  2000],  probability: 1 },
-        { criteria: "freespins", scaleFactor: 0.4,  winRange: [2000,  5000],  probability: 1 },
-        { criteria: "freespins", scaleFactor: 0.25, winRange: [5000,  10000], probability: 1 },
-        { criteria: "freespins", scaleFactor: 0.15, winRange: [10000, 15000], probability: 1 },
+        // ── Free spins (bonus-buy entry, 4/5 volatility) ────────────────────────
+        // 100x cost → avgWin ≈ 96x. Shift the peak from 20–50x (3/5) to 200–1000x
+        // (4/5). Keep mid-range (5–50x) alive so median stays ~20–30x and
+        // mean/median ratio stays within the default 4–8 constraint.
+        { criteria: "freespins", scaleFactor: 0.25, winRange: [0.01,  1],     probability: 1 },
+        { criteria: "freespins", scaleFactor: 0.35, winRange: [1,     2],     probability: 1 },
+        { criteria: "freespins", scaleFactor: 0.5,  winRange: [2,     5],     probability: 1 },
+        { criteria: "freespins", scaleFactor: 0.7,  winRange: [5,     10],    probability: 1 },
+        { criteria: "freespins", scaleFactor: 0.85, winRange: [10,    20],    probability: 1 },
+        { criteria: "freespins", scaleFactor: 1.0,  winRange: [20,    50],    probability: 1 },
+        { criteria: "freespins", scaleFactor: 1.2,  winRange: [50,    100],   probability: 1 },
+        { criteria: "freespins", scaleFactor: 1.6,  winRange: [100,   200],   probability: 1 },
+        { criteria: "freespins", scaleFactor: 2.2,  winRange: [200,   500],   probability: 1 },
+        { criteria: "freespins", scaleFactor: 2.8,  winRange: [500,   1000],  probability: 1 },
+        { criteria: "freespins", scaleFactor: 2.0,  winRange: [1000,  2000],  probability: 1 },
+        { criteria: "freespins", scaleFactor: 1.0,  winRange: [2000,  5000],  probability: 1 },
+        { criteria: "freespins", scaleFactor: 0.5,  winRange: [5000,  10000], probability: 1 },
+        { criteria: "freespins", scaleFactor: 0.25, winRange: [10000, 15000], probability: 1 },
         { criteria: "freespins", scaleFactor: 1,    winRange: [15000, 15000], probability: 1 },
       ]),
       parameters: new OptimizationParameters(),
@@ -817,23 +812,24 @@ game.configureOptimization({
         }),
       },
       scaling: new OptimizationScaling([
-        // ── Super free spins (bonus-buy entry) ──────────────────────────────
-        // 300x bonus-buy. Curve shifted toward high tiers with boosted 500–2Kx
-        // matching the proven base-mode super-FS distribution.
+        // ── Super free spins (bonus-buy entry, 4/5 volatility) ──────────────
+        // 300x cost → avgWin ≈ 288x. Peak at 500–2000x and sustain into 2000–5000x
+        // so the extreme tail is meaningful. Mid-range (5–100x) kept alive to
+        // hold median ~60–80x → ratio ≈ 288/70 ≈ 4, within default constraint.
         { criteria: "superfreespins", scaleFactor: 0.15, winRange: [0.01,  1],     probability: 1 },
-        { criteria: "superfreespins", scaleFactor: 0.3,  winRange: [1,     2],     probability: 1 },
-        { criteria: "superfreespins", scaleFactor: 0.5,  winRange: [2,     5],     probability: 1 },
-        { criteria: "superfreespins", scaleFactor: 0.7,  winRange: [5,     10],    probability: 1 },
-        { criteria: "superfreespins", scaleFactor: 0.95, winRange: [10,    20],    probability: 1 },
-        { criteria: "superfreespins", scaleFactor: 1.2,  winRange: [20,    50],    probability: 1 },
-        { criteria: "superfreespins", scaleFactor: 1.5,  winRange: [50,    100],   probability: 1 },
-        { criteria: "superfreespins", scaleFactor: 1.6,  winRange: [100,   200],   probability: 1 },
-        { criteria: "superfreespins", scaleFactor: 1.55, winRange: [200,   500],   probability: 1 },
-        { criteria: "superfreespins", scaleFactor: 4.0,  winRange: [500,   1000],  probability: 1 },
-        { criteria: "superfreespins", scaleFactor: 3.5,  winRange: [1000,  2000],  probability: 1 },
-        { criteria: "superfreespins", scaleFactor: 0.7,  winRange: [2000,  5000],  probability: 1 },
-        { criteria: "superfreespins", scaleFactor: 0.45, winRange: [5000,  10000], probability: 1 },
-        { criteria: "superfreespins", scaleFactor: 0.25, winRange: [10000, 15000], probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 0.25, winRange: [1,     2],     probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 0.4,  winRange: [2,     5],     probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 0.6,  winRange: [5,     10],    probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 0.8,  winRange: [10,    20],    probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 1.0,  winRange: [20,    50],    probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 1.2,  winRange: [50,    100],   probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 1.5,  winRange: [100,   200],   probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 2.0,  winRange: [200,   500],   probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 3.5,  winRange: [500,   1000],  probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 3.0,  winRange: [1000,  2000],  probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 2.0,  winRange: [2000,  5000],  probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 1.0,  winRange: [5000,  10000], probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 0.5,  winRange: [10000, 15000], probability: 1 },
         { criteria: "superfreespins", scaleFactor: 1,    winRange: [15000, 15000], probability: 1 },
       ]),
       parameters: new OptimizationParameters(),
