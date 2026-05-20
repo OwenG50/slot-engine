@@ -537,8 +537,7 @@ function handleWins(ctx: Context, wildMultipliers: Map<string, number>, isFreeSp
       },
     })
 
-    const currentGameMode = ctx.services.game.getCurrentGameMode()
-    const winLevel = calculateWinLevel(totalPayout, currentGameMode.cost)
+    const winLevel = calculateWinLevel(totalPayout)
 
     ctx.services.data.addBookEvent({
       type: "setWin",
@@ -578,12 +577,12 @@ function handleWins(ctx: Context, wildMultipliers: Map<string, number>, isFreeSp
   return totalPayout
 }
 
-function calculateWinLevel(payout: number, betCost: number): number {
-  const multiplier = payout / betCost
+function calculateWinLevel(payout: number): number {
+  const multiplier = payout
 
-  if (multiplier >= 1000) return 5
+  if (multiplier >= 250) return 5
   if (multiplier >= 100) return 4
-  if (multiplier >= 10) return 3
+  if (multiplier >= 25) return 3
   if (multiplier >= 5) return 2
   if (multiplier > 0) return 1
 
@@ -695,8 +694,7 @@ function endFreeSpins(ctx: Context) {
 
   // Free spins ended
   const totalWin = capToMaxWin(ctx, ctx.state.userData.totalFreeSpinsWin)
-  const currentGameMode = ctx.services.game.getCurrentGameMode()
-  const winLevel = calculateWinLevel(totalWin, currentGameMode.cost)
+  const winLevel = calculateWinLevel(totalWin)
 
   ctx.services.data.addBookEvent({
     type: "freeSpinEnd",
