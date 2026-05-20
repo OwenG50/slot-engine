@@ -153,7 +153,8 @@ function drawBoard(ctx: Context) {
     // Force scatter trigger in base game
     const criteria = ctx.state.currentResultSet.criteria
     const targetScatters = criteria.includes("super") ? 4 : 3
-    
+    const isGuaranteedWilds = ctx.state.currentGameMode === "guaranteedTwoWilds"
+
     while (true) {
       ctx.services.board.resetBoard()
 
@@ -172,21 +173,53 @@ function drawBoard(ctx: Context) {
       const scatInvalid = ctx.services.board.isSymbolOnAnyReelMultipleTimes(scatter)
       const [scatCount] = ctx.services.board.countSymbolsOnBoard(scatter)
 
-      if (scatCount === targetScatters && !scatInvalid) break
+      if (scatCount !== targetScatters || scatInvalid) continue
+
+      // guaranteedTwoWilds: also ensure at least 2 wilds land alongside scatters
+      if (isGuaranteedWilds) {
+        const [wildCount] = ctx.services.board.countSymbolsOnBoard(wild)
+        if (wildCount < 2) continue
+      }
+
+      break
     }
   } else {
-    // Normal base game - limit to max 2 scatters
-    while (true) {
-      ctx.services.board.resetBoard()
-      ctx.services.board.drawBoardWithRandomStops(reels)
+    const isGuaranteedWilds = ctx.state.currentGameMode === "guaranteedTwoWilds"
 
-      const scatInvalid = ctx.services.board.isSymbolOnAnyReelMultipleTimes(scatter)
-      const [scatCount] = ctx.services.board.countSymbolsOnBoard(scatter)
+    if (isGuaranteedWilds) {
+      // guaranteedTwoWilds: force exactly 2 wild positions on every base spin.
+      // The higher W weight in the guaranteedTwoWilds reel ensures enough stops
+      // exist on each reel for getRandomReelStops to pick from quickly.
+      while (true) {
+        ctx.services.board.resetBoard()
 
-      // Base validation: max 2 scatters
-      if (scatCount > 2 || scatInvalid) continue
-      
-      break
+        const wildReelStops = ctx.services.board.getReelStopsForSymbol(reels, wild)
+        const forcedWildStops = ctx.services.board.getRandomReelStops(reels, wildReelStops, 2)
+        ctx.services.board.drawBoardWithForcedStops({
+          reels,
+          forcedStops: forcedWildStops,
+        })
+
+        const scatInvalid = ctx.services.board.isSymbolOnAnyReelMultipleTimes(scatter)
+        const [scatCount] = ctx.services.board.countSymbolsOnBoard(scatter)
+
+        if (scatCount > 2 || scatInvalid) continue
+        break
+      }
+    } else {
+      // Normal base game - limit to max 2 scatters
+      while (true) {
+        ctx.services.board.resetBoard()
+        ctx.services.board.drawBoardWithRandomStops(reels)
+
+        const scatInvalid = ctx.services.board.isSymbolOnAnyReelMultipleTimes(scatter)
+        const [scatCount] = ctx.services.board.countSymbolsOnBoard(scatter)
+
+        // Base validation: max 2 scatters
+        if (scatCount > 2 || scatInvalid) continue
+
+        break
+      }
     }
   }
 }

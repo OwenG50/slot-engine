@@ -294,6 +294,55 @@ export const gameModes = defineGameModes({
       }),
     ],
   }),
+  // guaranteedTwoWilds: 25x cost bonus-buy feature.
+  // Every base game spin draws at least 2 wild multipliers. Can trigger
+  // regular and super free spins. Targets ~1/4 base hit rate, 4/5 volatility.
+  guaranteedTwoWilds: new GameMode({
+    name: "guaranteedTwoWilds",
+    cost: 25,
+    rtp: 0.96,
+    reelsAmount: 5,
+    symbolsPerReel: [5, 5, 5, 5, 5],
+    isBonusBuy: true,
+    reelSets: [...Object.values(GENERATORS)],
+    resultSets: [
+      new ResultSet({
+        criteria: "0",
+        quota: 0.50,
+        multiplier: 0,
+        reelWeights: {
+          [SPIN_TYPE.BASE_GAME]: { guaranteedTwoWilds: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { freespin: 1 },
+        },
+      }),
+      new ResultSet({
+        criteria: "basegame",
+        quota: 0.03,
+        reelWeights: {
+          [SPIN_TYPE.BASE_GAME]: { guaranteedTwoWilds: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { freespin: 1, superfreespin: 1 },
+        },
+      }),
+      new ResultSet({
+        criteria: "freespins",
+        quota: 0.25,
+        forceFreespins: true,
+        reelWeights: {
+          [SPIN_TYPE.BASE_GAME]: { guaranteedTwoWilds: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { freespin: 1 },
+        },
+      }),
+      new ResultSet({
+        criteria: "superfreespins",
+        quota: 0.22,
+        forceFreespins: true,
+        reelWeights: {
+          [SPIN_TYPE.BASE_GAME]: { guaranteedTwoWilds: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { superfreespin: 1 },
+        },
+      }),
+    ],
+  }),
 })
 
 export type GameModesType = typeof gameModes
@@ -329,11 +378,12 @@ export const game = createSlotGame<GameType>({
 // Add or remove from this to choose what gets simulated or not.
 game.configureSimulation({
   simRunsAmount: {
-    base: 300000,
-    bonusHunt: 300000,
-    bonusHuntPlus: 300000,
-    bonusFeature: 300000,
-    superBonusFeature: 300000,
+    // base: 300000,
+    // bonusHunt: 300000,
+    // bonusHuntPlus: 300000,
+    guaranteedTwoWilds: 500000,
+    // bonusFeature: 300000,
+    // superBonusFeature: 300000,
   },
   concurrency: 24
 })
@@ -834,6 +884,115 @@ game.configureOptimization({
       ]),
       parameters: new OptimizationParameters(),
     },
+    // ─── guaranteedTwoWilds ────────────────────────────────────────────────────
+    // 25x cost bonus-buy feature. Every base game spin draws at least 2 wild
+    // multipliers. Can trigger regular and super free spins.
+    // BG hit rate ~1/4. RTP budget: 0 + 0.0001 + 0.12 + 0.45 + 0.3899 = 0.96 ✓
+    // FS/super-FS hit rates match base game (1 in 200 / 1 in 700).
+    guaranteedTwoWilds: {
+      conditions: {
+        "0": new OptimizationConditions({
+          rtp: 0,
+          avgWin: 0,
+          searchConditions: 0,
+          priority: 10,
+        }),
+        // Max win – cost 25x, rtp 0.0001 → hitRate = 15000 / 0.0001 / 25 = 6M.
+        maxwin: new OptimizationConditions({
+          rtp: 0.0001,
+          avgWin: 15000,
+          searchConditions: 15000,
+          priority: 5,
+        }),
+        // BG hit rate 1 in 4. avgWin = rtp * hitRate = 0.12 * 4 = 0.48x per hit.
+        basegame: new OptimizationConditions({
+          rtp: 0.12,
+          hitRate: 4,
+          priority: 1,
+        }),
+        // Same FS hit rate as base game (1 in 200).
+        // avgWin per trigger = 0.45 * 200 = 90x
+        freespins: new OptimizationConditions({
+          rtp: 0.45,
+          hitRate: 200,
+          searchConditions: {
+            criteria: "freespins",
+          },
+          priority: 2,
+        }),
+        // Same super-FS hit rate as base game (1 in 700).
+        // avgWin per trigger = 0.3899 * 700 ≈ 272.9x
+        superfreespins: new OptimizationConditions({
+          rtp: 0.3899,
+          hitRate: 700,
+          searchConditions: {
+            criteria: "superfreespins",
+          },
+          priority: 3,
+        }),
+      },
+      scaling: new OptimizationScaling([
+        // ── Base game ──────────────────────────────────────────────────────
+        // avgWin ≈ 0.48x. With 2 guaranteed wilds the natural win pool is
+        // richer than base — crush sub-1x, boost 1–5x, strict taper above.
+        { criteria: "basegame", scaleFactor: 0.001,  winRange: [0.01,  1],     probability: 1 },
+        { criteria: "basegame", scaleFactor: 35.0,   winRange: [1,     2],     probability: 1 },
+        { criteria: "basegame", scaleFactor: 5.0,    winRange: [2,     5],     probability: 1 },
+        { criteria: "basegame", scaleFactor: 3.5,    winRange: [5,     10],    probability: 1 },
+        { criteria: "basegame", scaleFactor: 1.0,    winRange: [10,    20],    probability: 1 },
+        { criteria: "basegame", scaleFactor: 0.05,   winRange: [20,    50],    probability: 1 },
+        { criteria: "basegame", scaleFactor: 0.02,   winRange: [50,    100],   probability: 1 },
+        { criteria: "basegame", scaleFactor: 0.007,  winRange: [100,   200],   probability: 1 },
+        { criteria: "basegame", scaleFactor: 0.005,  winRange: [200,   500],   probability: 1 },
+        { criteria: "basegame", scaleFactor: 0.003,  winRange: [500,   1000],  probability: 1 },
+        { criteria: "basegame", scaleFactor: 0.0015, winRange: [1000,  2000],  probability: 1 },
+        { criteria: "basegame", scaleFactor: 0.0,    winRange: [2000,  5000],  probability: 1 },
+        { criteria: "basegame", scaleFactor: 0.003,  winRange: [5000,  10000], probability: 1 },
+        { criteria: "basegame", scaleFactor: 0.002,  winRange: [10000, 15000], probability: 1 },
+        { criteria: "basegame", scaleFactor: 1,      winRange: [15000, 15000], probability: 1 },
+        // ── Free spins ─────────────────────────────────────────────────────
+        // avgWin ≈ 90x. 500x-1Kx is the target peak tier. Ramp up from
+        // 200x, peak at 500-1Kx, then taper down. 2Kx+ aggressively crushed
+        // to stop the natural heavy super-FS book distribution dominating there.
+        { criteria: "freespins", scaleFactor: 0.15, winRange: [0.01,  1],     probability: 1 },
+        { criteria: "freespins", scaleFactor: 0.3,  winRange: [1,     2],     probability: 1 },
+        { criteria: "freespins", scaleFactor: 0.5,  winRange: [2,     5],     probability: 1 },
+        { criteria: "freespins", scaleFactor: 0.8,  winRange: [5,     10],    probability: 1 },
+        { criteria: "freespins", scaleFactor: 1.1,  winRange: [10,    20],    probability: 1 },
+        { criteria: "freespins", scaleFactor: 1.5,  winRange: [20,    50],    probability: 1 },
+        { criteria: "freespins", scaleFactor: 2.0,  winRange: [50,    100],   probability: 1 },
+        { criteria: "freespins", scaleFactor: 35.0, winRange: [100,   200],   probability: 1 },
+        { criteria: "freespins", scaleFactor: 12.0, winRange: [200,   500],   probability: 1 },
+        { criteria: "freespins", scaleFactor: 4.0,  winRange: [500,   1000],  probability: 1 },
+        { criteria: "freespins", scaleFactor: 1.7,  winRange: [1000,  2000],  probability: 1 },
+        { criteria: "freespins", scaleFactor: 0.022,winRange: [2000,  5000],  probability: 1 },
+        { criteria: "freespins", scaleFactor: 0.006,winRange: [5000,  10000], probability: 1 },
+        { criteria: "freespins", scaleFactor: 0.01, winRange: [10000, 15000], probability: 1 },
+        { criteria: "freespins", scaleFactor: 1,    winRange: [15000, 15000], probability: 1 },
+        // ── Super free spins ───────────────────────────────────────────────
+        // avgWin ≈ 272.9x. Same 500x-1Kx peak goal. 2Kx-10Kx crushed hard
+        // because super-FS has many natural simulation books in that range.
+        { criteria: "superfreespins", scaleFactor: 0.1,  winRange: [0.01,  1],     probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 0.2,  winRange: [1,     2],     probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 0.35, winRange: [2,     5],     probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 0.6,  winRange: [5,     10],    probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 0.9,  winRange: [10,    20],    probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 1.5,  winRange: [20,    50],    probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 2.0,  winRange: [50,    100],   probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 35.0, winRange: [100,   200],   probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 12.0, winRange: [200,   500],   probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 4.0,  winRange: [500,   1000],  probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 1.7,  winRange: [1000,  2000],  probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 0.022,winRange: [2000,  5000],  probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 0.006,winRange: [5000,  10000], probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 0.01, winRange: [10000, 15000], probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 1,    winRange: [15000, 15000], probability: 1 },
+      ]),
+      parameters: new OptimizationParameters({
+        minMeanToMedian: 2,
+        maxMeanToMedian: 5,
+      }),
+    },
   },
 })
 
@@ -841,10 +1000,10 @@ game.runTasks({
   doSimulation: true,
   doOptimization: true,
   optimizationOpts: {
-    gameModes: ["base", "bonusHunt", "bonusHuntPlus", "bonusFeature", "superBonusFeature"],
+    gameModes: ["guaranteedTwoWilds"],
   },
   doAnalysis: true,
   analysisOpts: {
-    gameModes: ["base", "bonusHunt", "bonusHuntPlus", "bonusFeature", "superBonusFeature"],
+    gameModes: ["guaranteedTwoWilds"],
   },
 })

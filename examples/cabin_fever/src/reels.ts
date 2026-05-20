@@ -39,6 +39,21 @@ const SYM_WEIGHTS = {
     L3: 60,
     L4: 65,
     L5: 70,
+  },
+  // guaranteedTwoWilds: similar to base but with ~2x wild weight for more
+  // variety on base game spins. Slightly trimmed low-pays to compensate.
+  guaranteedTwoWilds: {
+    S: 5,
+    W: 15,
+    H1: 30,
+    H2: 35,
+    H3: 40,
+    H4: 45,
+    L1: 50,
+    L2: 55,
+    L3: 60,
+    L4: 58,
+    L5: 58,
   }
 } as const
 
@@ -80,6 +95,24 @@ export const GENERATORS = {
     },
     spaceBetweenSameSymbols: {
       S: 5,
+    },
+    spaceBetweenSymbols: {
+
+    },
+  }),
+  // guaranteedTwoWilds: higher wild weight so the forced-2-wilds logic finds
+  // valid stops quickly on every reel. spaceBetweenSameSymbols keeps wilds
+  // spread across positions to avoid clustering.
+  guaranteedTwoWilds: new GeneratedReelSet({
+    id: "guaranteedTwoWilds",
+    overrideExisting: false,
+    symbolWeights: SYM_WEIGHTS.guaranteedTwoWilds,
+    limitSymbolsToReels: {
+
+    },
+    spaceBetweenSameSymbols: {
+      S: 5,
+      W: 3,
     },
     spaceBetweenSymbols: {
 
