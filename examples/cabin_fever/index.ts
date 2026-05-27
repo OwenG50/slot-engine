@@ -294,12 +294,12 @@ export const gameModes = defineGameModes({
       }),
     ],
   }),
-  // guaranteedTwoWilds: 25x cost bonus-buy feature.
+  // guaranteedTwoWilds: 50x cost bonus-buy feature.
   // Every base game spin draws at least 2 wild multipliers. Can trigger
   // regular and super free spins. Targets ~1/4 base hit rate, 4/5 volatility.
   guaranteedTwoWilds: new GameMode({
     name: "guaranteedTwoWilds",
-    cost: 25,
+    cost: 50,
     rtp: 0.96,
     reelsAmount: 5,
     symbolsPerReel: [5, 5, 5, 5, 5],
@@ -381,7 +381,7 @@ game.configureSimulation({
     // base: 300000,
     // bonusHunt: 300000,
     // bonusHuntPlus: 300000,
-    guaranteedTwoWilds: 500000,
+    guaranteedTwoWilds: 100000,
     // bonusFeature: 300000,
     // superBonusFeature: 300000,
   },
@@ -887,7 +887,7 @@ game.configureOptimization({
     // ─── guaranteedTwoWilds ────────────────────────────────────────────────────
     // 25x cost bonus-buy feature. Every base game spin draws at least 2 wild
     // multipliers. Can trigger regular and super free spins.
-    // BG hit rate ~1/4. RTP budget: 0 + 0.0001 + 0.12 + 0.45 + 0.3899 = 0.96 ✓
+    // BG hit rate ~1/4. RTP budget: 0 + 0.0001 + 0.42 + 0.30 + 0.2399 = 0.96 ✓
     // FS/super-FS hit rates match base game (1 in 200 / 1 in 700).
     guaranteedTwoWilds: {
       conditions: {
@@ -904,16 +904,16 @@ game.configureOptimization({
           searchConditions: 15000,
           priority: 5,
         }),
-        // BG hit rate 1 in 4. avgWin = rtp * hitRate = 0.12 * 4 = 0.48x per hit.
+        // BG hit rate 1 in 4. avgWin = rtp * hitRate = 0.42 * 4 = 1.68x per hit.
         basegame: new OptimizationConditions({
-          rtp: 0.12,
+          rtp: 0.42,
           hitRate: 4,
           priority: 1,
         }),
         // Same FS hit rate as base game (1 in 200).
-        // avgWin per trigger = 0.45 * 200 = 90x
+        // avgWin per trigger = 0.30 * 200 = 60x
         freespins: new OptimizationConditions({
-          rtp: 0.45,
+          rtp: 0.30,
           hitRate: 200,
           searchConditions: {
             criteria: "freespins",
@@ -921,9 +921,9 @@ game.configureOptimization({
           priority: 2,
         }),
         // Same super-FS hit rate as base game (1 in 700).
-        // avgWin per trigger = 0.3899 * 700 ≈ 272.9x
+        // avgWin per trigger = 0.2399 * 700 ≈ 167.9x
         superfreespins: new OptimizationConditions({
-          rtp: 0.3899,
+          rtp: 0.2399,
           hitRate: 700,
           searchConditions: {
             criteria: "superfreespins",
@@ -933,60 +933,71 @@ game.configureOptimization({
       },
       scaling: new OptimizationScaling([
         // ── Base game ──────────────────────────────────────────────────────
-        // avgWin ≈ 0.48x. With 2 guaranteed wilds the natural win pool is
-        // richer than base — crush sub-1x, boost 1–5x, strict taper above.
+        // avgWin ≈ 1.68x (rtp 0.42 boosted from 0.12). With BG RTP higher
+        // there is room to keep 20-200x alive — previously these were crushed
+        // to ~0 which created a cliff at 20-50x (observed 0.09%) and forced
+        // FS books to dominate 50-200x. 20-50x now bridges the gap; 50-100x
+        // and 100-200x given a small floor so the BG curve tapers smoothly
+        // instead of dropping off a ledge.
         { criteria: "basegame", scaleFactor: 0.001,  winRange: [0.01,  1],     probability: 1 },
         { criteria: "basegame", scaleFactor: 35.0,   winRange: [1,     2],     probability: 1 },
-        { criteria: "basegame", scaleFactor: 5.0,    winRange: [2,     5],     probability: 1 },
-        { criteria: "basegame", scaleFactor: 3.5,    winRange: [5,     10],    probability: 1 },
-        { criteria: "basegame", scaleFactor: 1.0,    winRange: [10,    20],    probability: 1 },
-        { criteria: "basegame", scaleFactor: 0.05,   winRange: [20,    50],    probability: 1 },
-        { criteria: "basegame", scaleFactor: 0.02,   winRange: [50,    100],   probability: 1 },
-        { criteria: "basegame", scaleFactor: 0.007,  winRange: [100,   200],   probability: 1 },
-        { criteria: "basegame", scaleFactor: 0.005,  winRange: [200,   500],   probability: 1 },
-        { criteria: "basegame", scaleFactor: 0.003,  winRange: [500,   1000],  probability: 1 },
-        { criteria: "basegame", scaleFactor: 0.0015, winRange: [1000,  2000],  probability: 1 },
+        { criteria: "basegame", scaleFactor: 8.0,    winRange: [2,     5],     probability: 1 },  // boosted from 5.0
+        { criteria: "basegame", scaleFactor: 5.0,    winRange: [5,     10],    probability: 1 },  // boosted from 3.5
+        { criteria: "basegame", scaleFactor: 2.5,    winRange: [10,    20],    probability: 1 },  // boosted from 1.0
+        { criteria: "basegame", scaleFactor: 1.0,    winRange: [20,    50],    probability: 1 },  // bridge dip (was 0.05)
+        { criteria: "basegame", scaleFactor: 0.35,   winRange: [50,    100],   probability: 1 },  // floor (was 0.02)
+        { criteria: "basegame", scaleFactor: 0.12,   winRange: [100,   200],   probability: 1 },  // floor (was 0.007)
+        { criteria: "basegame", scaleFactor: 0.04,   winRange: [200,   500],   probability: 1 },  // floor (was 0.005)
+        { criteria: "basegame", scaleFactor: 0.015,  winRange: [500,   1000],  probability: 1 },  // bridge cliff (was 0.003)
+        { criteria: "basegame", scaleFactor: 0.006,  winRange: [1000,  2000],  probability: 1 },  // bridge cliff (was 0.0015)
         { criteria: "basegame", scaleFactor: 0.0,    winRange: [2000,  5000],  probability: 1 },
         { criteria: "basegame", scaleFactor: 0.003,  winRange: [5000,  10000], probability: 1 },
         { criteria: "basegame", scaleFactor: 0.002,  winRange: [10000, 15000], probability: 1 },
         { criteria: "basegame", scaleFactor: 1,      winRange: [15000, 15000], probability: 1 },
         // ── Free spins ─────────────────────────────────────────────────────
-        // avgWin ≈ 90x. 500x-1Kx is the target peak tier. Ramp up from
-        // 200x, peak at 500-1Kx, then taper down. 2Kx+ aggressively crushed
-        // to stop the natural heavy super-FS book distribution dominating there.
-        { criteria: "freespins", scaleFactor: 0.15, winRange: [0.01,  1],     probability: 1 },
-        { criteria: "freespins", scaleFactor: 0.3,  winRange: [1,     2],     probability: 1 },
-        { criteria: "freespins", scaleFactor: 0.5,  winRange: [2,     5],     probability: 1 },
-        { criteria: "freespins", scaleFactor: 0.8,  winRange: [5,     10],    probability: 1 },
-        { criteria: "freespins", scaleFactor: 1.1,  winRange: [10,    20],    probability: 1 },
-        { criteria: "freespins", scaleFactor: 1.5,  winRange: [20,    50],    probability: 1 },
-        { criteria: "freespins", scaleFactor: 2.0,  winRange: [50,    100],   probability: 1 },
-        { criteria: "freespins", scaleFactor: 35.0, winRange: [100,   200],   probability: 1 },
-        { criteria: "freespins", scaleFactor: 12.0, winRange: [200,   500],   probability: 1 },
-        { criteria: "freespins", scaleFactor: 4.0,  winRange: [500,   1000],  probability: 1 },
-        { criteria: "freespins", scaleFactor: 1.7,  winRange: [1000,  2000],  probability: 1 },
-        { criteria: "freespins", scaleFactor: 0.022,winRange: [2000,  5000],  probability: 1 },
-        { criteria: "freespins", scaleFactor: 0.006,winRange: [5000,  10000], probability: 1 },
-        { criteria: "freespins", scaleFactor: 0.01, winRange: [10000, 15000], probability: 1 },
-        { criteria: "freespins", scaleFactor: 1,    winRange: [15000, 15000], probability: 1 },
+        // avgWin ≈ 60x per trigger (rtp 0.30, hitRate 200). FS RTP dropped
+        // from 0.45→0.30, so the natural FS book pool is now lighter — peak
+        // pulled down to 20-50x and 50-100x crushed harder to remove the
+        // 6.6% spike. 200-500x cut, 500-2K bridged with a smoother slope so
+        // the 2K-5K bucket no longer looks like a separate hump.
+        { criteria: "freespins", scaleFactor: 0.15,  winRange: [0.01,  1],     probability: 1 },
+        { criteria: "freespins", scaleFactor: 0.4,   winRange: [1,     2],     probability: 1 },
+        { criteria: "freespins", scaleFactor: 0.8,   winRange: [2,     5],     probability: 1 },
+        { criteria: "freespins", scaleFactor: 1.5,   winRange: [5,     10],    probability: 1 },
+        { criteria: "freespins", scaleFactor: 3.0,   winRange: [10,    20],    probability: 1 },  // boosted (was 1.5)
+        { criteria: "freespins", scaleFactor: 5.5,   winRange: [20,    50],    probability: 1 },  // peak (was 4.5)
+        { criteria: "freespins", scaleFactor: 2.5,   winRange: [50,    100],   probability: 1 },  // boosted (was 1.5)
+        { criteria: "freespins", scaleFactor: 0.7,   winRange: [100,   200],   probability: 1 },  // cut spike (was 1.4)
+        { criteria: "freespins", scaleFactor: 0.35,  winRange: [200,   500],   probability: 1 },  // cut (was 0.7)
+        { criteria: "freespins", scaleFactor: 3.2,   winRange: [500,   1000],  probability: 1 },  // boosted to grow 500-1K (was 1.8)
+        { criteria: "freespins", scaleFactor: 2.0,   winRange: [1000,  2000],  probability: 1 },  // boosted to fill 1K-2K (was 0.6)
+        // 2K+ kept just above pos_pigs viability thresholds.
+        { criteria: "freespins", scaleFactor: 0.004, winRange: [2000,  5000],  probability: 1 },  // cut to reduce 2K-5K (was 0.008)
+        { criteria: "freespins", scaleFactor: 0.002, winRange: [5000,  10000], probability: 1 },  // cut to reduce 5K-10K (was 0.003)
+        { criteria: "freespins", scaleFactor: 0.005, winRange: [10000, 15000], probability: 1 },
+        { criteria: "freespins", scaleFactor: 1,     winRange: [15000, 15000], probability: 1 },
         // ── Super free spins ───────────────────────────────────────────────
-        // avgWin ≈ 272.9x. Same 500x-1Kx peak goal. 2Kx-10Kx crushed hard
-        // because super-FS has many natural simulation books in that range.
-        { criteria: "superfreespins", scaleFactor: 0.1,  winRange: [0.01,  1],     probability: 1 },
-        { criteria: "superfreespins", scaleFactor: 0.2,  winRange: [1,     2],     probability: 1 },
-        { criteria: "superfreespins", scaleFactor: 0.35, winRange: [2,     5],     probability: 1 },
-        { criteria: "superfreespins", scaleFactor: 0.6,  winRange: [5,     10],    probability: 1 },
-        { criteria: "superfreespins", scaleFactor: 0.9,  winRange: [10,    20],    probability: 1 },
-        { criteria: "superfreespins", scaleFactor: 1.5,  winRange: [20,    50],    probability: 1 },
-        { criteria: "superfreespins", scaleFactor: 2.0,  winRange: [50,    100],   probability: 1 },
-        { criteria: "superfreespins", scaleFactor: 35.0, winRange: [100,   200],   probability: 1 },
-        { criteria: "superfreespins", scaleFactor: 12.0, winRange: [200,   500],   probability: 1 },
-        { criteria: "superfreespins", scaleFactor: 4.0,  winRange: [500,   1000],  probability: 1 },
-        { criteria: "superfreespins", scaleFactor: 1.7,  winRange: [1000,  2000],  probability: 1 },
-        { criteria: "superfreespins", scaleFactor: 0.022,winRange: [2000,  5000],  probability: 1 },
-        { criteria: "superfreespins", scaleFactor: 0.006,winRange: [5000,  10000], probability: 1 },
-        { criteria: "superfreespins", scaleFactor: 0.01, winRange: [10000, 15000], probability: 1 },
-        { criteria: "superfreespins", scaleFactor: 1,    winRange: [15000, 15000], probability: 1 },
+        // avgWin ≈ 168x per trigger (rtp 0.2399, hitRate 700). RTP dropped
+        // from 0.3899→0.2399, so peak shifted down from 50-100x to 20-100x.
+        // 50-100x was the dominant contributor to the 6.6% mid-spike — cut
+        // hard. 100-200x and 200-500x trimmed further. 5K-10K kept at the
+        // pos_pigs viability floor (~0.13) so the optimizer can still close
+        // RTP; 2K-5K lowered to flatten the secondary hump.
+        { criteria: "superfreespins", scaleFactor: 0.1,   winRange: [0.01,  1],     probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 0.25,  winRange: [1,     2],     probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 0.5,   winRange: [2,     5],     probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 1.0,   winRange: [5,     10],    probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 2.0,   winRange: [10,    20],    probability: 1 },  // boosted (was 1.2)
+        { criteria: "superfreespins", scaleFactor: 4.0,   winRange: [20,    50],    probability: 1 },  // peak (was 3.5)
+        { criteria: "superfreespins", scaleFactor: 3.0,   winRange: [50,    100],   probability: 1 },  // boosted (was 2.0)
+        { criteria: "superfreespins", scaleFactor: 1.0,   winRange: [100,   200],   probability: 1 },  // cut (was 2.0)
+        { criteria: "superfreespins", scaleFactor: 0.55,  winRange: [200,   500],   probability: 1 },  // cut (was 1.0)
+        { criteria: "superfreespins", scaleFactor: 4.0,   winRange: [500,   1000],  probability: 1 },  // boosted to grow 500-1K (was 2.6)
+        { criteria: "superfreespins", scaleFactor: 3.0,   winRange: [1000,  2000],  probability: 1 },  // boosted to fill 1K-2K (was 1.0)
+        { criteria: "superfreespins", scaleFactor: 0.007, winRange: [2000,  5000],  probability: 1 },  // cut to reduce 2K-5K (was 0.015)
+        { criteria: "superfreespins", scaleFactor: 0.04,  winRange: [5000,  10000], probability: 1 },  // cut to reduce 5K-10K — if "RTP too low" restore to 0.06
+        { criteria: "superfreespins", scaleFactor: 0.005, winRange: [10000, 15000], probability: 1 },  // cut to extend taper (was 0.008)
+        { criteria: "superfreespins", scaleFactor: 1,     winRange: [15000, 15000], probability: 1 },
       ]),
       parameters: new OptimizationParameters({
         minMeanToMedian: 2,

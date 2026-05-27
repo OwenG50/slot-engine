@@ -229,7 +229,10 @@ function resolveWildMultipliers(ctx: Context): Map<string, number> {
   const wildMultipliers = new Map<string, number>()
   const persistentWilds = ctx.state.userData.persistentWilds
   const isFreeSpin = ctx.state.currentSpinType === SPIN_TYPE.FREE_SPINS
-  const table = ctx.state.userData.isSuperFreeSpins ? SUPER_MULTIPLIER_TABLE : MULTIPLIER_TABLE
+  const isGuaranteedWilds = ctx.state.currentGameMode === "guaranteedTwoWilds"
+  const table = (ctx.state.userData.isSuperFreeSpins || (!isFreeSpin && isGuaranteedWilds))
+    ? SUPER_MULTIPLIER_TABLE
+    : MULTIPLIER_TABLE
 
   boardReels.forEach((reel, reelIndex) => {
     reel.forEach((symbol, rowIndex) => {
