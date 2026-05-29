@@ -378,12 +378,12 @@ export const game = createSlotGame<GameType>({
 // Add or remove from this to choose what gets simulated or not.
 game.configureSimulation({
   simRunsAmount: {
-    // base: 300000,
-    // bonusHunt: 300000,
-    // bonusHuntPlus: 300000,
-    guaranteedTwoWilds: 100000,
-    // bonusFeature: 300000,
-    // superBonusFeature: 300000,
+    base: 300000,
+    bonusHunt: 300000,
+    bonusHuntPlus: 300000,
+    guaranteedTwoWilds: 300000,
+    bonusFeature: 300000,
+    superBonusFeature: 300000,
   },
   concurrency: 24
 })
@@ -1011,10 +1011,10 @@ game.runTasks({
   doSimulation: true,
   doOptimization: true,
   optimizationOpts: {
-    gameModes: ["guaranteedTwoWilds"],
+    gameModes: ["base", "bonusHunt", "bonusHuntPlus", "bonusFeature", "superBonusFeature", "guaranteedTwoWilds"],
   },
   doAnalysis: true,
   analysisOpts: {
-    gameModes: ["guaranteedTwoWilds"],
+    gameModes: ["base", "bonusHunt", "bonusHuntPlus", "bonusFeature", "superBonusFeature", "guaranteedTwoWilds"],
   },
 })

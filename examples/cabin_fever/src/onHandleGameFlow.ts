@@ -616,10 +616,11 @@ function handleWins(ctx: Context, wildMultipliers: Map<string, number>, isFreeSp
 function calculateWinLevel(payout: number): number {
   const multiplier = payout
 
-  if (multiplier >= 250) return 5
-  if (multiplier >= 100) return 4
+  if (multiplier === 15000) return 6
+  if (multiplier >= 200) return 5
+  if (multiplier >= 50) return 4
   if (multiplier >= 25) return 3
-  if (multiplier >= 5) return 2
+  if (multiplier >= 15) return 2
   if (multiplier > 0) return 1
 
   return 0
