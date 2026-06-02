@@ -283,8 +283,10 @@ function resolveWildMultipliers(ctx: Context): {
   return { wildMultipliers, spawnCounts }
 }
 
-// Pick a random board position that is not occupied by a scatter. Returns null
-// if no valid position is found within a bounded number of attempts.
+// Pick a random board position that is empty — i.e. not occupied by a scatter
+// or an existing wild. This guarantees freshly spawned wilds always land on
+// unique spots (no stacking at spawn time). Returns null if no valid position
+// is found within a bounded number of attempts.
 function pickRandomBoardPosition(
   ctx: Context,
   boardReels: GameSymbol[][],
@@ -294,7 +296,9 @@ function pickRandomBoardPosition(
     const reel = Math.floor(ctx.services.rng.randomFloat(0, 1) * numReels)
     const rows = boardReels[reel]!.length
     const row = Math.floor(ctx.services.rng.randomFloat(0, 1) * rows)
-    if (boardReels[reel]![row]!.properties.get("isScatter")) continue
+    const cell = boardReels[reel]![row]!
+    if (cell.properties.get("isScatter")) continue
+    if (cell.properties.get("isWild")) continue
     return { reel, row }
   }
   return null
@@ -342,22 +346,6 @@ function resolveWildSpawns(
       incremented: boolean
     }> = []
 
-    // Self-spawn: in addition to the random spawns, the source wild also spawns
-    // a new wild on its own spot, incrementing its own multiplier by the rolled
-    // amount from the same multiplier pool.
-    {
-      const selfRoll = pickWeightedMultiplier(table, () => ctx.services.rng.randomFloat(0, 1))
-      const newVal = roundToDecimal((wildMultipliers.get(sourceKey) ?? 0) + selfRoll)
-      wildMultipliers.set(sourceKey, newVal)
-      spawns.push({
-        reel: source.reel,
-        row: source.row,
-        addedMult: selfRoll,
-        mult: newVal,
-        incremented: true,
-      })
-    }
-
     for (let i = 0; i < count; i++) {
       const target = pickRandomBoardPosition(ctx, boardReels)
       if (!target) continue
@@ -365,29 +353,18 @@ function resolveWildSpawns(
       const targetKey = posKey(target.reel, target.row)
       const rolledMult = pickWeightedMultiplier(table, () => ctx.services.rng.randomFloat(0, 1))
 
-      if (wildMultipliers.has(targetKey)) {
-        // A wild already exists here — increment it by the spawned amount.
-        const newVal = roundToDecimal(wildMultipliers.get(targetKey)! + rolledMult)
-        wildMultipliers.set(targetKey, newVal)
-        spawns.push({
-          reel: target.reel,
-          row: target.row,
-          addedMult: rolledMult,
-          mult: newVal,
-          incremented: true,
-        })
-      } else {
-        // Empty cell — spawn a brand-new wild with the rolled multiplier.
-        boardReels[target.reel]![target.row] = wild
-        wildMultipliers.set(targetKey, rolledMult)
-        spawns.push({
-          reel: target.reel,
-          row: target.row,
-          addedMult: rolledMult,
-          mult: rolledMult,
-          incremented: false,
-        })
-      }
+      // Initial spawn distribution only lands on unique empty cells, so every
+      // spawned wild is brand-new (no stacking here). Stacking only happens
+      // later during free spins when wilds are sticky.
+      boardReels[target.reel]![target.row] = wild
+      wildMultipliers.set(targetKey, rolledMult)
+      spawns.push({
+        reel: target.reel,
+        row: target.row,
+        addedMult: rolledMult,
+        mult: rolledMult,
+        incremented: false,
+      })
     }
 
     spawnEvents.push({ source, spawnCount: count, spawns })
