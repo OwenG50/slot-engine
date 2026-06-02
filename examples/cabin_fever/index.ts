@@ -381,7 +381,7 @@ game.configureSimulation({
     base: 300000,
     bonusHunt: 300000,
     bonusHuntPlus: 300000,
-    guaranteedTwoWilds: 300000,
+    guaranteedTwoWilds: 600000,
     bonusFeature: 300000,
     superBonusFeature: 300000,
   },
