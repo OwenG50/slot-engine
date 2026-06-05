@@ -25,6 +25,9 @@ export const userState = defineUserState({
   // Feature-wide global multiplier applied to every win. Stays 1x in the base
   // game and normal free spins; ramps up during super/hidden free spins.
   fsGlobalMulti: 1,
+  // Per-position Wild instant-pay values assigned at reveal time.
+  // Each entry maps a board position to the random pool value drawn for that Wild.
+  wildValues: [] as Array<{ reel: number; row: number; value: number }>,
 })
 
 export type UserStateType = typeof userState
@@ -53,6 +56,14 @@ export const symbols = defineSymbols({
     id: "S",
     properties: {
       isScatter: true,
+    },
+  }),
+  // Wild pays an instant random amount from the WILD_PAY_POOL (defined in
+  // onHandleGameFlow) and tumbles out immediately — it never forms clusters.
+  W: new GameSymbol({
+    id: "W",
+    properties: {
+      isWild: true,
     },
   }),
   H1: new GameSymbol({
@@ -247,7 +258,7 @@ export const game = createSlotGame<GameType>({
   hooks: {
     onHandleGameFlow,
   },
-  rootDir: __dirname, // optional, but required if connecting this game to @slot-engine/panel
+  rootDir: process.cwd(), // use cwd so the path is correct whether running via tsx or the compiled bundle
 })
 
 game.configureSimulation({

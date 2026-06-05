@@ -1,13 +1,26 @@
 import {
   ClusterWinType,
-  WinCombination,
   GameContext,
-  Reels,
   SPIN_TYPE,
 } from "@slot-engine/core"
 import { GameModesType, SymbolsType, UserStateType } from ".."
 
 type Context = GameContext<GameModesType, SymbolsType, UserStateType>
+
+/**
+ * Instant-pay pool for Wild symbols.
+ * A random value is drawn uniformly from this array each time a Wild lands.
+ * The value is a multiplier of the bet paid directly before the Wild tumbles out.
+ */
+const WILD_PAY_POOL = [
+  5, 10, 15, 20, 25, 50, 75, 100, 150, 200, 250,
+  300, 350, 400, 450, 500, 600, 700, 800, 900, 1000,
+] as const
+
+function roundToDecimal(value: number, decimals: number = 1): number {
+  const factor = Math.pow(10, decimals)
+  return Math.round(value * factor) / factor
+}
 
 /**
  * 6x5 cluster-pays game flow with tumbling reels.
@@ -28,31 +41,28 @@ export function onHandleGameFlow(ctx: Context) {
   // Set anticipation states based on scatters on board
   handleAnticipation(ctx)
 
+  // Assign instant-pay values to any Wild symbols on the initial board so the
+  // reveal event can display them before they are paid out.
+  assignWildValues(ctx)
+
   // Create event to tell the client what to render
-  ctx.services.data.addBookEvent({
-    type: "board-reveal",
-    data: {
-      // Note: If you can, only send IDs to minimize data size.
-      board: getSymIdsFromReels(ctx.services.board.getBoardReels()),
-      padTop: getSymIdsFromReels(ctx.services.board.getPaddingTop()),
-      padBottom: getSymIdsFromReels(ctx.services.board.getPaddingBottom()),
-      anticipation: ctx.services.board.getAnticipation(),
-    },
-  })
+  addRevealEvent(ctx)
 
   // Tumble until no more wins.
   // This also creates event data for the frontend.
-  handleTumbles(ctx)
+  const spinWin = handleTumbles(ctx)
 
   // Finalize this round's win
   ctx.services.wallet.confirmSpinWin()
 
-  ctx.services.data.addBookEvent({
-    type: "show-final-win",
-    data: {
-      payout: Math.min(ctx.services.wallet.getCurrentWin(), ctx.config.maxWinX),
-    },
-  })
+  if (spinWin > 0) {
+    ctx.services.data.addBookEvent({
+      type: "finalWin",
+      data: {
+        amount: Math.min(ctx.services.wallet.getCurrentWin(), ctx.config.maxWinX),
+      },
+    })
+  }
 
   // If we reach max win in base game we can skip free spins entirely
   if (ctx.state.triggeredMaxWin) return
@@ -141,105 +151,226 @@ function handleAnticipation(ctx: Context) {
   }
 }
 
-function handleTumbles(ctx: Context) {
+// Returns the total payout accumulated across all tumbles for this spin.
+function handleTumbles(ctx: Context): number {
   const cluster = new ClusterWinType({
     ctx,
   })
 
+  let spinTotal = 0
+
   // Keep tumbling until no more wins
   while (true) {
-    let { payout, winCombinations } = cluster
+    // ── Phase 1: process any Wild symbols present on the board ──────────────
+    // Wilds are detected BEFORE cluster evaluation so they pay and tumble out
+    // first. Any Wilds that drop in as replacements will be caught on the next
+    // iteration of this loop.
+    const boardReels = ctx.services.board.getBoardReels()
+    const wildsOnBoard: Array<{ reel: number; row: number }> = []
+
+    boardReels.forEach((reel, reelIdx) => {
+      reel.forEach((symbol, rowIdx) => {
+        if (symbol.id === "W") {
+          wildsOnBoard.push({ reel: reelIdx, row: rowIdx })
+        }
+      })
+    })
+
+    if (wildsOnBoard.length > 0) {
+      // Assign a pool value to every Wild that doesn't yet have one (i.e. it
+      // tumbled in during a previous iteration and wasn't present at reveal).
+      assignWildValues(ctx)
+
+      // Collect the value entries for the Wilds currently on the board.
+      const currentWildWins = ctx.state.userData.wildValues.filter((v) =>
+        wildsOnBoard.some((w) => w.reel === v.reel && w.row === v.row),
+      )
+
+      // Apply board-position multiplier and global FS multiplier to each Wild,
+      // mirroring the same mechanic used for cluster wins.
+      const wildWinDetails = currentWildWins.map((w) => {
+        const rawMult = ctx.state.userData.boardMultis[w.reel]?.[w.row] ?? 0
+        const boardMult = rawMult >= 2 ? rawMult : 1
+        const win = roundToDecimal(w.value * boardMult * ctx.state.userData.fsGlobalMulti)
+        return { reel: w.reel, row: w.row, baseValue: w.value, boardMult, globalMult: ctx.state.userData.fsGlobalMulti, win }
+      })
+
+      const wildTotal = roundToDecimal(
+        wildWinDetails.reduce((sum, w) => roundToDecimal(sum + w.win), 0),
+      )
+
+      spinTotal = roundToDecimal(spinTotal + wildTotal)
+
+      ctx.services.wallet.addTumbleWin(wildTotal)
+
+      ctx.services.data.addBookEvent({
+        type: "wildPayout",
+        data: {
+          wilds: wildWinDetails,
+          total: wildTotal,
+        },
+      })
+
+      // Clear the paid Wild entries from userData.
+      ctx.state.userData.wildValues = ctx.state.userData.wildValues.filter(
+        (v) => !currentWildWins.some((w) => w.reel === v.reel && w.row === v.row),
+      )
+
+      // Tumble Wilds out so new symbols drop in.
+      const symbolsToDelete = currentWildWins.map((w) => ({
+        reelIdx: w.reel,
+        rowIdx: w.row,
+      }))
+      const { newBoardSymbols } = ctx.services.board.tumbleBoard(symbolsToDelete)
+
+      ctx.services.data.addBookEvent({
+        type: "tumbleSymbols",
+        data: {
+          newBoardSymbols: Object.fromEntries(
+            Object.entries(newBoardSymbols).map(([reelIdx, symbols]) => [
+              reelIdx,
+              symbols.map((s) => {
+                const symbolData: Record<string, any> = { name: s.id }
+                if (s.properties.get("isScatter")) symbolData["Scatter"] = true
+                return symbolData
+              }),
+            ]),
+          ),
+        },
+      })
+
+      // Reached max win — stop early.
+      if (wildTotal >= ctx.config.maxWinX) {
+        ctx.state.triggeredMaxWin = true
+        break
+      }
+
+      // Restart the loop: check for more Wilds or clusters on the updated board.
+      continue
+    }
+
+    // ── Phase 2: evaluate cluster wins on the Wild-free board ───────────────
+    const { payout: rawPayout, winCombinations } = cluster
       .evaluateWins(ctx.services.board.getBoardReels())
-      .postProcess((wins) => processWins(wins, ctx))
       .getWins()
 
-    if (payout === 0) break
+    if (rawPayout === 0) break
 
-    // Apply the feature-wide global multiplier. It is 1x in the base game and
-    // in normal free spins, and ramps up during super/hidden free spins.
-    payout = payout * ctx.state.userData.fsGlobalMulti
+    // For each cluster win, compute:
+    //   boardMult  = sum of all active board-position multipliers (>=2) on the
+    //                cluster's symbols; falls back to 1x when none are active.
+    //   win        = basePayout × boardMult × fsGlobalMulti
+    //   winWithoutMult = basePayout (base cluster value, no multipliers)
+    // This mirrors cabin_fever's per-line win breakdown exactly.
+    let totalPayout = 0
+    const wins = winCombinations.map((wc) => {
+      const clusterMultiplier = wc.symbols.reduce((sum, s) => {
+        const mult = ctx.state.userData.boardMultis[s.reelIndex]![s.posIndex]!
+        return mult >= 2 ? sum + mult : sum
+      }, 0)
+      const boardMult = Math.max(1, clusterMultiplier)
+      const winAmount = roundToDecimal(wc.payout * boardMult * ctx.state.userData.fsGlobalMulti)
+      totalPayout = roundToDecimal(totalPayout + winAmount)
+      return {
+        symbol: wc.baseSymbol.id,
+        kind: wc.kind,
+        win: winAmount,
+        positions: wc.symbols.map((s) => ({ reel: s.reelIndex, row: s.posIndex })),
+        meta: {
+          multiplier: boardMult,
+          winWithoutMult: roundToDecimal(wc.payout),
+          globalMult: ctx.state.userData.fsGlobalMulti,
+        },
+      }
+    })
 
-    // Deduplicate win symbols to avoid double processing.
+    spinTotal = roundToDecimal(spinTotal + totalPayout)
+
+    // Deduplicate win symbols for board multiplier updates and tumbling.
     const winSymbols = ctx.services.game.dedupeWinSymbols(winCombinations)
 
-    // Add event to tell client about all wins.
-    // It could then highlight and destroy the winning symbols.
     ctx.services.data.addBookEvent({
-      type: "highlight-cluster-wins",
+      type: "winInfo",
       data: {
-        winSymbols,
+        totalWin: totalPayout,
+        wins,
       },
     })
 
     // `addTumbleWin` already calls `addSpinWin`, so no need to do it here.
-    ctx.services.wallet.addTumbleWin(payout)
+    ctx.services.wallet.addTumbleWin(totalPayout)
 
     ctx.services.data.addBookEvent({
-      type: "update-tumble-win",
+      type: "setWin",
       data: {
-        payout,
+        amount: totalPayout,
+        winLevel: calculateWinLevel(totalPayout),
       },
     })
 
-    // Double board multipliers after win, capped by the active free-spin tier.
-    // Super/hidden free spins raise the ceiling so multipliers compound higher.
+    // Update board-position multipliers after wins are paid:
+    //   0 (unvisited) → 2 (active: contributes 2x on next tumble win)
+    //   2 → 4 → 8 → … up to the tier's multiCap.
+    // Skipping the intermediate 1 state means multipliers apply from the
+    // second win on a position, matching the intended Sugar Rush mechanic.
     const multiCap = getTierConfig(ctx.state.userData.fsTier).multiCap
     for (const sym of winSymbols) {
-      const currentMulti = ctx.state.userData.boardMultis[sym.reelIdx]![sym.rowIdx]!
-      const newMulti = Math.max(1, Math.min(currentMulti * 2, multiCap))
-      ctx.state.userData.boardMultis[sym.reelIdx]![sym.rowIdx] = newMulti
+      const current = ctx.state.userData.boardMultis[sym.reelIdx]![sym.rowIdx]!
+      ctx.state.userData.boardMultis[sym.reelIdx]![sym.rowIdx] = current === 0
+        ? 2
+        : Math.min(current * 2, multiCap)
     }
 
     ctx.services.data.addBookEvent({
-      type: "update-multipliers",
+      type: "updateMultipliers",
       data: {
-        multipliers: ctx.state.userData.boardMultis,
+        multipliers: ctx.state.userData.boardMultis.map((reel) => [...reel]),
       },
     })
 
-    // Tumbling the board gives us the newly added symbols as well.
-    // We can tell the client which new symbols to animate in.
-    const { newBoardSymbols, newPaddingTopSymbols } =
+    // Tumbling the board drops new symbols into the vacated positions.
+    const { newBoardSymbols } =
       ctx.services.board.tumbleBoard(winSymbols)
 
-    // Note: If you can, only send IDs to minimize data size.
     ctx.services.data.addBookEvent({
-      type: "tumble-symbols",
+      type: "tumbleSymbols",
       data: {
         newBoardSymbols: Object.fromEntries(
           Object.entries(newBoardSymbols).map(([reelIdx, symbols]) => [
             reelIdx,
-            symbols.map((s) => s.id),
-          ]),
-        ),
-        newPaddingTopSymbols: Object.fromEntries(
-          Object.entries(newPaddingTopSymbols).map(([reelIdx, symbols]) => [
-            reelIdx,
-            symbols.map((s) => s.id),
+            symbols.map((s) => {
+              const symbolData: Record<string, any> = { name: s.id }
+              if (s.properties.get("isScatter")) symbolData["Scatter"] = true
+              return symbolData
+            }),
           ]),
         ),
       },
     })
 
     // Reached max win, stop win calculation
-    if (payout >= ctx.config.maxWinX) {
+    if (totalPayout >= ctx.config.maxWinX) {
       ctx.state.triggeredMaxWin = true
       break
     }
   }
+
+  return spinTotal
 }
 
 function checkFreespins(ctx: Context) {
+  // No retriggers — scatters during free spins are ignored entirely.
+  if (ctx.state.currentSpinType == SPIN_TYPE.FREE_SPINS) return
+
   const scatter = ctx.config.symbols.get("S")!
   const [scatCount] = ctx.services.board.countSymbolsOnBoard(scatter)
 
-  const freespinsAwarded = ctx.services.game.getFreeSpinsForScatters(
-    ctx.state.currentSpinType,
-    scatCount,
-  )
+  // Require at least 3 scatters to trigger free spins
+  if (scatCount < 3) return
 
-  // no freespins, return early
-  if (freespinsAwarded <= 0) return
+  // Roll a d6 per scatter to determine free spin count.
+  // 3 scatters: 3–18 spins | 4: 4–24 | 5: 5–30 | 6: 6–36
+  const { rolls, total: freespinsAwarded } = rollFreespinDice(ctx, scatCount)
 
   ctx.services.game.awardFreespins(freespinsAwarded)
 
@@ -264,9 +395,11 @@ function checkFreespins(ctx: Context) {
     ctx.state.userData.fsGlobalMulti = getTierConfig(tier).startMulti
 
     ctx.services.data.addBookEvent({
-      type: "fs-triggered",
+      type: "freeSpinTrigger",
       data: {
-        fs: freespinsAwarded,
+        totalFs: freespinsAwarded,
+        rolls,
+        positions: getScatterPositions(ctx),
         tier,
         globalMulti: ctx.state.userData.fsGlobalMulti,
       },
@@ -283,19 +416,13 @@ function checkFreespins(ctx: Context) {
       triggeredFS: true,
     })
 
-    playFreeSpins(ctx)
-    // We return here to avoid recording a retrigger event right after all free spins were played
-    return
-  }
+    // For hidden free spins: pre-populate every board position with a random
+    // starting multiplier so wins are amplified from the very first tumble.
+    if (tier === "hidden") {
+      initHiddenBoardMultis(ctx)
+    }
 
-  // If we are already in free spins, record a retrigger event
-  if (ctx.state.currentSpinType == SPIN_TYPE.FREE_SPINS) {
-    ctx.services.data.addBookEvent({
-      type: "fs-retriggered",
-      data: {
-        fs: freespinsAwarded,
-      },
-    })
+    playFreeSpins(ctx)
   }
 }
 
@@ -307,37 +434,35 @@ function playFreeSpins(ctx: Context) {
   while (ctx.state.currentFreespinAmount > 0) {
     ctx.state.currentFreespinAmount--
 
+    const currentSpin = ctx.state.totalFreespinAmount - ctx.state.currentFreespinAmount
+
     ctx.services.data.addBookEvent({
-      type: "update-fs-amount",
+      type: "updateFreeSpin",
       data: {
-        fs: ctx.state.currentFreespinAmount,
-        totalFs: ctx.state.totalFreespinAmount,
+        amount: currentSpin,
+        total: ctx.state.totalFreespinAmount,
       },
     })
 
     drawBoard(ctx)
     handleAnticipation(ctx)
 
-    ctx.services.data.addBookEvent({
-      type: "board-reveal",
-      data: {
-        // Note: If you can, only send IDs to minimize data size.
-        board: getSymIdsFromReels(ctx.services.board.getBoardReels()),
-        padTop: getSymIdsFromReels(ctx.services.board.getPaddingTop()),
-        padBottom: getSymIdsFromReels(ctx.services.board.getPaddingBottom()),
-        anticipation: ctx.services.board.getAnticipation(),
-      },
-    })
+    // Assign instant-pay values to any Wilds on the newly drawn board.
+    assignWildValues(ctx)
 
-    handleTumbles(ctx)
+    addRevealEvent(ctx)
+
+    const fsSpinWin = handleTumbles(ctx)
 
     // Add event before calling `confirmSpinWin()`, because the spin win will be reset.
-    ctx.services.data.addBookEvent({
-      type: "show-fs-spin-win",
-      data: {
-        payout: Math.min(ctx.services.wallet.getCurrentSpinWin(), ctx.config.maxWinX),
-      },
-    })
+    if (fsSpinWin > 0) {
+      ctx.services.data.addBookEvent({
+        type: "setTotalWin",
+        data: {
+          amount: Math.min(ctx.services.wallet.getCurrentSpinWin(), ctx.config.maxWinX),
+        },
+      })
+    }
 
     ctx.services.wallet.confirmSpinWin()
 
@@ -352,7 +477,7 @@ function playFreeSpins(ctx: Context) {
     if (tierCfg.ramp > 0) {
       ctx.state.userData.fsGlobalMulti += tierCfg.ramp
       ctx.services.data.addBookEvent({
-        type: "update-global-multi",
+        type: "updateGlobalMulti",
         data: {
           globalMulti: ctx.state.userData.fsGlobalMulti,
         },
@@ -363,10 +488,13 @@ function playFreeSpins(ctx: Context) {
   }
 
   // All FS have been played at this point so we can send the total win amount using `getCurrentWin()`.
+  const fsTotalWin = Math.min(ctx.services.wallet.getCurrentWin(), ctx.config.maxWinX)
+
   ctx.services.data.addBookEvent({
-    type: "show-fs-win",
+    type: "freeSpinEnd",
     data: {
-      payout: Math.min(ctx.services.wallet.getCurrentWin(), ctx.config.maxWinX),
+      amount: fsTotalWin,
+      winLevel: calculateWinLevel(fsTotalWin),
     },
   })
 }
@@ -390,7 +518,8 @@ const FS_TIERS: Record<
   // Super free spins (4-5 scatters): higher multiplier ceiling and a global
   // multiplier that starts at 2x and grows by 1x every free spin.
   super: { startMulti: 2, ramp: 1, multiCap: 256 },
-  // Hidden free spins (6 scatters): the most valuable tier. Global multiplier
+  // Hidden free spins (6 scatters): the most valuable tier. Every board position
+  // starts with a random multiplier (2, 4, or 8) already active. Global multiplier
   // starts at 3x and grows by 2x every free spin, with the highest ceiling.
   hidden: { startMulti: 3, ramp: 2, multiCap: 512 },
 }
@@ -403,6 +532,27 @@ function getTierForScatters(scatCount: number): FsTier {
   if (scatCount >= 6) return "hidden"
   if (scatCount >= 4) return "super"
   return "normal"
+}
+
+// Rolls a d6 for each scatter that landed and sums the results to determine
+// the total number of free spins awarded (min = scatCount, max = scatCount × 6).
+function rollFreespinDice(ctx: Context, scatCount: number): { rolls: number[]; total: number } {
+  const dice = [1, 2, 3, 4, 5, 6] as const
+  const rolls: number[] = []
+  for (let i = 0; i < scatCount; i++) {
+    rolls.push(ctx.services.rng.randomItem([...dice]))
+  }
+  return { rolls, total: rolls.reduce((sum, r) => sum + r, 0) }
+}
+
+// For hidden free spins: pre-populates every board position with a random
+// starting multiplier (2, 4, or 8) so wins are amplified from the very first
+// tumble of the very first free spin.
+function initHiddenBoardMultis(ctx: Context) {
+  const pool = [2, 4, 8] as const
+  ctx.state.userData.boardMultis = ctx.state.userData.boardMultis.map((reel) =>
+    reel.map(() => ctx.services.rng.randomItem([...pool])),
+  )
 }
 
 function getScatterWeights(key: string) {
@@ -427,8 +577,7 @@ function getScatterWeights(key: string) {
 }
 
 function makeInitialBoardMultis(ctx: Context) {
-  const mode =
-    ctx.config.gameModes[ctx.state.currentGameMode as keyof typeof ctx.config.gameModes]
+  const mode = ctx.services.game.getCurrentGameMode()
 
   const reelsNum = mode.reelsAmount
   const symbolsPerReel = mode.symbolsPerReel
@@ -447,30 +596,104 @@ function makeInitialBoardMultis(ctx: Context) {
   // Reset the free-spin tier state for the new base round.
   ctx.state.userData.fsTier = "normal"
   ctx.state.userData.fsGlobalMulti = 1
+  // Wild position values are paid and cleared during tumbling, but reset here
+  // as a safety net for the start of each simulation run.
+  ctx.state.userData.wildValues = []
 }
 
-function processWins(wins: WinCombination[], ctx: Context) {
-  const winCombinations = wins.map((wc) => {
-    const multiForCluster = wc.symbols.reduce((multi, s) => {
-      const multiOnPos = ctx.state.userData.boardMultis[s.reelIndex]![s.posIndex]!
-      // A winning cluster must first "activate" the multiplier on a position (multi 0 -> 1).
-      // Only on the next win does the multiplier apply (multi 1 -> 2).
-      // Multipliers themselves are updated in `handleTumbles()`.
-      // This function here just applies the multiplier to the payout.
-      return multiOnPos >= 2 ? multiOnPos + multi : multi
-    }, 0)
-
-    // Multi is initially 0, so we ensure at least 1x payout
-    const payout = wc.payout * Math.max(1, multiForCluster)
-
-    return {
-      ...wc,
-      payout,
-    }
+// Assigns a random instant-pay value (drawn from WILD_PAY_POOL) to every Wild
+// symbol currently on the board that does not yet have a value recorded in
+// userData.wildValues.  Call this BEFORE addRevealEvent so the reveal payload
+// can include the Wild's value, and again at the start of each tumble iteration
+// so that newly dropped-in Wilds are covered.
+function assignWildValues(ctx: Context) {
+  const boardReels = ctx.services.board.getBoardReels()
+  boardReels.forEach((reel, reelIdx) => {
+    reel.forEach((symbol, rowIdx) => {
+      if (symbol.id !== "W") return
+      const alreadyAssigned = ctx.state.userData.wildValues.some(
+        (v) => v.reel === reelIdx && v.row === rowIdx,
+      )
+      if (!alreadyAssigned) {
+        const value = ctx.services.rng.randomItem([...WILD_PAY_POOL])
+        ctx.state.userData.wildValues.push({ reel: reelIdx, row: rowIdx, value })
+      }
+    })
   })
-  return { winCombinations }
 }
 
-function getSymIdsFromReels(reels: Reels) {
-  return reels.map((reel) => reel.map((s) => s.id))
+// Builds the board event payload in cabin_fever format: each symbol is an object
+// `{ name, Scatter?, multiplier? }`, with `paddingPositions` (always zeros for this game)
+// and `anticipation` as a 0/1 array matching cabin_fever's reveal convention.
+function addRevealEvent(ctx: Context) {
+  const boardReels = ctx.services.board.getBoardReels()
+  const anticipation = ctx.services.board.getAnticipation()
+
+  const board = boardReels.map((reel, reelIndex) => {
+    return reel.map((symbol, rowIndex) => {
+      const symbolData: Record<string, any> = {
+        name: symbol.id,
+      }
+      if (symbol.properties.get("isScatter")) {
+        symbolData["Scatter"] = true
+      }
+      // Include the active board multiplier for this position when > 0
+      const mult = ctx.state.userData.boardMultis?.[reelIndex]?.[rowIndex]
+      if (mult !== undefined && mult > 0) {
+        symbolData["multiplier"] = mult
+      }
+      // Include the instant-pay value for Wild symbols
+      const wildEntry = ctx.state.userData.wildValues.find(
+        (w) => w.reel === reelIndex && w.row === rowIndex,
+      )
+      if (wildEntry) {
+        symbolData["wildValue"] = wildEntry.value
+      }
+      return symbolData
+    })
+  })
+
+  const paddingPositions = new Array(boardReels.length).fill(0)
+  const anticipationValues = anticipation.map((value) => (value ? 1 : 0))
+
+  ctx.services.data.addBookEvent({
+    type: "reveal",
+    data: {
+      board,
+      paddingPositions,
+      gameType: ctx.state.currentResultSet.criteria,
+      anticipation: anticipationValues,
+    },
+  })
+}
+
+// Mirrors cabin_fever's win-level banding so client win presentation stays consistent.
+function calculateWinLevel(payout: number): number {
+  const multiplier = payout
+
+  if (multiplier === 15000) return 6
+  if (multiplier >= 200) return 5
+  if (multiplier >= 50) return 4
+  if (multiplier >= 25) return 3
+  if (multiplier >= 15) return 2
+  if (multiplier > 0) return 1
+
+  return 0
+}
+
+// Collects scatter positions from the current board, matching cabin_fever's
+// freeSpinTrigger / addAdditionalFreeSpins position payloads.
+function getScatterPositions(ctx: Context): Array<{ reel: number; row: number }> {
+  const positions: Array<{ reel: number; row: number }> = []
+  const boardReels = ctx.services.board.getBoardReels()
+
+  boardReels.forEach((reel, reelIndex) => {
+    reel.forEach((symbol, rowIndex) => {
+      if (symbol.properties.get("isScatter")) {
+        positions.push({ reel: reelIndex, row: rowIndex })
+      }
+    })
+  })
+
+  return positions
 }
