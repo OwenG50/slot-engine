@@ -28,6 +28,11 @@ export const userState = defineUserState({
   // Per-position Wild instant-pay values assigned at reveal time.
   // Each entry maps a board position to the random pool value drawn for that Wild.
   wildValues: [] as Array<{ reel: number; row: number; value: number }>,
+  // Per-spin symbol multiplier for super/hidden free spins.
+  // A random non-scatter symbol and multiplier are drawn at the start of each
+  // free spin; all cluster wins for that symbol are boosted by the value.
+  // Null during base game and normal free spins.
+  globalSymbolMulti: null as { symbol: string; multiplier: number } | null,
 })
 
 export type UserStateType = typeof userState
@@ -227,6 +232,142 @@ export const gameModes = defineGameModes({
       }),
     ],
   }),
+  // superBonusFeature: 300x cost bonus-buy. The "superbonus" criteria forces
+  // free spins with at least 4 scatters (see getScatterWeights in
+  // onHandleGameFlow), so the feature always enters super (4-5 scatters) or
+  // hidden (6 scatters) free spins — never the normal tier.
+  superBonusFeature: new GameMode({
+    name: "superBonusFeature",
+    cost: 300,
+    rtp: 0.96,
+    reelsAmount: 6,
+    symbolsPerReel: [5, 5, 5, 5, 5, 5],
+    isBonusBuy: true,
+    reelSets: [...Object.values(REELS)],
+    resultSets: [
+      new ResultSet({
+        criteria: "superbonus",
+        quota: 0.99,
+        forceFreespins: true,
+        reelWeights: {
+          [SPIN_TYPE.BASE_GAME]: { base: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { bonus: 1 },
+        },
+      }),
+      new ResultSet({
+        criteria: "maxwin",
+        quota: 0.01,
+        forceMaxWin: true,
+        forceFreespins: true,
+        reelWeights: {
+          [SPIN_TYPE.BASE_GAME]: { base: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { bonus: 1 },
+          evaluate: maxwinReelsEvaluation,
+        },
+      }),
+    ],
+  }),
+  // bonusHunt: 2x cost. Triggers the bonus (any tier — normal, super or hidden)
+  // 3x more often than base. The increased frequency is enforced by the
+  // freespins fence hit rate in the optimization config (base 150 -> 50).
+  bonusHunt: new GameMode({
+    name: "bonusHunt",
+    cost: 2,
+    rtp: 0.96,
+    reelsAmount: 6,
+    symbolsPerReel: [5, 5, 5, 5, 5, 5],
+    isBonusBuy: false,
+    reelSets: [...Object.values(REELS)],
+    resultSets: [
+      new ResultSet({
+        criteria: "0",
+        quota: 0.3,
+        multiplier: 0,
+        reelWeights: {
+          [SPIN_TYPE.BASE_GAME]: { base: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { bonus: 1 },
+        },
+      }),
+      new ResultSet({
+        criteria: "basegame",
+        quota: 0.3,
+        reelWeights: {
+          [SPIN_TYPE.BASE_GAME]: { base: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { bonus: 1 },
+        },
+      }),
+      new ResultSet({
+        criteria: "freespins",
+        quota: 0.35,
+        forceFreespins: true,
+        reelWeights: {
+          [SPIN_TYPE.BASE_GAME]: { base: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { bonus: 1 },
+        },
+      }),
+      new ResultSet({
+        criteria: "maxwin",
+        quota: 0.05,
+        forceMaxWin: true,
+        forceFreespins: true,
+        reelWeights: {
+          [SPIN_TYPE.BASE_GAME]: { base: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { bonus: 1 },
+          evaluate: maxwinReelsEvaluation,
+        },
+      }),
+    ],
+  }),
+  // bonusHuntPlus: 5x cost. Triggers the bonus (any tier) 10x more often than
+  // base. The freespins fence hit rate drops from base 150 -> 15.
+  bonusHuntPlus: new GameMode({
+    name: "bonusHuntPlus",
+    cost: 5,
+    rtp: 0.96,
+    reelsAmount: 6,
+    symbolsPerReel: [5, 5, 5, 5, 5, 5],
+    isBonusBuy: false,
+    reelSets: [...Object.values(REELS)],
+    resultSets: [
+      new ResultSet({
+        criteria: "0",
+        quota: 0.2,
+        multiplier: 0,
+        reelWeights: {
+          [SPIN_TYPE.BASE_GAME]: { base: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { bonus: 1 },
+        },
+      }),
+      new ResultSet({
+        criteria: "basegame",
+        quota: 0.2,
+        reelWeights: {
+          [SPIN_TYPE.BASE_GAME]: { base: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { bonus: 1 },
+        },
+      }),
+      new ResultSet({
+        criteria: "freespins",
+        quota: 0.55,
+        forceFreespins: true,
+        reelWeights: {
+          [SPIN_TYPE.BASE_GAME]: { base: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { bonus: 1 },
+        },
+      }),
+      new ResultSet({
+        criteria: "maxwin",
+        quota: 0.05,
+        forceMaxWin: true,
+        forceFreespins: true,
+        reelWeights: {
+          [SPIN_TYPE.BASE_GAME]: { base: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { bonus: 1 },
+          evaluate: maxwinReelsEvaluation,
+        },
+      }),
+    ],
+  }),
 })
 
 export type GameModesType = typeof gameModes
@@ -265,6 +406,9 @@ game.configureSimulation({
   simRunsAmount: {
     base: 100000,
     bonusFeature: 100000,
+    superBonusFeature: 100000,
+    bonusHunt: 100000,
+    bonusHuntPlus: 100000,
   },
   concurrency: 8,
 })
@@ -274,11 +418,9 @@ game.configureOptimization({
     base: {
       conditions: {
         maxwin: new OptimizationConditions({
-          rtp: 0.01,
+          rtp: 0.0015,
           avgWin: 15000,
-          searchConditions: {
-            criteria: "maxwin",
-          },
+          searchConditions: 15000,
           priority: 8,
         }),
         "0": new OptimizationConditions({
@@ -296,7 +438,7 @@ game.configureOptimization({
           priority: 2,
         }),
         basegame: new OptimizationConditions({
-          rtp: 0.57,
+          rtp: 0.5785,
           hitRate: 4,
           priority: 1,
         }),
@@ -307,14 +449,115 @@ game.configureOptimization({
     bonusFeature: {
       conditions: {
         maxwin: new OptimizationConditions({
-          rtp: 0.01,
+          rtp: 0.0001,
           avgWin: 15000,
           searchConditions: 15000,
           priority: 2,
         }),
         freespins: new OptimizationConditions({
-          rtp: 0.95,
+          rtp: 0.9599,
           hitRate: "x",
+          priority: 1,
+        }),
+      },
+      scaling: new OptimizationScaling([]),
+      parameters: new OptimizationParameters(),
+    },
+    // superBonusFeature (cost 300x): bonus-buy that always lands 4+ scatters
+    // via the "superbonus" criteria, so it enters super or hidden free spins.
+    superBonusFeature: {
+      conditions: {
+        maxwin: new OptimizationConditions({
+          rtp: 0.0001,
+          avgWin: 15000,
+          searchConditions: 15000,
+          priority: 2,
+        }),
+        superbonus: new OptimizationConditions({
+          rtp: 0.9599,
+          hitRate: "x",
+          searchConditions: {
+            criteria: "superbonus",
+          },
+          priority: 1,
+        }),
+      },
+      scaling: new OptimizationScaling([]),
+      parameters: new OptimizationParameters(),
+    },
+    // bonusHunt (cost 2x): bonus triggers 3x more often than base.
+    // freespins hitRate 50 = base 150 / 3. Max-win target is 1 in 5M spins.
+    // RTP budget shifts from base game into the freespins fence.
+    // Total: 0.0015 + 0 + 0.65 + 0.3085 = 0.96.
+    //
+    // NOTE: the maxwin fence MUST use an exact-number searchConditions (15000),
+    // NOT { criteria: "maxwin" }. An exact number makes this a "win_type" fence:
+    // the optimizer injects the single 15000x win straight into the lookup table
+    // with probability 1/hr and never tries to fit a distribution. A criteria
+    // search instead builds a distribution from the maxwin-tagged sims, which
+    // all pay ~15000x (zero variance) and trips the Rust optimizer's
+    // "Unable to optimize! RTP too low... Not enough variance/range in wins".
+    bonusHunt: {
+      conditions: {
+        maxwin: new OptimizationConditions({
+          rtp: 0.0015,
+          avgWin: 15000,
+          searchConditions: 15000,
+          priority: 8,
+        }),
+        "0": new OptimizationConditions({
+          rtp: 0,
+          avgWin: 0,
+          searchConditions: 0,
+          priority: 6,
+        }),
+        freespins: new OptimizationConditions({
+          rtp: 0.65,
+          hitRate: 50,
+          searchConditions: {
+            criteria: "freespins",
+          },
+          priority: 2,
+        }),
+        basegame: new OptimizationConditions({
+          rtp: 0.3085,
+          hitRate: 4,
+          priority: 1,
+        }),
+      },
+      scaling: new OptimizationScaling([]),
+      parameters: new OptimizationParameters(),
+    },
+    // bonusHuntPlus (cost 5x): bonus triggers 10x more often than base.
+    // freespins hitRate 15 = base 150 / 10. Max-win target is 1 in 2M spins.
+    // Total: 0.0015 + 0 + 0.80 + 0.1585 = 0.96.
+    // maxwin uses exact-number searchConditions (15000) for the same win_type
+    // reason described on the bonusHunt fence above.
+    bonusHuntPlus: {
+      conditions: {
+        maxwin: new OptimizationConditions({
+          rtp: 0.0015,
+          avgWin: 15000,
+          searchConditions: 15000,
+          priority: 8,
+        }),
+        "0": new OptimizationConditions({
+          rtp: 0,
+          avgWin: 0,
+          searchConditions: 0,
+          priority: 6,
+        }),
+        freespins: new OptimizationConditions({
+          rtp: 0.8,
+          hitRate: 15,
+          searchConditions: {
+            criteria: "freespins",
+          },
+          priority: 2,
+        }),
+        basegame: new OptimizationConditions({
+          rtp: 0.1585,
+          hitRate: 4,
           priority: 1,
         }),
       },
@@ -328,10 +571,10 @@ game.runTasks({
   doSimulation: true,
   doOptimization: true,
   optimizationOpts: {
-    gameModes: ["base", "bonusFeature"],
+    gameModes: ["base", "bonusFeature", "superBonusFeature", "bonusHunt", "bonusHuntPlus"],
   },
   doAnalysis: true,
   analysisOpts: {
-    gameModes: ["base", "bonusFeature"],
+    gameModes: ["base", "bonusFeature", "superBonusFeature", "bonusHunt", "bonusHuntPlus"],
   },
 })

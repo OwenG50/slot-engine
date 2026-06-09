@@ -17,6 +17,31 @@ const WILD_PAY_POOL = [
   300, 350, 400, 450, 500, 600, 700, 800, 900, 1000,
 ] as const
 
+/**
+ * Weighted multiplier table for the per-spin symbol multiplier in super free spins.
+ * Lower multipliers are common; higher values are increasingly rare.
+ */
+const FS_SYMBOL_MULTI_WEIGHTS: Record<number, number> = {
+  2: 20, 3: 16, 4: 13, 5: 11, 6: 9, 7: 7, 8: 6, 9: 5, 10: 4,
+  15: 3, 20: 2.5, 25: 2, 30: 1.5, 35: 1.2, 40: 1, 45: 0.8, 50: 0.7,
+  100: 0.5, 200: 0.3, 300: 0.2, 400: 0.15, 500: 0.1, 1000: 0.05,
+}
+
+/**
+ * Weighted multiplier table for the per-spin symbol multiplier in hidden free spins.
+ * Minimum value is 25x; very high values are rare but possible.
+ */
+const FS_HIDDEN_SYMBOL_MULTI_WEIGHTS: Record<number, number> = {
+  25: 28, 30: 22, 35: 16, 40: 12, 45: 8, 50: 6,
+  100: 4, 200: 2, 300: 1, 400: 0.5, 500: 0.3, 1000: 0.2,
+}
+
+/**
+ * All cluster-paying symbols that can be selected as the per-spin feature symbol.
+ * Excludes scatter (S) and wild (W).
+ */
+const FS_CLUSTER_SYMBOLS = ["H1", "H2", "H3", "H4", "L1", "L2", "L3"] as const
+
 function roundToDecimal(value: number, decimals: number = 1): number {
   const factor = Math.pow(10, decimals)
   return Math.round(value * factor) / factor
@@ -34,6 +59,9 @@ function roundToDecimal(value: number, decimals: number = 1): number {
 export function onHandleGameFlow(ctx: Context) {
   // Build initial board multipliers starting at 0
   makeInitialBoardMultis(ctx)
+
+  // Draw a feature symbol and multiplier for this base-game spin.
+  drawGlobalSymbolMulti(ctx)
 
   // Build the initial board
   drawBoard(ctx)
@@ -59,7 +87,7 @@ export function onHandleGameFlow(ctx: Context) {
     ctx.services.data.addBookEvent({
       type: "finalWin",
       data: {
-        amount: Math.min(ctx.services.wallet.getCurrentWin(), ctx.config.maxWinX),
+        amount: Math.min(roundToDecimal(ctx.services.wallet.getCurrentWin()), ctx.config.maxWinX),
       },
     })
   }
@@ -269,7 +297,14 @@ function handleTumbles(ctx: Context): number {
         return mult >= 2 ? sum + mult : sum
       }, 0)
       const boardMult = Math.max(1, clusterMultiplier)
-      const winAmount = roundToDecimal(wc.payout * boardMult * ctx.state.userData.fsGlobalMulti)
+      // Apply the per-spin symbol multiplier when this win's symbol matches the
+      // active feature symbol (super/hidden free spins only). Falls back to 1x
+      // (i.e. base game and normal free spins are unaffected).
+      const globalSymbolMulti = ctx.state.userData.globalSymbolMulti
+      const symbolMult = (globalSymbolMulti && wc.baseSymbol.id === globalSymbolMulti.symbol)
+        ? globalSymbolMulti.multiplier
+        : 1
+      const winAmount = roundToDecimal(wc.payout * boardMult * symbolMult)
       totalPayout = roundToDecimal(totalPayout + winAmount)
       return {
         symbol: wc.baseSymbol.id,
@@ -279,7 +314,7 @@ function handleTumbles(ctx: Context): number {
         meta: {
           multiplier: boardMult,
           winWithoutMult: roundToDecimal(wc.payout),
-          globalMult: ctx.state.userData.fsGlobalMulti,
+          symbolMult,
         },
       }
     })
@@ -299,14 +334,6 @@ function handleTumbles(ctx: Context): number {
 
     // `addTumbleWin` already calls `addSpinWin`, so no need to do it here.
     ctx.services.wallet.addTumbleWin(totalPayout)
-
-    ctx.services.data.addBookEvent({
-      type: "setWin",
-      data: {
-        amount: totalPayout,
-        winLevel: calculateWinLevel(totalPayout),
-      },
-    })
 
     // Update board-position multipliers after wins are paid:
     //   0 (unvisited) → 2 (active: contributes 2x on next tumble win)
@@ -353,6 +380,16 @@ function handleTumbles(ctx: Context): number {
       ctx.state.triggeredMaxWin = true
       break
     }
+  }
+
+  if (spinTotal > 0) {
+    ctx.services.data.addBookEvent({
+      type: "setWin",
+      data: {
+        amount: spinTotal,
+        winLevel: calculateWinLevel(spinTotal),
+      },
+    })
   }
 
   return spinTotal
@@ -416,10 +453,17 @@ function checkFreespins(ctx: Context) {
       triggeredFS: true,
     })
 
-    // For hidden free spins: pre-populate every board position with a random
+    // For super/hidden free spins: pre-populate every board position with a random
     // starting multiplier so wins are amplified from the very first tumble.
-    if (tier === "hidden") {
-      initHiddenBoardMultis(ctx)
+    if (tier === "super" || tier === "hidden") {
+      initBoardMultis(ctx, tier)
+
+      ctx.services.data.addBookEvent({
+        type: "boardMultiInit",
+        data: {
+          multipliers: ctx.state.userData.boardMultis.map((reel) => [...reel]),
+        },
+      })
     }
 
     playFreeSpins(ctx)
@@ -444,6 +488,9 @@ function playFreeSpins(ctx: Context) {
       },
     })
 
+    // Draw a feature symbol and multiplier before each free spin.
+    drawGlobalSymbolMulti(ctx)
+
     drawBoard(ctx)
     handleAnticipation(ctx)
 
@@ -455,11 +502,17 @@ function playFreeSpins(ctx: Context) {
     const fsSpinWin = handleTumbles(ctx)
 
     // Add event before calling `confirmSpinWin()`, because the spin win will be reset.
+    // For total-win UI, emit the full accumulated amount so far in this play:
+    // confirmed total + current spin's pending win.
     if (fsSpinWin > 0) {
+      const totalWinSoFar = roundToDecimal(
+        ctx.services.wallet.getCurrentWin() + ctx.services.wallet.getCurrentSpinWin(),
+      )
+
       ctx.services.data.addBookEvent({
         type: "setTotalWin",
         data: {
-          amount: Math.min(ctx.services.wallet.getCurrentSpinWin(), ctx.config.maxWinX),
+          amount: Math.min(totalWinSoFar, ctx.config.maxWinX),
         },
       })
     }
@@ -469,26 +522,11 @@ function playFreeSpins(ctx: Context) {
     // We don't want to play more free spins if max win was reached
     if (ctx.state.triggeredMaxWin) break
 
-    // Ramp the feature-wide global multiplier for the next free spin.
-    // Normal free spins have a ramp of 0 (it stays flat at 1x); super and
-    // hidden free spins grow the multiplier every spin, making later spins
-    // progressively more valuable.
-    const tierCfg = getTierConfig(ctx.state.userData.fsTier)
-    if (tierCfg.ramp > 0) {
-      ctx.state.userData.fsGlobalMulti += tierCfg.ramp
-      ctx.services.data.addBookEvent({
-        type: "updateGlobalMulti",
-        data: {
-          globalMulti: ctx.state.userData.fsGlobalMulti,
-        },
-      })
-    }
-
     checkFreespins(ctx)
   }
 
   // All FS have been played at this point so we can send the total win amount using `getCurrentWin()`.
-  const fsTotalWin = Math.min(ctx.services.wallet.getCurrentWin(), ctx.config.maxWinX)
+  const fsTotalWin = Math.min(roundToDecimal(ctx.services.wallet.getCurrentWin()), ctx.config.maxWinX)
 
   ctx.services.data.addBookEvent({
     type: "freeSpinEnd",
@@ -515,13 +553,14 @@ const FS_TIERS: Record<
   // Normal free spins (3 scatters): persistent position multipliers double up
   // to 128x, no feature-wide global multiplier.
   normal: { startMulti: 1, ramp: 0, multiCap: 128 },
-  // Super free spins (4-5 scatters): higher multiplier ceiling and a global
-  // multiplier that starts at 2x and grows by 1x every free spin.
-  super: { startMulti: 2, ramp: 1, multiCap: 256 },
-  // Hidden free spins (6 scatters): the most valuable tier. Every board position
-  // starts with a random multiplier (2, 4, or 8) already active. Global multiplier
-  // starts at 3x and grows by 2x every free spin, with the highest ceiling.
-  hidden: { startMulti: 3, ramp: 2, multiCap: 512 },
+  // Super free spins (4-5 scatters): higher multiplier ceiling. Each spin a
+  // random cluster symbol is assigned a random multiplier from FS_SYMBOL_MULTI_POOL;
+  // all wins for that symbol during the spin (and its tumbles) are boosted.
+  super: { startMulti: 1, ramp: 0, multiCap: 256 },
+  // Hidden free spins (6 scatters): same as super but multiplier pool starts at
+  // 10x minimum (FS_HIDDEN_SYMBOL_MULTI_POOL). Board positions also start with
+  // random multipliers active.
+  hidden: { startMulti: 1, ramp: 0, multiCap: 512 },
 }
 
 function getTierConfig(tier: FsTier) {
@@ -534,10 +573,11 @@ function getTierForScatters(scatCount: number): FsTier {
   return "normal"
 }
 
-// Rolls a d6 for each scatter that landed and sums the results to determine
-// the total number of free spins awarded (min = scatCount, max = scatCount × 6).
+// Rolls a die (values 3–6) for each scatter that landed and sums the results
+// to determine the total number of free spins awarded (min = scatCount × 3,
+// max = scatCount × 6).
 function rollFreespinDice(ctx: Context, scatCount: number): { rolls: number[]; total: number } {
-  const dice = [1, 2, 3, 4, 5, 6] as const
+  const dice = [3, 4, 5, 6] as const
   const rolls: number[] = []
   for (let i = 0; i < scatCount; i++) {
     rolls.push(ctx.services.rng.randomItem([...dice]))
@@ -545,13 +585,25 @@ function rollFreespinDice(ctx: Context, scatCount: number): { rolls: number[]; t
   return { rolls, total: rolls.reduce((sum, r) => sum + r, 0) }
 }
 
-// For hidden free spins: pre-populates every board position with a random
-// starting multiplier (2, 4, or 8) so wins are amplified from the very first
-// tumble of the very first free spin.
-function initHiddenBoardMultis(ctx: Context) {
-  const pool = [2, 4, 8] as const
+// Weighted starting multiplier tables for pre-filled board positions.
+// Both tiers go all the way up to their respective multiCap, but higher values
+// are heavily down-weighted so huge starting boards remain rare.
+//   Super  (multiCap 256x): minimum 2x
+//   Hidden (multiCap 512x): minimum 4x
+const BOARD_MULTI_INIT_WEIGHTS: Record<FsTier, Record<number, number>> = {
+  normal: {},
+  super:  { 2: 35, 4: 28, 8: 18, 16: 9, 32: 5, 64: 3, 128: 1.5, 256: 0.5 },
+  hidden: { 4: 38, 8: 26, 16: 16, 32: 9, 64: 5, 128: 3, 256: 2, 512: 1 },
+}
+
+// For super/hidden free spins: pre-populates every board position with a
+// weighted-random starting multiplier so wins are amplified from the very first
+// tumble. Low values are common; high values are rare but possible up to the
+// tier's multiCap.
+function initBoardMultis(ctx: Context, tier: FsTier) {
+  const weights = BOARD_MULTI_INIT_WEIGHTS[tier]
   ctx.state.userData.boardMultis = ctx.state.userData.boardMultis.map((reel) =>
-    reel.map(() => ctx.services.rng.randomItem([...pool])),
+    reel.map(() => Number(ctx.services.rng.weightedRandom(weights))),
   )
 }
 
@@ -562,6 +614,14 @@ function getScatterWeights(key: string) {
       4: 10,
       5: 1,
       6: 0.5,
+    },
+    // superBonusFeature buy: always at least 4 scatters so the feature enters
+    // super (4-5) or hidden (6) free spins. The weight on 6 gives the buy a
+    // chance to land hidden free spins directly.
+    superbonus: {
+      4: 60,
+      5: 30,
+      6: 10,
     },
     maxwin: {
       5: 1,
@@ -599,6 +659,25 @@ function makeInitialBoardMultis(ctx: Context) {
   // Wild position values are paid and cleared during tumbling, but reset here
   // as a safety net for the start of each simulation run.
   ctx.state.userData.wildValues = []
+  // Per-spin symbol multiplier — reset at the start of each base round.
+  ctx.state.userData.globalSymbolMulti = null
+}
+
+// Draws a random cluster symbol and multiplier for the current spin and stores
+// it in userData.globalSymbolMulti. Fires the "globalSymbolMulti" book event so clients
+// receive the draw before the board reveal. Called on every spin in all modes.
+function drawGlobalSymbolMulti(ctx: Context) {
+  const tier = ctx.state.userData.fsTier
+  const weights = tier === "hidden"
+    ? FS_HIDDEN_SYMBOL_MULTI_WEIGHTS
+    : FS_SYMBOL_MULTI_WEIGHTS
+  const multiplier = Number(ctx.services.rng.weightedRandom(weights))
+  const symbol = ctx.services.rng.randomItem([...FS_CLUSTER_SYMBOLS])
+  ctx.state.userData.globalSymbolMulti = { symbol, multiplier }
+  ctx.services.data.addBookEvent({
+    type: "globalSymbolMulti",
+    data: { symbol, multiplier },
+  })
 }
 
 // Assigns a random instant-pay value (drawn from WILD_PAY_POOL) to every Wild
