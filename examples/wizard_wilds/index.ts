@@ -39,6 +39,15 @@ export const symbols = defineSymbols({
       5: 20,
     },
   }),
+  WD: new GameSymbol({
+    id: "WD",
+    properties: {
+      isWild: true,
+    },
+    pays: {
+      5: 20,
+    },
+  }),
   H1: new GameSymbol({
     id: "H1",
     pays: {
@@ -379,12 +388,12 @@ export const game = createSlotGame<GameType>({
 // Add or remove from this to choose what gets simulated or not.
 game.configureSimulation({
   simRunsAmount: {
-    base: 300000,
-    bonusHunt: 300000,
-    bonusHuntPlus: 300000,
-    guaranteedTwoWilds: 300000,
-    bonusFeature: 300000,
-    superBonusFeature: 300000,
+    base: 100000,
+    bonusHunt: 100000,
+    bonusHuntPlus: 100000,
+    guaranteedTwoWilds: 100000,
+    bonusFeature: 100000,
+    superBonusFeature: 100000,
   },
   concurrency: 24
 })

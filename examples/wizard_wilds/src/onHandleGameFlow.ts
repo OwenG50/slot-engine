@@ -246,9 +246,9 @@ function drawBoard(ctx: Context) {
   }
 }
 
-// Assign reveal-time multipliers to every wild on the board. Newly landed wilds
-// also roll a "wild spawn count" (1..MAX_WILD_SPAWN_COUNT) that drives the
-// wizard-wild spawn step; sticky wilds simply carry their accumulated value.
+// Assign reveal-time multipliers to sticky wilds on the board. Newly landed
+// wilds only roll a "wild spawn count" (1..MAX_WILD_SPAWN_COUNT) that drives
+// the wizard-wild spawn step; they are later converted to WD dispensers.
 function resolveWildMultipliers(ctx: Context): {
   wildMultipliers: Map<string, number>
   spawnCounts: Map<string, number>
@@ -270,11 +270,8 @@ function resolveWildMultipliers(ctx: Context): {
         // Sticky wilds do not spawn again (they already spawned when landed).
         wildMultipliers.set(key, persistentWilds.get(key)!)
       } else {
-        // Newly landed wild — assign a fresh random multiplier and a spawn count.
-        // Do NOT write to persistentWilds here; that happens after wins resolve
-        // so the reveal multiplier is never prematurely committed.
-        const mult = pickWeightedMultiplier(table, () => ctx.services.rng.randomFloat(0, 1))
-        wildMultipliers.set(key, mult)
+        // Newly landed wild — this is a dispenser source only: no multiplier,
+        // not sticky, and later replaced by WD after spawning.
         spawnCounts.set(key, pickWildSpawnCount(ctx))
       }
     })
@@ -305,12 +302,9 @@ function pickRandomBoardPosition(
 }
 
 // Wizard-wild spawn step. For every freshly landed wild, spawn `spawnCount` new
-// wilds at random positions. A spawn lands a brand-new wild (with a multiplier
-// rolled from the same multiplier pool used elsewhere) on an empty cell; if it
-// targets a cell that already holds a wild, the existing wild's multiplier is
-// incremented by the rolled amount instead of creating a duplicate. The board
-// and wildMultipliers map are mutated in place, and a single wildSpawn book
-// event records every source wild and the spawns it produced.
+// wilds at random positions, then convert that source position into WD (wild
+// dispenser). WD acts as a wild for the current spin only, has no multiplier,
+// and is never persisted as sticky.
 function resolveWildSpawns(
   ctx: Context,
   wildMultipliers: Map<string, number>,
@@ -320,6 +314,7 @@ function resolveWildSpawns(
 
   const boardReels = ctx.services.board.getBoardReels()
   const wild = ctx.config.symbols.get("W")!
+  const wildDispenser = ctx.config.symbols.get("WD")!
   const table = pickMultiplierTable(ctx)
 
   const spawnEvents: Array<{
@@ -366,6 +361,10 @@ function resolveWildSpawns(
         incremented: false,
       })
     }
+
+    // Source wild becomes a non-sticky wild dispenser for this spin.
+    boardReels[source.reel]![source.row] = wildDispenser
+    wildMultipliers.delete(sourceKey)
 
     spawnEvents.push({ source, spawnCount: count, spawns })
   })
@@ -520,11 +519,16 @@ function addRevealEvent(
 
       // Add symbol properties if they exist
       if (symbol.properties.get("isWild")) {
+        const key = posKey(reelIndex, symbolIndex - topPadLen)
+        const isDispenser = spawnCounts.has(key)
+
         symbolData["Wild"] = true
+        if (isDispenser) {
+          symbolData["name"] = "WD"
+        }
         // Include multiplier and spawn count for main-board wilds
         const mainRow = symbolIndex - topPadLen
         if (mainRow >= 0 && mainRow < reel.length) {
-          const key = posKey(reelIndex, mainRow)
           const mult = wildMultipliers.get(key)
           if (mult !== undefined) symbolData["multiplier"] = mult
           const spawnCount = spawnCounts.get(key)
