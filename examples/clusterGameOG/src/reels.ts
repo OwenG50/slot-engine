@@ -26,6 +26,28 @@ const SYM_WEIGHTS = {
     L2: 55,
     L3: 60,
   },
+  // Super free-spin reels (4-5 scatters): premium-leaning so the super tier
+  // consistently produces bigger clusters. S omitted (no retriggers).
+  superBonus: {
+    H1: 45,
+    H2: 45,
+    H3: 48,
+    H4: 50,
+    L1: 50,
+    L2: 55,
+    L3: 60,
+  },
+  // Hidden free-spin reels (6 scatters): the most premium-heavy profile for the
+  // top tier. S omitted (no retriggers).
+  hiddenBonus: {
+    H1: 55,
+    H2: 50,
+    H3: 50,
+    H4: 50,
+    L1: 48,
+    L2: 50,
+    L3: 55,
+  },
   // Max-win reels: heavy H1 for big clusters + enough S so every reel column
   // has scatter positions for the forced-scatter placement (forceFreespins is
   // also true on the maxwin result set, so getReelStopsForSymbol must return
@@ -56,6 +78,20 @@ export const REELS = {
     id: "bonus",
     overrideExisting: true,
     symbolWeights: SYM_WEIGHTS.bonus,
+    spaceBetweenSameSymbols: {},
+    spaceBetweenSymbols: {},
+  }),
+  superBonus: new GeneratedReelSet({
+    id: "superBonus",
+    overrideExisting: true,
+    symbolWeights: SYM_WEIGHTS.superBonus,
+    spaceBetweenSameSymbols: {},
+    spaceBetweenSymbols: {},
+  }),
+  hiddenBonus: new GeneratedReelSet({
+    id: "hiddenBonus",
+    overrideExisting: true,
+    symbolWeights: SYM_WEIGHTS.hiddenBonus,
     spaceBetweenSameSymbols: {},
     spaceBetweenSymbols: {},
   }),

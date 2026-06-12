@@ -455,6 +455,8 @@ function checkFreespins(ctx: Context) {
 
     // For super/hidden free spins: pre-populate every board position with a random
     // starting multiplier so wins are amplified from the very first tumble.
+    // For normal free spins: clear any multipliers that built up during the
+    // triggering base-game spin so sticky multis only accumulate within FS.
     if (tier === "super" || tier === "hidden") {
       initBoardMultis(ctx, tier)
 
@@ -464,6 +466,10 @@ function checkFreespins(ctx: Context) {
           multipliers: ctx.state.userData.boardMultis.map((reel) => [...reel]),
         },
       })
+    } else {
+      ctx.state.userData.boardMultis = ctx.state.userData.boardMultis.map(
+        (reel) => reel.map(() => 0),
+      )
     }
 
     playFreeSpins(ctx)
@@ -609,19 +615,19 @@ function initBoardMultis(ctx: Context, tier: FsTier) {
 
 function getScatterWeights(key: string) {
   const SCATTER_WEIGHTS = {
+    // Normal bonus: always exactly 3 scatters -> normal free-spin tier.
     freespins: {
-      3: 80,
-      4: 10,
-      5: 1,
-      6: 0.5,
+      3: 1,
     },
-    // superBonusFeature buy: always at least 4 scatters so the feature enters
-    // super (4-5) or hidden (6) free spins. The weight on 6 gives the buy a
-    // chance to land hidden free spins directly.
-    superbonus: {
+    // Super bonus: always 4 or 5 scatters -> super free-spin tier (never 6, so
+    // the super-only modes can never accidentally enter the hidden tier).
+    superfreespins: {
       4: 60,
-      5: 30,
-      6: 10,
+      5: 40,
+    },
+    // Hidden bonus: always exactly 6 scatters -> hidden free-spin tier.
+    hiddenfreespins: {
+      6: 1,
     },
     maxwin: {
       5: 1,
