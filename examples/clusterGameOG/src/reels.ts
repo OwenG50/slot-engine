@@ -69,9 +69,7 @@ export const REELS = {
     id: "base",
     overrideExisting: true,
     symbolWeights: SYM_WEIGHTS.base,
-    spaceBetweenSameSymbols: {
-      S: 5,
-    },
+    spaceBetweenSameSymbols: {},
     spaceBetweenSymbols: {},
   }),
   bonus: new GeneratedReelSet({
@@ -99,9 +97,7 @@ export const REELS = {
     id: "maxwin",
     overrideExisting: true,
     symbolWeights: SYM_WEIGHTS.maxwin,
-    spaceBetweenSameSymbols: {
-      S: 5,
-    },
+    spaceBetweenSameSymbols: {},
     spaceBetweenSymbols: {},
   }),
 } as const

@@ -129,10 +129,9 @@ function drawBoard(ctx: Context) {
         forcedStops: scatterReelStops,
       })
 
-      const scatInvalid = ctx.services.board.isSymbolOnAnyReelMultipleTimes(scatter)
       const [scatCount] = ctx.services.board.countSymbolsOnBoard(scatter)
 
-      if (scatCount == numScatters && !scatInvalid) break
+      if (scatCount == numScatters) break
     }
   } else if (
     // If spin should NOT trigger free spins, draw board with up to 2 scatters
@@ -143,23 +142,18 @@ function drawBoard(ctx: Context) {
       ctx.services.board.resetBoard()
       ctx.services.board.drawBoardWithRandomStops(reels)
 
-      const scatInvalid = ctx.services.board.isSymbolOnAnyReelMultipleTimes(scatter)
       const [scatCount] = ctx.services.board.countSymbolsOnBoard(scatter)
 
       if (scatCount > ctx.config.anticipationTriggers[ctx.state.currentSpinType]) {
         continue
       }
 
-      if (!scatInvalid) break
+      break
     }
   } else {
     // If no special ResultSet criteria, or we are in FS, draw board normally
-    while (true) {
-      ctx.services.board.resetBoard()
-      ctx.services.board.drawBoardWithRandomStops(reels)
-      const scatInvalid = ctx.services.board.isSymbolOnAnyReelMultipleTimes(scatter)
-      if (!scatInvalid) break
-    }
+    ctx.services.board.resetBoard()
+    ctx.services.board.drawBoardWithRandomStops(reels)
   }
 }
 
@@ -177,6 +171,30 @@ function handleAnticipation(ctx: Context) {
       count++
     }
   }
+}
+
+// Re-evaluates scatter anticipation after each tumble. When 2 or more scatters
+// are visible on the board during a base-game spin, ALL reels enter anticipation
+// so the player sees they are one scatter away from triggering free spins.
+// Returns the updated anticipation array (1/0 per reel) for inclusion in
+// tumbleSymbols events.
+function refreshTumbleAnticipation(ctx: Context): number[] {
+  if (ctx.state.currentSpinType === SPIN_TYPE.FREE_SPINS) {
+    return ctx.services.board.getAnticipation().map((v) => (v ? 1 : 0))
+  }
+
+  const scatter = ctx.config.symbols.get("S")!
+  const [scatCount] = ctx.services.board.countSymbolsOnBoard(scatter)
+
+  if (scatCount >= 2) {
+    // 2+ scatters visible — all reels enter anticipation so players know
+    // a new scatter anywhere completes the trigger.
+    ctx.services.board.getBoardReels().forEach((_, i) =>
+      ctx.services.board.setAnticipationForReel(i, true),
+    )
+  }
+
+  return ctx.services.board.getAnticipation().map((v) => (v ? 1 : 0))
 }
 
 // Returns the total payout accumulated across all tumbles for this spin.
@@ -251,6 +269,7 @@ function handleTumbles(ctx: Context): number {
       }))
       const { newBoardSymbols } = ctx.services.board.tumbleBoard(symbolsToDelete)
 
+      const wildTumbleAnticipation = refreshTumbleAnticipation(ctx)
       ctx.services.data.addBookEvent({
         type: "tumbleSymbols",
         data: {
@@ -264,6 +283,7 @@ function handleTumbles(ctx: Context): number {
               }),
             ]),
           ),
+          anticipation: wildTumbleAnticipation,
         },
       })
 
@@ -359,6 +379,7 @@ function handleTumbles(ctx: Context): number {
     const { newBoardSymbols } =
       ctx.services.board.tumbleBoard(winSymbols)
 
+    const clusterTumbleAnticipation = refreshTumbleAnticipation(ctx)
     ctx.services.data.addBookEvent({
       type: "tumbleSymbols",
       data: {
@@ -372,6 +393,7 @@ function handleTumbles(ctx: Context): number {
             }),
           ]),
         ),
+        anticipation: clusterTumbleAnticipation,
       },
     })
 
@@ -414,14 +436,6 @@ function checkFreespins(ctx: Context) {
   // Ensure we only trigger free spins from base game.
   // Our playFreeSpins function handles the free spins loop already and we don't want recursion.
   if (ctx.state.currentSpinType == SPIN_TYPE.BASE_GAME) {
-    // In some cases, free spins might be triggered in a non-freespins result set,
-    // for example when the third scatter drops in during tumbling.
-    // Make this simulation invalid to skip it.
-    const forbiddenResultSets = ["0", "basegame"]
-    if (forbiddenResultSets.includes(ctx.state.currentResultSet.criteria)) {
-      ctx.services.wallet.addSpinWin(-999999999)
-    }
-
     // Determine the free-spin tier from the number of triggering scatters and
     // initialize the feature-wide global multiplier for that tier.
     //   3 scatters  -> normal free spins
@@ -756,7 +770,7 @@ function addRevealEvent(ctx: Context) {
 function calculateWinLevel(payout: number): number {
   const multiplier = payout
 
-  if (multiplier === 15000) return 6
+  if (multiplier === 25000) return 6
   if (multiplier >= 200) return 5
   if (multiplier >= 50) return 4
   if (multiplier >= 25) return 3

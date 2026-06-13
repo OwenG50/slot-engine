@@ -486,7 +486,7 @@ export type GameType = InferGameType<GameModesType, SymbolsType, UserStateType>
 export const game = createSlotGame<GameType>({
   id: "cluster-game-og",
   name: "Cluster Game OG",
-  maxWinX: 15000,
+  maxWinX: 25000,
   gameModes,
   symbols,
   padSymbols: 1,
@@ -514,10 +514,10 @@ export const game = createSlotGame<GameType>({
 game.configureSimulation({
   simRunsAmount: {
     base: 100000,
-    bonusFeature: 100000,
-    superBonusFeature: 100000,
     bonusHunt: 100000,
     bonusHuntPlus: 100000,
+    bonusFeature: 100000,
+    superBonusFeature: 100000,
     MysteryBonusFeature: 100000,
   },
   concurrency: 8,
@@ -528,9 +528,9 @@ game.configureOptimization({
     base: {
       conditions: {
         maxwin: new OptimizationConditions({
-          rtp: 0.0015,
-          avgWin: 15000,
-          searchConditions: 15000,
+          rtp: 0.0025,
+          avgWin: 25000,
+          searchConditions: 25000,
           priority: 8,
         }),
         "0": new OptimizationConditions({
@@ -547,8 +547,8 @@ game.configureOptimization({
         // the free-spin tiers so that landing a bonus feels genuinely rewarding,
         // with value escalating by tier. Per-trigger avg win = rtp * hitRate:
         //   normal 0.30  -> ~45x   super 0.18 -> ~81x   hidden 0.1785 -> ~143x
-        // basegame drops to 0.30 (avg ~1.2x per winning spin).
-        // Total: 0.0015 + 0 + 0.30 + 0.18 + 0.1785 + 0.30 = 0.96.
+        // basegame drops to 0.299 (avg ~1.2x per winning spin).
+        // Total: 0.0025 + 0 + 0.30 + 0.18 + 0.1785 + 0.299 = 0.96.
         freespins: new OptimizationConditions({
           rtp: 0.30,
           hitRate: 150,
@@ -574,7 +574,7 @@ game.configureOptimization({
           priority: 4,
         }),
         basegame: new OptimizationConditions({
-          rtp: 0.30,
+          rtp: 0.299,
           hitRate: 4,
           priority: 1,
         }),
@@ -585,13 +585,13 @@ game.configureOptimization({
     bonusFeature: {
       conditions: {
         maxwin: new OptimizationConditions({
-          rtp: 0.0001,
-          avgWin: 15000,
-          searchConditions: 15000,
+          rtp: 0.0002,
+          avgWin: 25000,
+          searchConditions: 25000,
           priority: 2,
         }),
         freespins: new OptimizationConditions({
-          rtp: 0.9599,
+          rtp: 0.9598,
           hitRate: "x",
           priority: 1,
         }),
@@ -604,13 +604,13 @@ game.configureOptimization({
     superBonusFeature: {
       conditions: {
         maxwin: new OptimizationConditions({
-          rtp: 0.0001,
-          avgWin: 15000,
-          searchConditions: 15000,
+          rtp: 0.0002,
+          avgWin: 25000,
+          searchConditions: 25000,
           priority: 2,
         }),
         superfreespins: new OptimizationConditions({
-          rtp: 0.9599,
+          rtp: 0.9598,
           hitRate: "x",
           searchConditions: {
             criteria: "superfreespins",
@@ -627,8 +627,8 @@ game.configureOptimization({
     // the base game is squeezed down and almost the entire budget feeds the FS
     // tiers. Value still escalates by tier. Per-trigger avg win = rtp * hitRate:
     //   normal 0.52 -> ~15.6x   super 0.19 -> ~17.1x   hidden 0.1285 -> ~20.6x
-    // basegame 0.12 (avg ~0.48x).
-    // Total: 0.0015 + 0 + 0.52 + 0.19 + 0.1285 + 0.12 = 0.96.
+    // basegame 0.119 (avg ~0.48x).
+    // Total: 0.0025 + 0 + 0.52 + 0.19 + 0.1285 + 0.119 = 0.96.
     //
     // NOTE: the maxwin fence MUST use an exact-number searchConditions (15000),
     // NOT { criteria: "maxwin" }. An exact number makes this a "win_type" fence:
@@ -640,9 +640,9 @@ game.configureOptimization({
     bonusHunt: {
       conditions: {
         maxwin: new OptimizationConditions({
-          rtp: 0.0015,
-          avgWin: 15000,
-          searchConditions: 15000,
+          rtp: 0.0025,
+          avgWin: 25000,
+          searchConditions: 25000,
           priority: 8,
         }),
         "0": new OptimizationConditions({
@@ -676,7 +676,7 @@ game.configureOptimization({
           priority: 4,
         }),
         basegame: new OptimizationConditions({
-          rtp: 0.12,
+          rtp: 0.119,
           hitRate: 4,
           priority: 1,
         }),
@@ -690,16 +690,16 @@ game.configureOptimization({
     // a sliver and nearly the whole 0.96 budget feeds the FS tiers, still
     // escalating by tier. Per-trigger avg win = rtp * hitRate:
     //   normal 0.55 -> ~4.1x   super 0.20 -> ~4.5x   hidden 0.1485 -> ~5.9x
-    // basegame 0.06 (avg ~0.24x).
-    // Total: 0.0015 + 0 + 0.55 + 0.20 + 0.1485 + 0.06 = 0.96.
+    // basegame 0.059 (avg ~0.24x).
+    // Total: 0.0025 + 0 + 0.55 + 0.20 + 0.1485 + 0.059 = 0.96.
     // maxwin uses exact-number searchConditions (15000) for the same win_type
     // reason described on the bonusHunt fence above.
     bonusHuntPlus: {
       conditions: {
         maxwin: new OptimizationConditions({
-          rtp: 0.0015,
-          avgWin: 15000,
-          searchConditions: 15000,
+          rtp: 0.0025,
+          avgWin: 25000,
+          searchConditions: 25000,
           priority: 8,
         }),
         "0": new OptimizationConditions({
@@ -733,7 +733,7 @@ game.configureOptimization({
           priority: 4,
         }),
         basegame: new OptimizationConditions({
-          rtp: 0.06,
+          rtp: 0.059,
           hitRate: 4,
           priority: 1,
         }),
@@ -750,41 +750,41 @@ game.configureOptimization({
     //   normal 60% → hitRate 1/0.6 ≈ 1.667
     //   super  30% → hitRate 1/0.3 ≈ 3.333
     //   hidden 10% → hitRate 1/0.1 = 10
-    // RTP split (sum 0.9599) chosen so avg win per trigger escalates by tier
+    // RTP split chosen so avg win per trigger escalates by tier
     // (avgWin = rtp × hitRate × cost):
-    //   normal  0.30     × 1.667 × 500 ≈  250 bets
-    //   super   0.36     × 3.333 × 500 ≈  600 bets
-    //   hidden  0.299925 × 10   × 500 ≈ 1500 bets
-    // Total: 0.000075 + 0.30 + 0.36 + 0.299925 = 0.96 ✓
+    //   normal  0.299899 × 1.667 × 500 ≈  250 bets
+    //   super   0.359914 × 3.333 × 500 ≈  600 bets
+    //   hidden  0.299979 × 10    × 500 ≈ 1500 bets
+    // Total: 0.000125 + 0.299899 + 0.359914 + 0.299979 = 0.959917 ✓
     //
     // IMPORTANT – maxwin priority MUST be higher than all FS fence priorities
     // (freespins=3, super=4, hidden=5). The Rust optimizer processes fences in
-    // descending priority order; the win_type maxwin fence removes all win=15000x
+    // descending priority order; the win_type maxwin fence removes all win=25000x
     // books from the lookup_table first. If FS fences run first instead, their
-    // organic 15000x books get high per-book weights (hr 1.667–10) and dominate
+    // organic 25000x books get high per-book weights (hr 1.667–10) and dominate
     // the maxwinHitRate (~1/15k), making the dedicated fence (1/400k) irrelevant.
-    // With maxwin at priority 8 it runs first, claims every win=15000 book, and
+    // With maxwin at priority 8 it runs first, claims every win=25000 book, and
     // the FS fences only see non-maxwin wins. Result: maxwinHitRate = 400k.
-    // hr = avgWin / rtp / cost = 15000 / 0.000075 / 500 = 400,000.
+    // hr = avgWin / rtp / cost = 25000 / 0.000125 / 500 = 400,000.
     //
     // RTP FLOOR COMPENSATION: Because MysteryBonusFeature has no "0" or
     // basegame result sets, EVERY simulation book is a triggered bonus session.
     // The optimizer's pig algorithm has no cheap/zero-win ballast books to anchor
     // the low end of each fence's distribution, so it structurally overshoots the
     // target RTP by a consistent ~0.000084 (observed: 480.042 vs 480.0 credits).
-    // To compensate, each FS fence rtp is reduced by its proportional share of
-    // the excess so the final optimized output lands at 0.96 rather than 0.9601.
-    // The declared sum (0.959916) still rounds to 0.96 at 3dp (assertion passes).
+    // To compensate, each FS fence rtp is reduced by its proportional quota share
+    // of the excess (60%/30%/10%) so the optimized output lands at 0.96.
+    // The declared sum (0.959917) still rounds to 0.96 at 3dp (assertion passes).
     MysteryBonusFeature: {
       conditions: {
         maxwin: new OptimizationConditions({
-          rtp: 0.000075,
-          avgWin: 15000,
-          searchConditions: 15000,
+          rtp: 0.000125,
+          avgWin: 25000,
+          searchConditions: 25000,
           priority: 8,
         }),
         freespins: new OptimizationConditions({
-          rtp: 0.299974,
+          rtp: 0.299899,
           hitRate: 1.667,
           searchConditions: {
             criteria: "freespins",
@@ -792,7 +792,7 @@ game.configureOptimization({
           priority: 3,
         }),
         superfreespins: new OptimizationConditions({
-          rtp: 0.359968,
+          rtp: 0.359914,
           hitRate: 3.333,
           searchConditions: {
             criteria: "superfreespins",
@@ -800,7 +800,7 @@ game.configureOptimization({
           priority: 4,
         }),
         hiddenfreespins: new OptimizationConditions({
-          rtp: 0.299899,
+          rtp: 0.299979,
           hitRate: 10,
           searchConditions: {
             criteria: "hiddenfreespins",
