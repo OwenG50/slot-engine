@@ -20,7 +20,7 @@ import { maxwinReelsEvaluation } from "./src/evaluations"
 export const userState = defineUserState({
   boardMultis: [] as number[][],
   // Which free-spin tier the current feature is in. Determined by how many
-  // scatters triggered the feature: 3 -> normal, 4-5 -> super, 6 -> hidden.
+  // scatters triggered the feature: 3 -> normal, 4 -> super, 5 -> hidden.
   fsTier: "normal" as "normal" | "super" | "hidden",
   // Feature-wide global multiplier applied to every win. Stays 1x in the base
   // game and normal free spins; ramps up during super/hidden free spins.
@@ -254,7 +254,7 @@ export const gameModes = defineGameModes({
     ],
   }),
   // superBonusFeature: 300x cost bonus-buy. The "superfreespins" criteria forces
-  // 4 or 5 scatters (see getScatterWeights in onHandleGameFlow), so this buy
+  // exactly 4 scatters (see getScatterWeights in onHandleGameFlow), so this buy
   // ALWAYS delivers a super-tier free-spin round — never normal or hidden.
   superBonusFeature: new GameMode({
     name: "superBonusFeature",
@@ -491,17 +491,19 @@ export const game = createSlotGame<GameType>({
   symbols,
   padSymbols: 1,
   scatterToFreespins: {
+    // Base-game trigger: a fixed 12 free spins regardless of tier.
+    //   3 scatters -> Bonus, 4 -> Super Bonus, 5 -> Hidden Bonus.
     [SPIN_TYPE.BASE_GAME]: {
-      3: 10,
+      3: 12,
       4: 12,
-      5: 15,
-      6: 20,
+      5: 12,
     },
+    // Free-spin retrigger: scaled by how many scatters land.
+    //   3 -> +3, 4 -> +5, 5 -> +8 free spins.
     [SPIN_TYPE.FREE_SPINS]: {
-      3: 10,
-      4: 12,
-      5: 15,
-      6: 20,
+      3: 3,
+      4: 5,
+      5: 8,
     },
   },
   userState,
@@ -599,7 +601,7 @@ game.configureOptimization({
       scaling: new OptimizationScaling([]),
       parameters: new OptimizationParameters(),
     },
-    // superBonusFeature (cost 300x): bonus-buy that always lands 4-5 scatters
+    // superBonusFeature (cost 300x): bonus-buy that always lands 4 scatters
     // via the "superfreespins" criteria, so it only ever enters the super tier.
     superBonusFeature: {
       conditions: {

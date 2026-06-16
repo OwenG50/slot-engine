@@ -15,9 +15,11 @@ const SYM_WEIGHTS = {
     L3: 60,
   },
   // Bonus (free-spin) reels: slightly more premium-heavy.
-  // S is intentionally omitted so scatters never appear during free spins,
-  // preventing any retrigger or additional free-spin award.
+  // A low S weight lets scatters land during free spins so retriggers are
+  // possible (3 -> +3, 4 -> +5, 5 -> +8 free spins). 6 scatters are rejected
+  // at draw time so the board never exceeds 5 scatters.
   bonus: {
+    S: 6,
     H1: 35,
     H2: 40,
     H3: 45,
@@ -26,9 +28,10 @@ const SYM_WEIGHTS = {
     L2: 55,
     L3: 60,
   },
-  // Super free-spin reels (4-5 scatters): premium-leaning so the super tier
-  // consistently produces bigger clusters. S omitted (no retriggers).
+  // Super free-spin reels (4 scatters): premium-leaning so the super tier
+  // consistently produces bigger clusters. Low S weight enables retriggers.
   superBonus: {
+    S: 6,
     H1: 45,
     H2: 45,
     H3: 48,
@@ -37,9 +40,10 @@ const SYM_WEIGHTS = {
     L2: 55,
     L3: 60,
   },
-  // Hidden free-spin reels (6 scatters): the most premium-heavy profile for the
-  // top tier. S omitted (no retriggers).
+  // Hidden free-spin reels (5 scatters): the most premium-heavy profile for the
+  // top tier. Low S weight enables retriggers.
   hiddenBonus: {
+    S: 6,
     H1: 55,
     H2: 50,
     H3: 50,

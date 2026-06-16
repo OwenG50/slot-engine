@@ -151,9 +151,17 @@ function drawBoard(ctx: Context) {
       break
     }
   } else {
-    // If no special ResultSet criteria, or we are in FS, draw board normally
-    ctx.services.board.resetBoard()
-    ctx.services.board.drawBoardWithRandomStops(reels)
+    // If no special ResultSet criteria, or we are in FS, draw board normally.
+    // Cap scatters at 5 so 6 can never land (this also bounds free-spin
+    // retriggers to the 3 / 4 / 5 scatter tiers).
+    while (true) {
+      ctx.services.board.resetBoard()
+      ctx.services.board.drawBoardWithRandomStops(reels)
+
+      const [scatCount] = ctx.services.board.countSymbolsOnBoard(scatter)
+
+      if (scatCount <= 5) break
+    }
   }
 }
 
@@ -418,18 +426,20 @@ function handleTumbles(ctx: Context): number {
 }
 
 function checkFreespins(ctx: Context) {
-  // No retriggers — scatters during free spins are ignored entirely.
-  if (ctx.state.currentSpinType == SPIN_TYPE.FREE_SPINS) return
-
   const scatter = ctx.config.symbols.get("S")!
   const [scatCount] = ctx.services.board.countSymbolsOnBoard(scatter)
 
-  // Require at least 3 scatters to trigger free spins
-  if (scatCount < 3) return
+  // Fixed free-spin award looked up from `scatterToFreespins` config:
+  //   BASE_GAME (trigger):   3/4/5 scatters -> 12 free spins
+  //                          (Bonus / Super Bonus / Hidden Bonus tiers).
+  //   FREE_SPINS (retrigger): 3 -> +3, 4 -> +5, 5 -> +8 free spins.
+  // Returns 0 for fewer than 3 scatters, so nothing happens.
+  const freespinsAwarded = ctx.services.game.getFreeSpinsForScatters(
+    ctx.state.currentSpinType,
+    scatCount,
+  )
 
-  // Roll a d6 per scatter to determine free spin count.
-  // 3 scatters: 3–18 spins | 4: 4–24 | 5: 5–30 | 6: 6–36
-  const { rolls, total: freespinsAwarded } = rollFreespinDice(ctx, scatCount)
+  if (freespinsAwarded <= 0) return
 
   ctx.services.game.awardFreespins(freespinsAwarded)
 
@@ -438,9 +448,9 @@ function checkFreespins(ctx: Context) {
   if (ctx.state.currentSpinType == SPIN_TYPE.BASE_GAME) {
     // Determine the free-spin tier from the number of triggering scatters and
     // initialize the feature-wide global multiplier for that tier.
-    //   3 scatters  -> normal free spins
-    //   4-5 scatters -> super free spins  (higher value)
-    //   6 scatters  -> hidden free spins (highest value)
+    //   3 scatters -> normal free spins
+    //   4 scatters -> super free spins  (higher value)
+    //   5 scatters -> hidden free spins (highest value)
     const tier = getTierForScatters(scatCount)
     ctx.state.userData.fsTier = tier
     ctx.state.userData.fsGlobalMulti = getTierConfig(tier).startMulti
@@ -449,7 +459,6 @@ function checkFreespins(ctx: Context) {
       type: "freeSpinTrigger",
       data: {
         totalFs: freespinsAwarded,
-        rolls,
         positions: getScatterPositions(ctx),
         tier,
         globalMulti: ctx.state.userData.fsGlobalMulti,
@@ -487,7 +496,23 @@ function checkFreespins(ctx: Context) {
     }
 
     playFreeSpins(ctx)
+    return
   }
+
+  // ── Free-spin retrigger ───────────────────────────────────────────────────
+  // Reached only while already inside the free-spin loop. The tier never
+  // changes on a retrigger — we simply add the awarded spins to the running
+  // feature (3 -> +3, 4 -> +5, 5 -> +8). awardFreespins above already topped
+  // up the remaining spin count.
+  ctx.services.data.addBookEvent({
+    type: "addAdditionalFreeSpins",
+    data: {
+      additionalFs: freespinsAwarded,
+      remainingFs: ctx.state.currentFreespinAmount,
+      totalFs: ctx.state.totalFreespinAmount,
+      positions: getScatterPositions(ctx),
+    },
+  })
 }
 
 function playFreeSpins(ctx: Context) {
@@ -573,11 +598,11 @@ const FS_TIERS: Record<
   // Normal free spins (3 scatters): persistent position multipliers double up
   // to 128x, no feature-wide global multiplier.
   normal: { startMulti: 1, ramp: 0, multiCap: 128 },
-  // Super free spins (4-5 scatters): higher multiplier ceiling. Each spin a
+  // Super free spins (4 scatters): higher multiplier ceiling. Each spin a
   // random cluster symbol is assigned a random multiplier from FS_SYMBOL_MULTI_POOL;
   // all wins for that symbol during the spin (and its tumbles) are boosted.
   super: { startMulti: 1, ramp: 0, multiCap: 256 },
-  // Hidden free spins (6 scatters): same as super but multiplier pool starts at
+  // Hidden free spins (5 scatters): same as super but multiplier pool starts at
   // 10x minimum (FS_HIDDEN_SYMBOL_MULTI_POOL). Board positions also start with
   // random multipliers active.
   hidden: { startMulti: 1, ramp: 0, multiCap: 512 },
@@ -588,21 +613,9 @@ function getTierConfig(tier: FsTier) {
 }
 
 function getTierForScatters(scatCount: number): FsTier {
-  if (scatCount >= 6) return "hidden"
+  if (scatCount >= 5) return "hidden"
   if (scatCount >= 4) return "super"
   return "normal"
-}
-
-// Rolls a die (values 3–6) for each scatter that landed and sums the results
-// to determine the total number of free spins awarded (min = scatCount × 3,
-// max = scatCount × 6).
-function rollFreespinDice(ctx: Context, scatCount: number): { rolls: number[]; total: number } {
-  const dice = [3, 4, 5, 6] as const
-  const rolls: number[] = []
-  for (let i = 0; i < scatCount; i++) {
-    rolls.push(ctx.services.rng.randomItem([...dice]))
-  }
-  return { rolls, total: rolls.reduce((sum, r) => sum + r, 0) }
 }
 
 // Weighted starting multiplier tables for pre-filled board positions.
@@ -633,19 +646,18 @@ function getScatterWeights(key: string) {
     freespins: {
       3: 1,
     },
-    // Super bonus: always 4 or 5 scatters -> super free-spin tier (never 6, so
-    // the super-only modes can never accidentally enter the hidden tier).
+    // Super bonus: always exactly 4 scatters -> super free-spin tier.
     superfreespins: {
-      4: 60,
-      5: 40,
+      4: 1,
     },
-    // Hidden bonus: always exactly 6 scatters -> hidden free-spin tier.
+    // Hidden bonus: always exactly 5 scatters -> hidden free-spin tier.
+    // 6 scatters can never land.
     hiddenfreespins: {
-      6: 1,
+      5: 1,
     },
+    // Max-win forces 5 scatters (hidden tier). Never 6.
     maxwin: {
       5: 1,
-      6: 2,
     },
   }
 
