@@ -60,6 +60,11 @@ export function onHandleGameFlow(ctx: Context) {
   // Build initial board multipliers starting at 0
   makeInitialBoardMultis(ctx)
 
+  // For the guaranteed-board-multi buy modes, pre-fill every board position
+  // with a random starting multiplier so the single paid spin is amplified
+  // from the very first tumble. No-op for every other mode.
+  applyGuaranteedBoardMultis(ctx)
+
   // Draw a feature symbol and multiplier for this base-game spin.
   drawGlobalSymbolMulti(ctx)
 
@@ -368,7 +373,7 @@ function handleTumbles(ctx: Context): number {
     //   2 → 4 → 8 → … up to the tier's multiCap.
     // Skipping the intermediate 1 state means multipliers apply from the
     // second win on a position, matching the intended Sugar Rush mechanic.
-    const multiCap = getTierConfig(ctx.state.userData.fsTier).multiCap
+    const multiCap = getEffectiveMultiCap(ctx)
     for (const sym of winSymbols) {
       const current = ctx.state.userData.boardMultis[sym.reelIdx]![sym.rowIdx]!
       ctx.state.userData.boardMultis[sym.reelIdx]![sym.rowIdx] = current === 0
@@ -640,6 +645,61 @@ function initBoardMultis(ctx: Context, tier: FsTier) {
   )
 }
 
+// Weighted starting multiplier tables for the guaranteed-board-multi buy modes.
+// On the single paid base spin every board position is pre-filled from these.
+//   guaranteedBoardMultis:  2x  → 128x
+//   guaranteedBoardMultisHigh:  8x  → 256x
+// Lower values are common; higher values are increasingly rare.
+const GUARANTEED_BOARD_MULTI_WEIGHTS: Record<string, Record<number, number>> = {
+  guaranteedBoardMultis: { 2: 35, 4: 28, 8: 18, 16: 9, 32: 5, 64: 3, 128: 2 },
+  guaranteedBoardMultisHigh: {
+    8: 35, 16: 26, 32: 16, 64: 9, 128: 5, 256: 3,
+  },
+}
+
+// For the guaranteed-board-multi buy modes, pre-fills every board position on
+// the single paid base spin with a weighted-random starting multiplier (and
+// emits a boardMultiInit event so the client can render it before the reveal).
+// No-op for every other mode and for free spins.
+function applyGuaranteedBoardMultis(ctx: Context) {
+  if (ctx.state.currentSpinType !== SPIN_TYPE.BASE_GAME) return
+
+  const modeName = ctx.services.game.getCurrentGameMode().name
+  const weights = GUARANTEED_BOARD_MULTI_WEIGHTS[modeName]
+  if (!weights) return
+
+  ctx.state.userData.boardMultis = ctx.state.userData.boardMultis.map((reel) =>
+    reel.map(() => Number(ctx.services.rng.weightedRandom(weights))),
+  )
+
+  ctx.services.data.addBookEvent({
+    type: "boardMultiInit",
+    data: {
+      multipliers: ctx.state.userData.boardMultis.map((reel) => [...reel]),
+    },
+  })
+}
+
+// Returns the per-position doubling ceiling for the current spin. The
+// guaranteed-board-multi base spins seed multipliers above the normal tier cap
+// (up to 256x for the high mode), so the cap is raised to match while those
+// modes are in their base spin. Free spins fall back to the tier's multiCap.
+function getEffectiveMultiCap(ctx: Context): number {
+  const tierCap = getTierConfig(ctx.state.userData.fsTier).multiCap
+
+  if (ctx.state.currentSpinType === SPIN_TYPE.BASE_GAME) {
+    const modeName = ctx.services.game.getCurrentGameMode().name
+    if (modeName === "guaranteedBoardMultisHigh") {
+      return Math.max(tierCap, 256)
+    }
+    if (modeName === "guaranteedBoardMultis") {
+      return Math.max(tierCap, 128)
+    }
+  }
+
+  return tierCap
+}
+
 function getScatterWeights(key: string) {
   const SCATTER_WEIGHTS = {
     // Normal bonus: always exactly 3 scatters -> normal free-spin tier.
@@ -700,7 +760,17 @@ function makeInitialBoardMultis(ctx: Context) {
 // receive the draw before the board reveal. Called on every spin in all modes.
 function drawGlobalSymbolMulti(ctx: Context) {
   const tier = ctx.state.userData.fsTier
-  const weights = tier === "hidden"
+  // The guaranteedBoardMultisHigh mode guarantees a 25x-minimum
+  // symbol multiplier on its single paid BASE spin ONLY. Its free spins fall
+  // back to the normal per-tier weight tables (like every other mode) so that
+  // bonus-criteria books keep enough win variance for the optimizer to fit a
+  // distribution. The hidden tier always uses the high-minimum table as before.
+  const modeName = ctx.services.game.getCurrentGameMode().name
+  const isHighGuaranteedBaseSpin =
+    modeName === "guaranteedBoardMultisHigh" &&
+    ctx.state.currentSpinType === SPIN_TYPE.BASE_GAME
+  const useHighMulti = tier === "hidden" || isHighGuaranteedBaseSpin
+  const weights = useHighMulti
     ? FS_HIDDEN_SYMBOL_MULTI_WEIGHTS
     : FS_SYMBOL_MULTI_WEIGHTS
   const multiplier = Number(ctx.services.rng.weightedRandom(weights))
