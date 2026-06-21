@@ -167,6 +167,12 @@ export const gameModes = defineGameModes({
         quota: 0.3,
         multiplier: 0,
         reelWeights: {
+          // Scatter-bearing base reel: scatters appear (0-2) for near-miss
+          // anticipation and may tumble in, but `capBaseScatters` in
+          // onHandleGameFlow enforces a hard cap of 2 scatters on every
+          // non-bonus base spin, so they can never reach the 3-scatter trigger
+          // threshold. Free spins come solely from the forceFreespins result
+          // sets below.
           [SPIN_TYPE.BASE_GAME]: { base: 1 },
           [SPIN_TYPE.FREE_SPINS]: { bonus: 1 },
         },
@@ -376,6 +382,10 @@ export const gameModes = defineGameModes({
         quota: 0.3,
         multiplier: 0,
         reelWeights: {
+          // Scatter-bearing base reel. Guaranteed wins produce many tumble
+          // cycles, so scatters can drop in repeatedly; `capBaseScatters` in
+          // onHandleGameFlow caps them at 2 after every tumble, so the board
+          // never reaches the 3-scatter trigger on a non-bonus base spin.
           [SPIN_TYPE.BASE_GAME]: { base: 1 },
           [SPIN_TYPE.FREE_SPINS]: { bonus: 1 },
         },
@@ -590,11 +600,11 @@ export const game = createSlotGame<GameType>({
 
 game.configureSimulation({
   simRunsAmount: {
-    base: 300000,
-    bonusHunt: 300000,
-    guaranteedBoardMultis: 300000,
-    guaranteedBoardMultisHigh: 300000,
-    bonusFeature: 300000,
+    // base: 300000,
+    // bonusHunt: 300000,
+    // guaranteedBoardMultis: 300000,
+    // guaranteedBoardMultisHigh: 300000,
+    // bonusFeature: 300000,
     superBonusFeature: 300000,
     MysteryBonusFeature: 300000,
   },
@@ -674,8 +684,31 @@ game.configureOptimization({
           priority: 1,
         }),
       },
-      scaling: new OptimizationScaling([]),
-      parameters: new OptimizationParameters(),
+      scaling: new OptimizationScaling([
+        // Suppress below-cost and near-cost wins; concentrate value in 500x+
+        // territory so every normal-FS buy either ends near zero or delivers
+        // a meaningful return. Philosophy mirrors superBonusFeature exactly,
+        // scaled to the 100x cost / ~96x avgWin envelope.
+        { criteria: "freespins", scaleFactor: 0.05,  winRange: [0.01,   1],      probability: 1 },
+        { criteria: "freespins", scaleFactor: 0.1,   winRange: [1,      2],      probability: 1 },
+        { criteria: "freespins", scaleFactor: 0.2,   winRange: [2,      5],      probability: 1 },
+        { criteria: "freespins", scaleFactor: 0.4,   winRange: [5,      10],     probability: 1 },
+        { criteria: "freespins", scaleFactor: 0.5,   winRange: [10,     20],     probability: 1 },
+        { criteria: "freespins", scaleFactor: 0.6,   winRange: [20,     50],     probability: 1 },
+        { criteria: "freespins", scaleFactor: 0.4,   winRange: [50,     100],    probability: 1 },
+        { criteria: "freespins", scaleFactor: 0.2,   winRange: [100,    200],    probability: 1 },
+        { criteria: "freespins", scaleFactor: 0.15,  winRange: [200,    500],    probability: 1 },
+        { criteria: "freespins", scaleFactor: 0.8,   winRange: [500,    1000],   probability: 1 },
+        { criteria: "freespins", scaleFactor: 3.5,   winRange: [1000,   2000],   probability: 1 },
+        { criteria: "freespins", scaleFactor: 6.0,   winRange: [2000,   5000],   probability: 1 },
+        { criteria: "freespins", scaleFactor: 4.0,   winRange: [5000,   10000],  probability: 1 },
+        { criteria: "freespins", scaleFactor: 2.5,   winRange: [10000,  25000],  probability: 1 },
+        { criteria: "freespins", scaleFactor: 1,     winRange: [25000,  25000],  probability: 1 },
+      ]),
+      parameters: new OptimizationParameters({
+        minMeanToMedian: 2,
+        maxMeanToMedian: 8,
+      }),
     },
     // superBonusFeature (cost 300x): bonus-buy that always lands 4 scatters
     // via the "superfreespins" criteria, so it only ever enters the super tier.
@@ -796,11 +829,23 @@ game.configureOptimization({
     // guaranteedBoardMultisHigh (cost 500x):
     // Both behave like the base game for triggering purposes — free spins of
     // every tier occur organically at the SAME hit rates as base
-    // (freespins 1/150, super 1/450, hidden 1/800). The optimization conditions
-    // therefore MIRROR the base mode exactly; only the bet cost differs. The
-    // guaranteed board multipliers (and, for the high mode, the 25x-minimum
-    // symbol multiplier) inflate the per-spin win distribution, which the
-    // optimizer absorbs via lookup-table weighting to keep RTP at 0.96.
+    // (freespins 1/150, super 1/450, hidden 1/800).
+    //
+    // HIT-RATE DESIGN: Both modes target ~90% non-zero hit rate (only ~10% of
+    // spins pay nothing). This is achieved by:
+    //   1. Giving the "0" fence hitRate:10 so the win_type injection rule forces
+    //      exactly 1-in-10 probability for zero-win outcomes.
+    //   2. Giving basegame hitRate:1.124 (explicit, ~89% of spins) so the
+    //      optimizer has a hard probability target, keeping FS fence hit rates
+    //      pinned to their absolute 1/150, 1/450, 1/800 values — identical to
+    //      the base game. The guaranteed board multipliers (and the 25x
+    //      symbol-multi floor for the high mode) mean positive-win spins return
+    //      a meaningful amount even when clusters are modest, so players lose
+    //      money slowly with a consistent stream of partial returns and an
+    //      occasional large hit.
+    //
+    // The guaranteed board multipliers inflate the per-spin win distribution,
+    // which the optimizer absorbs via lookup-table weighting to keep RTP at 0.96.
     guaranteedBoardMultis: {
       conditions: {
         maxwin: new OptimizationConditions({
@@ -810,25 +855,36 @@ game.configureOptimization({
           searchConditions: 25000,
           priority: 8,
         }),
+        // "0" fence: win_type (searchConditions:0 is an exact number). With
+        // hitRate:10 the Rust optimizer injects zero-win outcomes at prob=1/10
+        // regardless of how many zero-win books exist in the pool, giving a
+        // ~10% null hit rate. Running at priority:6 it also removes ALL zero-win
+        // books from the pool before the basegame fence runs.
         "0": new OptimizationConditions({
           rtp: 0,
           avgWin: 0,
+          hitRate: 10,
           searchConditions: 0,
           priority: 6,
         }),
-        // Same base-heavy budget as guaranteedBoardMultisAndHighSymbolMulti, so
-        // most of the RTP comes from the single paid base spin. The Rust
-        // optimizer's per-fence TARGET average win is rtp * hitRate * cost
-        // (cost = 100 here); each fence rtp is solved so its target lands at/below
-        // that criteria's NATURAL mean win, which keeps the optimizer able to fit
-        // a distribution and pulls the bonus tiers down to a sliver of RTP.
+        // Base-heavy budget: most of the RTP comes from the single paid base
+        // spin. The Rust optimizer's per-fence TARGET average win is
+        // rtp * hitRate * cost (cost = 100 here).
         //
         // Natural per-criteria mean win (bets), measured from the books:
-        //     basegame ~40 (unique-mean ~403), freespins ~15, super ~138, hidden ~933
+        //     basegame positive-win unique-mean ~403, freespins ~15, super ~138, hidden ~933
         //     freespins: 0.000667 * 150 * 100 = 10   (mean ~15)
         //     super:     0.002111 * 450 * 100 = 95   (mean ~138)
         //     hidden:    0.008125 * 800 * 100 = 650  (mean ~933)
         // Bonus HIT RATES stay equal to base (150 / 450 / 800) as required.
+        //
+        // CEILING NOTE: each FS fence rtp is hard-capped by the book math at
+        //   naturalMean / (hitRate * cost). Pushing rtp past that makes the
+        //   optimizer's target avg win exceed every book and aborts with
+        //   "RTP too low... Not enough variance/range in wins". The values below
+        //   already sit at ~70% of each tier's ceiling — about as much RTP as
+        //   these fences can physically hold. FS "feel" is delivered by the
+        //   bimodal scaling further down, not by more total RTP.
         freespins: new OptimizationConditions({
           rtp: 0.000667,
           hitRate: 150,
@@ -853,16 +909,33 @@ game.configureOptimization({
           },
           priority: 4,
         }),
-        // basegame carries the bulk of the budget (0.948997). target =
-        // 0.948997 * 4 * 100 = ~380 bets, right at the base unique-mean (~403),
-        // so the fence is balanced and the optimizer converges = high base RTP.
+        // basegame uses hitRate 1.124 to absorb the remaining ~89% of spins
+        // after the "0" fence (10%) and FS tiers (~1%) are claimed. Using an
+        // explicit fractional hitRate (rather than "x") ensures the optimizer
+        // knows the exact probability target for this fence, so FS fences keep
+        // their absolute 1/150, 1/450, 1/800 rates (identical to base game).
+        //   sum check: 1/10 + 1/1.124 + 1/150 + 1/450 + 1/800 ≈ 1.0 ✓
+        // Target avg_win = rtp * hitRate * cost = 0.948997 * 1.124 * 100 = ~107
+        // bets, well below the positive-win natural mean (~403), so the
+        // optimizer fits a distribution without error.
         basegame: new OptimizationConditions({
           rtp: 0.948997,
-          hitRate: 4,
+          hitRate: 1.124,
           priority: 1,
         }),
       },
-      scaling: new OptimizationScaling([]),
+      scaling: new OptimizationScaling([
+        // Cohesive FS feel: suppress sub-cost dribbles and push mass into the
+        // tail so a triggered bonus reads as meaningful. Mild factors keep the
+        // fences inside their feasible target window so the optimizer still
+        // converges (these tiers carry little RTP, so headroom is thin).
+        { criteria: "freespins",       scaleFactor: 0.4, winRange: [0.01, 5],    probability: 1 },
+        { criteria: "freespins",       scaleFactor: 1.4, winRange: [20,   200],  probability: 1 },
+        { criteria: "superfreespins",  scaleFactor: 0.4, winRange: [0.01, 20],   probability: 1 },
+        { criteria: "superfreespins",  scaleFactor: 1.4, winRange: [100,  1000], probability: 1 },
+        { criteria: "hiddenfreespins", scaleFactor: 0.4, winRange: [0.01, 100],  probability: 1 },
+        { criteria: "hiddenfreespins", scaleFactor: 1.4, winRange: [500,  5000], probability: 1 },
+      ]),
       parameters: new OptimizationParameters(),
     },
     guaranteedBoardMultisHigh: {
@@ -874,9 +947,15 @@ game.configureOptimization({
           searchConditions: 25000,
           priority: 8,
         }),
+        // "0" fence: win_type (searchConditions:0 is an exact number). With
+        // hitRate:10 the Rust optimizer injects zero-win outcomes at prob=1/10
+        // regardless of how many zero-win books exist in the pool, giving a
+        // ~10% null hit rate. Running at priority:6 it also removes ALL zero-win
+        // books from the pool before the basegame fence runs.
         "0": new OptimizationConditions({
           rtp: 0,
           avgWin: 0,
+          hitRate: 10,
           searchConditions: 0,
           priority: 6,
         }),
@@ -889,22 +968,14 @@ game.configureOptimization({
         // with "RTP too low... Not enough variance/range in wins".
         //
         // Natural per-criteria AVERAGE win (bets), measured from the books:
-        //     basegame ~1920, freespins ~502, super ~396, hidden ~1534
+        //     basegame positive-win mean ~1920, freespins ~502, super ~396, hidden ~1534
         //
-        // So each fence's rtp is solved so its target lands just BELOW that
-        // criteria's natural mean (gives the optimizer wins on both sides of the
-        // target = variance, and pulls RTP DOWN into budget):
+        // FS fence targets stay unchanged; each lands below its criteria mean:
         //     freespins: 0.004667 * 150 * 500 = 350  (mean ~502)
         //     super:     0.001244 * 450 * 500 = 280  (mean ~396)
         //     hidden:    0.00275  * 800 * 500 = 1100 (mean ~1534)
-        // The bonus tiers therefore take only a sliver of RTP; the base game
-        // (the guaranteed-multi paid spin) absorbs the rest = high base RTP.
-        // Bonus HIT RATES stay equal to base (150 / 450 / 800) as required.
-        //
-        // VERIFIED (published LUT): RTP 0.96 exactly; freespins 1/150,
-        // superfreespins 1/450, hiddenfreespins 1/800, maxwin 1/20000,
-        // basegame 1/4 (dominant fence). Optimizer converges with no
-        // "RTP too low" error.
+        // The bonus tiers take only a sliver of RTP; the base game absorbs the
+        // rest. Bonus HIT RATES stay equal to base (150 / 450 / 800) as required.
         freespins: new OptimizationConditions({
           rtp: 0.004667,
           hitRate: 150,
@@ -929,13 +1000,18 @@ game.configureOptimization({
           },
           priority: 4,
         }),
-        // basegame keeps hitRate 4 (NOT raised): target = 0.9512765 * 4 * 500 =
-        // ~1903 bets, right at the basegame natural mean (~1920), so the fence is
-        // balanced. This single fence carries ~0.95 of the 0.96 budget = the
-        // higher base RTP you asked for.
+        // basegame uses hitRate 1.124 to absorb the remaining ~89% of spins
+        // after the "0" fence (10%) and FS tiers (~1%) are claimed. Using an
+        // explicit fractional hitRate (rather than "x") ensures the optimizer
+        // knows the exact probability target for this fence, so FS fences keep
+        // their absolute 1/150, 1/450, 1/800 rates (identical to base game).
+        //   sum check: 1/10 + 1/1.124 + 1/150 + 1/450 + 1/800 ≈ 1.0 ✓
+        // Target avg_win = rtp * hitRate * cost = 0.9512765 * 1.124 * 500 = ~534
+        // bets, well below the positive-win natural mean (~1920), so the
+        // optimizer fits a distribution without error.
         basegame: new OptimizationConditions({
           rtp: 0.9512765,
-          hitRate: 4,
+          hitRate: 1.124,
           priority: 1,
         }),
       },
@@ -949,6 +1025,16 @@ game.configureOptimization({
         { criteria: "basegame", scaleFactor: 1,    winRange: [25000, 25000], probability: 1 },
         // Boost mid-range to absorb the redistributed probability mass
         { criteria: "basegame", scaleFactor: 1.5,  winRange: [500,   2000],  probability: 1 },
+        // Cohesive FS feel: suppress sub-cost dribbles and push mass into the
+        // tail so a triggered bonus reads as meaningful. Mild factors keep the
+        // fences inside their feasible target window so the optimizer still
+        // converges (these tiers carry little RTP, so headroom is thin).
+        { criteria: "freespins",       scaleFactor: 0.4, winRange: [0.01, 20],   probability: 1 },
+        { criteria: "freespins",       scaleFactor: 1.4, winRange: [200,  2000], probability: 1 },
+        { criteria: "superfreespins",  scaleFactor: 0.4, winRange: [0.01, 20],   probability: 1 },
+        { criteria: "superfreespins",  scaleFactor: 1.4, winRange: [150,  2000], probability: 1 },
+        { criteria: "hiddenfreespins", scaleFactor: 0.4, winRange: [0.01, 100],  probability: 1 },
+        { criteria: "hiddenfreespins", scaleFactor: 1.4, winRange: [800,  8000], probability: 1 },
       ]),
       parameters: new OptimizationParameters(),
     },
@@ -1019,8 +1105,68 @@ game.configureOptimization({
           priority: 5,
         }),
       },
-      scaling: new OptimizationScaling([]),
-      parameters: new OptimizationParameters(),
+      scaling: new OptimizationScaling([
+        // Each tier gets its own bimodal shaping scaled to its avgWin envelope.
+        // All three follow the same philosophy as superBonusFeature: suppress
+        // the dead zone below cost, let the mid-range fall off, then boost the
+        // valuable tail so wins feel impactful and escalate clearly by tier.
+        //
+        // normal free spins (avg ~250x per trigger)
+        { criteria: "freespins", scaleFactor: 0.05,  winRange: [0.01,   1],      probability: 1 },
+        { criteria: "freespins", scaleFactor: 0.1,   winRange: [1,      2],      probability: 1 },
+        { criteria: "freespins", scaleFactor: 0.2,   winRange: [2,      5],      probability: 1 },
+        { criteria: "freespins", scaleFactor: 0.4,   winRange: [5,      10],     probability: 1 },
+        { criteria: "freespins", scaleFactor: 0.5,   winRange: [10,     20],     probability: 1 },
+        { criteria: "freespins", scaleFactor: 0.6,   winRange: [20,     50],     probability: 1 },
+        { criteria: "freespins", scaleFactor: 0.4,   winRange: [50,     100],    probability: 1 },
+        { criteria: "freespins", scaleFactor: 0.2,   winRange: [100,    200],    probability: 1 },
+        { criteria: "freespins", scaleFactor: 0.15,  winRange: [200,    500],    probability: 1 },
+        { criteria: "freespins", scaleFactor: 0.8,   winRange: [500,    1000],   probability: 1 },
+        { criteria: "freespins", scaleFactor: 3.5,   winRange: [1000,   2000],   probability: 1 },
+        { criteria: "freespins", scaleFactor: 6.0,   winRange: [2000,   5000],   probability: 1 },
+        { criteria: "freespins", scaleFactor: 4.0,   winRange: [5000,   10000],  probability: 1 },
+        { criteria: "freespins", scaleFactor: 2.5,   winRange: [10000,  25000],  probability: 1 },
+        { criteria: "freespins", scaleFactor: 1,     winRange: [25000,  25000],  probability: 1 },
+        // super free spins (avg ~600x per trigger) — identical shape to the
+        // standalone superBonusFeature mode for full cohesion.
+        { criteria: "superfreespins", scaleFactor: 0.05,  winRange: [0.01,   1],      probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 0.1,   winRange: [1,      2],      probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 0.2,   winRange: [2,      5],      probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 0.4,   winRange: [5,      10],     probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 0.5,   winRange: [10,     20],     probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 0.6,   winRange: [20,     50],     probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 0.4,   winRange: [50,     100],    probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 0.2,   winRange: [100,    200],    probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 0.15,  winRange: [200,    500],    probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 0.8,   winRange: [500,    1000],   probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 3.5,   winRange: [1000,   2000],   probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 6.0,   winRange: [2000,   5000],   probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 4.0,   winRange: [5000,   10000],  probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 2.5,   winRange: [10000,  25000],  probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 1,     winRange: [25000,  25000],  probability: 1 },
+        // hidden free spins (avg ~1500x per trigger) — most extreme tier;
+        // peak mass shifted into the 5000x–10000x range to match the tier's
+        // natural high-multiplier potential.
+        { criteria: "hiddenfreespins", scaleFactor: 0.05,  winRange: [0.01,   1],      probability: 1 },
+        { criteria: "hiddenfreespins", scaleFactor: 0.1,   winRange: [1,      2],      probability: 1 },
+        { criteria: "hiddenfreespins", scaleFactor: 0.15,  winRange: [2,      5],      probability: 1 },
+        { criteria: "hiddenfreespins", scaleFactor: 0.25,  winRange: [5,      10],     probability: 1 },
+        { criteria: "hiddenfreespins", scaleFactor: 0.35,  winRange: [10,     20],     probability: 1 },
+        { criteria: "hiddenfreespins", scaleFactor: 0.4,   winRange: [20,     50],     probability: 1 },
+        { criteria: "hiddenfreespins", scaleFactor: 0.3,   winRange: [50,     100],    probability: 1 },
+        { criteria: "hiddenfreespins", scaleFactor: 0.15,  winRange: [100,    200],    probability: 1 },
+        { criteria: "hiddenfreespins", scaleFactor: 0.1,   winRange: [200,    500],    probability: 1 },
+        { criteria: "hiddenfreespins", scaleFactor: 0.5,   winRange: [500,    1000],   probability: 1 },
+        { criteria: "hiddenfreespins", scaleFactor: 2.0,   winRange: [1000,   2000],   probability: 1 },
+        { criteria: "hiddenfreespins", scaleFactor: 5.0,   winRange: [2000,   5000],   probability: 1 },
+        { criteria: "hiddenfreespins", scaleFactor: 7.0,   winRange: [5000,   10000],  probability: 1 },
+        { criteria: "hiddenfreespins", scaleFactor: 4.5,   winRange: [10000,  25000],  probability: 1 },
+        { criteria: "hiddenfreespins", scaleFactor: 1,     winRange: [25000,  25000],  probability: 1 },
+      ]),
+      parameters: new OptimizationParameters({
+        minMeanToMedian: 2,
+        maxMeanToMedian: 10,
+      }),
     },
   },
 })
@@ -1029,12 +1175,12 @@ game.runTasks({
   doSimulation: true,
   doOptimization: true,
   optimizationOpts: {
-    gameModes: ["base", "bonusHunt", "guaranteedBoardMultis", "guaranteedBoardMultisHigh", "bonusFeature", "superBonusFeature", "MysteryBonusFeature"],
+    gameModes: [ "superBonusFeature", "MysteryBonusFeature"],
     // gameModes: ["guaranteedBoardMultisHigh"],
   },
   doAnalysis: true,
   analysisOpts: {
-    gameModes: ["base", "bonusHunt", "guaranteedBoardMultis", "guaranteedBoardMultisHigh", "bonusFeature", "superBonusFeature", "MysteryBonusFeature"],
+    gameModes: ["superBonusFeature", "MysteryBonusFeature"],
     // gameModes: ["guaranteedBoardMultisHigh"],
   },
 })

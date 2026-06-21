@@ -1,11 +1,14 @@
 import { GeneratedReelSet } from "@slot-engine/core"
 
 const SYM_WEIGHTS = {
-  // Base game reels.
-  // S weight 12 → ~9 scatters per 250-row reel column, ensuring every column
-  // reliably has scatter positions for the forced-scatter draw in forceFreespins.
+  // Base game reels. Scatters (S) appear on every non-bonus base spin for
+  // near-miss anticipation and can tumble in during cascades, but
+  // `capBaseScatters` in onHandleGameFlow hard-caps them at 2 per spin so a
+  // non-bonus base spin can never reach the 3-scatter trigger. Free-spin
+  // triggers come solely from the forceFreespins result sets, which force the
+  // exact scatter count at reveal.
   base: {
-    S: 12,
+    S: 8,
     H1: 30,
     H2: 35,
     H3: 40,

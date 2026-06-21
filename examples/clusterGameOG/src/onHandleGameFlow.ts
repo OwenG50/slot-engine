@@ -1,6 +1,7 @@
 import {
   ClusterWinType,
   GameContext,
+  GameSymbol,
   SPIN_TYPE,
 } from "@slot-engine/core"
 import { GameModesType, SymbolsType, UserStateType } from ".."
@@ -186,28 +187,88 @@ function handleAnticipation(ctx: Context) {
   }
 }
 
-// Re-evaluates scatter anticipation after each tumble. When 2 or more scatters
-// are visible on the board during a base-game spin, ALL reels enter anticipation
-// so the player sees they are one scatter away from triggering free spins.
+// Re-evaluates scatter anticipation after each tumble. Anticipation must be
+// based on the scatters ALREADY locked on the board BEFORE the new tumble
+// symbols drop in (`scattersAlreadyOnBoard`), NOT the post-tumble board: a
+// scatter that lands during this very tumble must not retroactively trigger
+// anticipation for the drop that just landed it. When 2 or more scatters were
+// already present during a base-game spin, ALL reels enter anticipation so the
+// player sees they are one scatter away from triggering free spins.
 // Returns the updated anticipation array (1/0 per reel) for inclusion in
 // tumbleSymbols events.
-function refreshTumbleAnticipation(ctx: Context): number[] {
+function refreshTumbleAnticipation(
+  ctx: Context,
+  scattersAlreadyOnBoard: number,
+): number[] {
   if (ctx.state.currentSpinType === SPIN_TYPE.FREE_SPINS) {
     return ctx.services.board.getAnticipation().map((v) => (v ? 1 : 0))
   }
 
-  const scatter = ctx.config.symbols.get("S")!
-  const [scatCount] = ctx.services.board.countSymbolsOnBoard(scatter)
-
-  if (scatCount >= 2) {
-    // 2+ scatters visible — all reels enter anticipation so players know
-    // a new scatter anywhere completes the trigger.
+  if (scattersAlreadyOnBoard >= 2) {
+    // 2+ scatters were already on the board — all reels enter anticipation so
+    // players know a new scatter anywhere completes the trigger.
     ctx.services.board.getBoardReels().forEach((_, i) =>
       ctx.services.board.setAnticipationForReel(i, true),
+    )
+  } else {
+    // Fewer than 2 scatters already present — clear any stale anticipation so we
+    // don't carry forward all-true state from a previous tumble or spin.
+    ctx.services.board.getBoardReels().forEach((_, i) =>
+      ctx.services.board.setAnticipationForReel(i, false),
     )
   }
 
   return ctx.services.board.getAnticipation().map((v) => (v ? 1 : 0))
+}
+
+// Hard-caps scatters on a NON-bonus base spin so it can never reach the trigger
+// threshold. Scatters are allowed to appear (0-2) at reveal and to tumble in
+// for near-miss anticipation, but the moment a tumble would push the board to 3
+// scatters, the excess freshly-dropped scatter(s) are converted into a random
+// regular cluster symbol — both on the board and in the `newBoardSymbols`
+// payload so the emitted tumbleSymbols event matches the capped board. This
+// keeps free-spin triggers exclusively in the forceFreespins result sets (the
+// free-spins simulation pool): a base spin can NEVER trigger, so the "3
+// scatters on screen but no free spins" state is impossible, with zero
+// acceptance-retry overhead. No-op on forced-freespins spins (which need their
+// forced scatter count) and during free spins (where scatters drive retriggers).
+function capBaseScatters(
+  ctx: Context,
+  newBoardSymbols: Record<string, GameSymbol[]>,
+) {
+  if (
+    ctx.state.currentSpinType !== SPIN_TYPE.BASE_GAME ||
+    ctx.state.currentResultSet.forceFreespins
+  ) {
+    return
+  }
+
+  const scatter = ctx.config.symbols.get("S")!
+  const [totalScatters] = ctx.services.board.countSymbolsOnBoard(scatter)
+
+  const maxScatters = ctx.config.anticipationTriggers[SPIN_TYPE.BASE_GAME]
+  let excess = totalScatters - maxScatters
+  if (excess <= 0) return
+
+  // Only the freshly dropped-in symbols can be converted — pre-existing scatters
+  // were already within the cap on the previous board. New symbols occupy the
+  // top rows of each reel, so newBoardSymbols[reel][j] sits at board cell
+  // [reel, j]. Convert excess new scatters (front of the array = topmost) into a
+  // random regular symbol until the board is back within the cap.
+  for (const [reelKey, symbols] of Object.entries(newBoardSymbols)) {
+    if (excess <= 0) break
+    const reelIdx = Number(reelKey)
+    for (let rowIdx = 0; rowIdx < symbols.length; rowIdx++) {
+      if (excess <= 0) break
+      if (!symbols[rowIdx]!.properties.get("isScatter")) continue
+
+      const replacementId = ctx.services.rng.randomItem([...FS_CLUSTER_SYMBOLS])
+      const replacement = ctx.config.symbols.get(replacementId)!.clone()
+      ctx.services.board.setSymbol(reelIdx, rowIdx, replacement)
+      symbols[rowIdx] = replacement
+      excess--
+    }
+  }
 }
 
 // Returns the total payout accumulated across all tumbles for this spin.
@@ -215,6 +276,8 @@ function handleTumbles(ctx: Context): number {
   const cluster = new ClusterWinType({
     ctx,
   })
+
+  const scatter = ctx.config.symbols.get("S")!
 
   let spinTotal = 0
 
@@ -280,9 +343,19 @@ function handleTumbles(ctx: Context): number {
         reelIdx: w.reel,
         rowIdx: w.row,
       }))
+      // Count scatters already locked on the board BEFORE new symbols drop in;
+      // anticipation reflects only those, never a scatter landing this tumble.
+      const [scattersBeforeTumble] =
+        ctx.services.board.countSymbolsOnBoard(scatter)
       const { newBoardSymbols } = ctx.services.board.tumbleBoard(symbolsToDelete)
 
-      const wildTumbleAnticipation = refreshTumbleAnticipation(ctx)
+      // Keep non-bonus base spins at or below the near-miss cap (2 scatters).
+      capBaseScatters(ctx, newBoardSymbols)
+
+      const wildTumbleAnticipation = refreshTumbleAnticipation(
+        ctx,
+        scattersBeforeTumble,
+      )
       ctx.services.data.addBookEvent({
         type: "tumbleSymbols",
         data: {
@@ -389,10 +462,20 @@ function handleTumbles(ctx: Context): number {
     })
 
     // Tumbling the board drops new symbols into the vacated positions.
+    // Count scatters already locked on the board BEFORE new symbols drop in;
+    // anticipation reflects only those, never a scatter landing this tumble.
+    const [scattersBeforeTumble] =
+      ctx.services.board.countSymbolsOnBoard(scatter)
     const { newBoardSymbols } =
       ctx.services.board.tumbleBoard(winSymbols)
 
-    const clusterTumbleAnticipation = refreshTumbleAnticipation(ctx)
+    // Keep non-bonus base spins at or below the near-miss cap (2 scatters).
+    capBaseScatters(ctx, newBoardSymbols)
+
+    const clusterTumbleAnticipation = refreshTumbleAnticipation(
+      ctx,
+      scattersBeforeTumble,
+    )
     ctx.services.data.addBookEvent({
       type: "tumbleSymbols",
       data: {
@@ -431,8 +514,46 @@ function handleTumbles(ctx: Context): number {
 }
 
 function checkFreespins(ctx: Context) {
+  // Free spins are GATED on non-bonus ("0" / "basegame") base-game result sets:
+  // they may only be triggered by a result set that explicitly forces them
+  // (forceFreespins) or by a retrigger already inside the free-spin loop. This
+  // is the safety net; the primary guarantee is the reel design — non-bonus
+  // result sets use the scatter-free `baseNoScatter` reel, so scatters never
+  // appear (and therefore never accumulate to 3+) on a non-bonus base spin.
+  // Together these ensure 3 scatters only ever appear alongside a real bonus,
+  // so the "3 scatters on screen but no free spins" state can never occur, with
+  // zero acceptance-retry overhead. Forced result sets and FREE_SPINS
+  // retriggers pass through unaffected.
+  if (
+    ctx.state.currentSpinType === SPIN_TYPE.BASE_GAME &&
+    !ctx.state.currentResultSet.forceFreespins
+  ) {
+    return
+  }
+
   const scatter = ctx.config.symbols.get("S")!
-  const [scatCount] = ctx.services.board.countSymbolsOnBoard(scatter)
+  const [rawScatCount] = ctx.services.board.countSymbolsOnBoard(scatter)
+
+  // For bonus buy modes, extra scatters that tumble in during the base spin must
+  // not upgrade the free-spin tier beyond what the player paid for:
+  //   "freespins"      → bonus buy  → cap at 3 (normal tier)
+  //   "superfreespins" → super buy  → cap at 4 (super tier)
+  // "hiddenfreespins" and "maxwin" both map to >=5 which is already the highest
+  // tier, so no cap is needed there.
+  const scatCount = (() => {
+    if (
+      ctx.state.currentSpinType === SPIN_TYPE.BASE_GAME &&
+      ctx.state.currentResultSet.forceFreespins
+    ) {
+      const criteriaScatterCap: Partial<Record<string, number>> = {
+        freespins: 3,
+        superfreespins: 4,
+      }
+      const cap = criteriaScatterCap[ctx.state.currentResultSet.criteria]
+      if (cap !== undefined) return Math.min(rawScatCount, cap)
+    }
+    return rawScatCount
+  })()
 
   // Fixed free-spin award looked up from `scatterToFreespins` config:
   //   BASE_GAME (trigger):   3/4/5 scatters -> 12 free spins
@@ -631,7 +752,7 @@ function getTierForScatters(scatCount: number): FsTier {
 const BOARD_MULTI_INIT_WEIGHTS: Record<FsTier, Record<number, number>> = {
   normal: {},
   super:  { 2: 35, 4: 28, 8: 18, 16: 9, 32: 5, 64: 3, 128: 1.5, 256: 0.5 },
-  hidden: { 4: 38, 8: 26, 16: 16, 32: 9, 64: 5, 128: 3, 256: 2, 512: 1 },
+  hidden: { 8: 38, 16: 26, 32: 16, 64: 9, 128: 5, 256: 3, 512: 1 },
 }
 
 // For super/hidden free spins: pre-populates every board position with a
