@@ -605,8 +605,8 @@ game.configureSimulation({
     // guaranteedBoardMultis: 300000,
     // guaranteedBoardMultisHigh: 300000,
     // bonusFeature: 300000,
-    superBonusFeature: 300000,
-    MysteryBonusFeature: 300000,
+    // superBonusFeature: 300000,
+    // MysteryBonusFeature: 300000,
   },
   concurrency: 8,
 })
@@ -1172,15 +1172,15 @@ game.configureOptimization({
 })
 
 game.runTasks({
-  doSimulation: true,
+  doSimulation: false,
   doOptimization: true,
   optimizationOpts: {
-    gameModes: [ "superBonusFeature", "MysteryBonusFeature"],
+    gameModes: [ "superBonusFeature", ],
     // gameModes: ["guaranteedBoardMultisHigh"],
   },
-  doAnalysis: true,
+  doAnalysis: false,
   analysisOpts: {
-    gameModes: ["superBonusFeature", "MysteryBonusFeature"],
+    gameModes: ["bonusFeature",],
     // gameModes: ["guaranteedBoardMultisHigh"],
   },
 })

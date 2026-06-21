@@ -538,8 +538,10 @@ function checkFreespins(ctx: Context) {
   // not upgrade the free-spin tier beyond what the player paid for:
   //   "freespins"      → bonus buy  → cap at 3 (normal tier)
   //   "superfreespins" → super buy  → cap at 4 (super tier)
-  // "hiddenfreespins" and "maxwin" both map to >=5 which is already the highest
-  // tier, so no cap is needed there.
+  // "hiddenfreespins" maps to >=5 which is already the highest tier, no cap needed.
+  // "maxwin" forces 5 scatters for reel-stop placement in ALL modes, but for
+  // bonusFeature / superBonusFeature the player bought a specific tier — the
+  // maxwin result set must not silently upgrade them to hidden tier.
   const scatCount = (() => {
     if (
       ctx.state.currentSpinType === SPIN_TYPE.BASE_GAME &&
@@ -549,6 +551,12 @@ function checkFreespins(ctx: Context) {
         freespins: 3,
         superfreespins: 4,
       }
+      // Bonus-buy modes that lock a specific tier must also cap the maxwin
+      // scatter count so the maxwin result set (which forces 5 scatters for
+      // reel-stop placement) doesn't accidentally trigger the hidden tier.
+      const modeName = ctx.services.game.getCurrentGameMode().name
+      if (modeName === "bonusFeature") criteriaScatterCap["maxwin"] = 3
+      else if (modeName === "superBonusFeature") criteriaScatterCap["maxwin"] = 4
       const cap = criteriaScatterCap[ctx.state.currentResultSet.criteria]
       if (cap !== undefined) return Math.min(rawScatCount, cap)
     }

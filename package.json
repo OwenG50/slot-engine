@@ -9,7 +9,8 @@
     "test": "turbo run test",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "typecheck": "turbo run typecheck",
-    "publish-release": "pnpm install --frozen-lockfile=false && pnpm --filter=\"@slot-engine/*\" build && pnpm changeset publish"
+    "publish-release": "pnpm install --frozen-lockfile=false && pnpm --filter=\"@slot-engine/*\" build && pnpm changeset publish",
+    "analyze": "tsx scripts/analyze-build.ts"
   },
   "devDependencies": {
     "@types/node": "24.7.2",
