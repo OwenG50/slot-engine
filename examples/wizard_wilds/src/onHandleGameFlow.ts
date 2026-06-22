@@ -5,7 +5,7 @@ type Context = GameContext<GameModesType, SymbolsType, UserStateType>
 
 // Maximum "wild spawn count" a freshly landed wild can roll. When a new wild
 // lands it spawns up to this many additional wilds across the board.
-const MAX_WILD_SPAWN_COUNT = 6
+const MAX_WILD_SPAWN_COUNT = 5
 
 // Helper function to round to 1 decimal places to avoid floating point precision issues
 function roundToDecimal(value: number, decimals: number = 1): number {
@@ -13,43 +13,52 @@ function roundToDecimal(value: number, decimals: number = 1): number {
   return Math.round(value * multiplier) / multiplier
 }
 
-// Weighted multiplier tables — higher values have lower weights so they feel rarer.
-// Low-to-mid weights boosted significantly so high multipliers (30–50) are
-// proportionally much rarer, reducing the frequency of max-win simulation books.
+// Multiplier tables — all values are multiples of 5 (5–100). Lower values are
+// more common; 100 is the absolute maximum for both initial landing and growth.
 const MULTIPLIER_TABLE: Array<{ value: number; weight: number }> = [
-  { value: 2,   weight: 250 },
-  { value: 3,   weight: 200 },
-  { value: 4,   weight: 150 },
-  { value: 5,   weight: 120 },
-  { value: 6,   weight: 90  },
-  { value: 8,   weight: 50  },
-  { value: 10,  weight: 25  },
-  { value: 12,  weight: 10  },
-  { value: 15,  weight: 5   },
-  { value: 20,  weight: 2   },
-  { value: 25,  weight: 1   },
-  { value: 30,  weight: 1   },
-  { value: 35,  weight: 1   },
-  { value: 45,  weight: 1   },
-  { value: 50,  weight: 1   },
+  { value: 5,   weight: 250 },
+  { value: 10,  weight: 200 },
+  { value: 15,  weight: 150 },
+  { value: 20,  weight: 120 },
+  { value: 25,  weight: 90  },
+  { value: 30,  weight: 60  },
+  { value: 35,  weight: 40  },
+  { value: 40,  weight: 25  },
+  { value: 45,  weight: 18  },
+  { value: 50,  weight: 12  },
+  { value: 55,  weight: 8   },
+  { value: 60,  weight: 5   },
+  { value: 65,  weight: 3   },
+  { value: 70,  weight: 2   },
+  { value: 75,  weight: 2   },
+  { value: 80,  weight: 1   },
+  { value: 85,  weight: 1   },
+  { value: 90,  weight: 1   },
+  { value: 95,  weight: 1   },
+  { value: 100, weight: 1   },
 ]
 
-// Super free spins table — minimum 5x multiplier.
-// Same approach as MULTIPLIER_TABLE: low-to-mid weights boosted to dilute
-// the probability of extreme multipliers and reduce max-win book frequency.
+// Super free spins table — minimum 15x multiplier, same 100x cap.
+// Same step ladder as MULTIPLIER_TABLE but the lowest landing value is 15.
 const SUPER_MULTIPLIER_TABLE: Array<{ value: number; weight: number }> = [
-  { value: 5,   weight: 250 },
-  { value: 6,   weight: 200 },
-  { value: 8,   weight: 150 },
-  { value: 10,  weight: 100 },
-  { value: 12,  weight: 60  },
-  { value: 15,  weight: 30  },
-  { value: 20,  weight: 10  },
-  { value: 25,  weight: 3   },
-  { value: 30,  weight: 1   },
-  { value: 35,  weight: 1   },
-  { value: 45,  weight: 1   },
-  { value: 50,  weight: 1   },
+  { value: 15,  weight: 250 },
+  { value: 20,  weight: 200 },
+  { value: 25,  weight: 150 },
+  { value: 30,  weight: 100 },
+  { value: 35,  weight: 70  },
+  { value: 40,  weight: 45  },
+  { value: 45,  weight: 30  },
+  { value: 50,  weight: 18  },
+  { value: 55,  weight: 12  },
+  { value: 60,  weight: 7   },
+  { value: 65,  weight: 4   },
+  { value: 70,  weight: 3   },
+  { value: 75,  weight: 2   },
+  { value: 80,  weight: 1   },
+  { value: 85,  weight: 1   },
+  { value: 90,  weight: 1   },
+  { value: 95,  weight: 1   },
+  { value: 100, weight: 1   },
 ]
 
 function posKey(reel: number, row: number): string {
@@ -69,13 +78,20 @@ function pickWeightedMultiplier(
   return table[table.length - 1]!.value
 }
 
+// Advance a wild's multiplier by one step (the next multiple of 5). Capped at 100.
+function getNextMultiplier(currentMult: number): number {
+  if (currentMult >= 100) return 100
+  return Math.min(currentMult + 5, 100)
+}
+
 // Select the multiplier pool used for both reveal-time wild values and the
-// wizard-wild spawns. Super free spins (and base spins in the guaranteedTwoWilds
-// mode) use the richer SUPER table; everything else uses the standard table.
+// wizard-wild spawns. Super free spins, hidden free spins (and base spins in
+// the guaranteedTwoWilds mode) use the richer SUPER table; everything else
+// uses the standard table.
 function pickMultiplierTable(ctx: Context): Array<{ value: number; weight: number }> {
   const isFreeSpin = ctx.state.currentSpinType === SPIN_TYPE.FREE_SPINS
   const isGuaranteedWilds = ctx.state.currentGameMode === "guaranteedTwoWilds"
-  return (ctx.state.userData.isSuperFreeSpins || (!isFreeSpin && isGuaranteedWilds))
+  return (ctx.state.userData.isSuperFreeSpins || ctx.state.userData.isHiddenFreeSpins || (!isFreeSpin && isGuaranteedWilds))
     ? SUPER_MULTIPLIER_TABLE
     : MULTIPLIER_TABLE
 }
@@ -146,7 +162,8 @@ function drawBoard(ctx: Context) {
   if (isFreeSpin) {
     const persistentWilds = ctx.state.userData.persistentWilds
 
-    // Keep redrawing until max 4 scatters land (no 5-scatter hidden bonus in free spins)
+    // Keep redrawing until max 4 scatters land (5-scatter hidden bonus can only
+    // be triggered from the base game, never as a retrigger in free spins).
     while (true) {
       ctx.services.board.resetBoard()
       ctx.services.board.drawBoardWithRandomStops(reels)
@@ -170,10 +187,24 @@ function drawBoard(ctx: Context) {
         }
       })
     }
+
+    // Hidden bonus first-spin guarantee: ensure at least one wild lands so
+    // the dispenser mechanic always fires on spin 1 of the hidden bonus.
+    if (ctx.state.userData.isHiddenFreeSpins && ctx.state.userData.isHiddenFreeSpinsFirstSpin) {
+      const boardReels = ctx.services.board.getBoardReels()
+      const [wildCount] = ctx.services.board.countSymbolsOnBoard(wild)
+      if (wildCount === 0) {
+        const pos = pickRandomBoardPosition(ctx, boardReels)
+        if (pos) {
+          boardReels[pos.reel]![pos.row] = wild
+        }
+      }
+      ctx.state.userData.isHiddenFreeSpinsFirstSpin = false
+    }
   } else if (ctx.state.currentResultSet.forceFreespins) {
     // Force scatter trigger in base game
     const criteria = ctx.state.currentResultSet.criteria
-    const targetScatters = criteria.includes("super") ? 4 : 3
+    const targetScatters = criteria.includes("hidden") ? 5 : criteria.includes("super") ? 4 : 3
     const isGuaranteedWilds = ctx.state.currentGameMode === "guaranteedTwoWilds"
 
     while (true) {
@@ -672,23 +703,23 @@ function handleWins(ctx: Context, wildMultipliers: Map<string, number>, isFreeSp
   // Post-win phase: grow multipliers now (wins already used the reveal-time values),
   // but HOLD the event — it fires after winInfo/setWin/setTotalWin below.
   //
-  // Growth is ADDITIVE: if a wild had 5x and wins one line that rolls a 10, the new
-  // stored value is 15x. Each winning line participation earns one extra roll on top.
+  // Growth steps to the NEXT multiple-of-5 value for each win line participated in
+  // (e.g. 5x → 10x → 15x). Maximum is 100x; once capped it will not grow further.
   // Non-winning new wilds are still registered as sticky (finalMult = currentMult).
   let incrementedWilds: Array<{ reel: number; row: number; addedMult: number; mult: number }> = []
   if (isFreeSpin) {
     const persistentWilds = ctx.state.userData.persistentWilds
-    const table = ctx.state.userData.isSuperFreeSpins ? SUPER_MULTIPLIER_TABLE : MULTIPLIER_TABLE
 
     wildMultipliers.forEach((currentMult, key) => {
       const winCount = wildWinCount.get(key) ?? 0
-      // Start from the wild's current accumulated value and add growth on top
+      // Step the multiplier up by one multiple-of-5 per winning line, capped at 100
       let addedMult = 0
       let finalMult = currentMult
       for (let i = 0; i < winCount; i++) {
-        const roll = pickWeightedMultiplier(table, () => ctx.services.rng.randomFloat(0, 1))
-        addedMult += roll
-        finalMult += roll
+        if (finalMult >= 100) break
+        const prevMult = finalMult
+        finalMult = getNextMultiplier(finalMult)
+        addedMult += finalMult - prevMult
       }
 
       // Always write back — registers new wilds as sticky, updates grown sticky wilds
@@ -803,6 +834,11 @@ function checkFreespins(ctx: Context) {
       })
     })
 
+    // Determine bonus type by scatter count:
+    // 3 = normal free spins, 4 = super free spins, 5 = hidden free spins
+    const isHiddenBonus = scatCount >= 5
+    const isSuperBonus = !isHiddenBonus && scatCount >= 4
+
     ctx.services.data.addBookEvent({
       type: "freeSpinTrigger",
       data: {
@@ -813,7 +849,9 @@ function checkFreespins(ctx: Context) {
 
     // Initialize free spins state
     ctx.state.userData.persistentWilds = new Map()
-    ctx.state.userData.isSuperFreeSpins = scatCount >= 4
+    ctx.state.userData.isSuperFreeSpins = isSuperBonus
+    ctx.state.userData.isHiddenFreeSpins = isHiddenBonus
+    ctx.state.userData.isHiddenFreeSpinsFirstSpin = isHiddenBonus
 
     ctx.state.currentSpinType = SPIN_TYPE.FREE_SPINS
     playFreeSpins(ctx)
@@ -904,5 +942,7 @@ function endFreeSpins(ctx: Context) {
 
   ctx.state.userData.persistentWilds = new Map()
   ctx.state.userData.isSuperFreeSpins = false
+  ctx.state.userData.isHiddenFreeSpins = false
+  ctx.state.userData.isHiddenFreeSpinsFirstSpin = false
   ctx.state.userData.totalFreeSpinsWin = 0
 }

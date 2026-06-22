@@ -40,6 +40,21 @@ const SYM_WEIGHTS = {
     L4: 65,
     L5: 70,
   },
+  // hiddenfreespin: slightly richer wild weight to help guarantee at least one
+  // dispenser lands on the first spin of the hidden bonus.
+  hiddenfreespin: {
+    S: 2,
+    W: 10,
+    H1: 35,
+    H2: 40,
+    H3: 50,
+    H4: 50,
+    L1: 50,
+    L2: 55,
+    L3: 60,
+    L4: 65,
+    L5: 70,
+  },
   // guaranteedTwoWilds: similar to base but with ~2x wild weight for more
   // variety on base game spins. Slightly trimmed low-pays to compensate.
   guaranteedTwoWilds: {
@@ -90,6 +105,20 @@ export const GENERATORS = {
     id: "superfreespin",
     overrideExisting: false,
     symbolWeights: SYM_WEIGHTS.superfreespin,
+    limitSymbolsToReels: {
+
+    },
+    spaceBetweenSameSymbols: {
+      S: 5,
+    },
+    spaceBetweenSymbols: {
+
+    },
+  }),
+  hiddenfreespin: new GeneratedReelSet({
+    id: "hiddenfreespin",
+    overrideExisting: false,
+    symbolWeights: SYM_WEIGHTS.hiddenfreespin,
     limitSymbolsToReels: {
 
     },
