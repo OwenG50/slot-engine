@@ -730,8 +730,8 @@ const FS_TIERS: Record<
   { startMulti: number; ramp: number; multiCap: number }
 > = {
   // Normal free spins (3 scatters): persistent position multipliers double up
-  // to 128x, no feature-wide global multiplier.
-  normal: { startMulti: 1, ramp: 0, multiCap: 128 },
+  // to 256x, no feature-wide global multiplier.
+  normal: { startMulti: 1, ramp: 0, multiCap: 256 },
   // Super free spins (4 scatters): higher multiplier ceiling. Each spin a
   // random cluster symbol is assigned a random multiplier from FS_SYMBOL_MULTI_POOL;
   // all wins for that symbol during the spin (and its tumbles) are boosted.
@@ -739,7 +739,7 @@ const FS_TIERS: Record<
   // Hidden free spins (5 scatters): same as super but multiplier pool starts at
   // 10x minimum (FS_HIDDEN_SYMBOL_MULTI_POOL). Board positions also start with
   // random multipliers active.
-  hidden: { startMulti: 1, ramp: 0, multiCap: 512 },
+  hidden: { startMulti: 1, ramp: 0, multiCap: 256 },
 }
 
 function getTierConfig(tier: FsTier) {
@@ -753,14 +753,14 @@ function getTierForScatters(scatCount: number): FsTier {
 }
 
 // Weighted starting multiplier tables for pre-filled board positions.
-// Both tiers go all the way up to their respective multiCap, but higher values
-// are heavily down-weighted so huge starting boards remain rare.
+// All tiers cap at 256x; higher values are heavily down-weighted so huge
+// starting boards remain rare.
 //   Super  (multiCap 256x): minimum 2x
-//   Hidden (multiCap 512x): minimum 4x
+//   Hidden (multiCap 256x): minimum 8x
 const BOARD_MULTI_INIT_WEIGHTS: Record<FsTier, Record<number, number>> = {
   normal: {},
   super:  { 2: 35, 4: 28, 8: 18, 16: 9, 32: 5, 64: 3, 128: 1.5, 256: 0.5 },
-  hidden: { 8: 38, 16: 26, 32: 16, 64: 9, 128: 5, 256: 3, 512: 1 },
+  hidden: { 8: 38, 16: 26, 32: 16, 64: 9, 128: 5, 256: 4 },
 }
 
 // For super/hidden free spins: pre-populates every board position with a
@@ -776,11 +776,11 @@ function initBoardMultis(ctx: Context, tier: FsTier) {
 
 // Weighted starting multiplier tables for the guaranteed-board-multi buy modes.
 // On the single paid base spin every board position is pre-filled from these.
-//   guaranteedBoardMultis:  2x  → 128x
-//   guaranteedBoardMultisHigh:  8x  → 256x
+//   guaranteedBoardMultis:      2x → 256x
+//   guaranteedBoardMultisHigh:  8x → 256x
 // Lower values are common; higher values are increasingly rare.
 const GUARANTEED_BOARD_MULTI_WEIGHTS: Record<string, Record<number, number>> = {
-  guaranteedBoardMultis: { 2: 35, 4: 28, 8: 18, 16: 9, 32: 5, 64: 3, 128: 2 },
+  guaranteedBoardMultis: { 2: 35, 4: 28, 8: 18, 16: 9, 32: 5, 64: 3, 128: 2, 256: 1 },
   guaranteedBoardMultisHigh: {
     8: 35, 16: 26, 32: 16, 64: 9, 128: 5, 256: 3,
   },
@@ -809,10 +809,10 @@ function applyGuaranteedBoardMultis(ctx: Context) {
   })
 }
 
-// Returns the per-position doubling ceiling for the current spin. The
-// guaranteed-board-multi base spins seed multipliers above the normal tier cap
-// (up to 256x for the high mode), so the cap is raised to match while those
-// modes are in their base spin. Free spins fall back to the tier's multiCap.
+// Returns the per-position doubling ceiling for the current spin.
+// All tiers and modes share a 256x max board multiplier. The explicit Math.max
+// guards remain for safety, but since every tier's multiCap is now 256 they
+// are effectively no-ops.
 function getEffectiveMultiCap(ctx: Context): number {
   const tierCap = getTierConfig(ctx.state.userData.fsTier).multiCap
 
