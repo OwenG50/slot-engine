@@ -7,8 +7,12 @@ const SYM_WEIGHTS = {
   // non-bonus base spin can never reach the 3-scatter trigger. Free-spin
   // triggers come solely from the forceFreespins result sets, which force the
   // exact scatter count at reveal.
+  // W is the Lucky Wild: a rare, non-paying symbol that, once the board has no
+  // more clusters/tumbles, destroys itself plus 5-10 random board positions
+  // (see handleLuckyWilds in onHandleGameFlow). Kept rare via a low weight.
   base: {
     S: 8,
+    W: 2,
     H1: 30,
     H2: 35,
     H3: 40,
@@ -23,6 +27,7 @@ const SYM_WEIGHTS = {
   // at draw time so the board never exceeds 5 scatters.
   bonus: {
     S: 6,
+    W: 3,
     H1: 35,
     H2: 40,
     H3: 45,
@@ -35,6 +40,7 @@ const SYM_WEIGHTS = {
   // consistently produces bigger clusters. Low S weight enables retriggers.
   superBonus: {
     S: 6,
+    W: 3,
     H1: 45,
     H2: 45,
     H3: 48,
@@ -47,6 +53,7 @@ const SYM_WEIGHTS = {
   // top tier. Low S weight enables retriggers.
   hiddenBonus: {
     S: 6,
+    W: 3,
     H1: 55,
     H2: 50,
     H3: 50,
@@ -61,6 +68,7 @@ const SYM_WEIGHTS = {
   // non-empty arrays for all 6 reels).
   maxwin: {
     S: 12,
+    W: 3,
     H1: 200,
     H2: 30,
     H3: 20,

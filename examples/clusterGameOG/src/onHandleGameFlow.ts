@@ -9,14 +9,19 @@ import { GameModesType, SymbolsType, UserStateType } from ".."
 type Context = GameContext<GameModesType, SymbolsType, UserStateType>
 
 /**
- * Instant-pay pool for Wild symbols.
- * A random value is drawn uniformly from this array each time a Wild lands.
- * The value is a multiplier of the bet paid directly before the Wild tumbles out.
+ * Lucky Wild destruction range. Once the board has no remaining clusters and no
+ * more tumbles, every Wild ("W") on the board destroys ITSELF plus a random
+ * number of other board positions in this inclusive range, drawn per Wild.
  */
-const WILD_PAY_POOL = [
-  5, 10, 15, 20, 25, 50, 75, 100, 150, 200, 250,
-  300, 350, 400, 450, 500, 600, 700, 800, 900, 1000,
-] as const
+const LUCKY_WILD_MIN_DESTROY = 5
+const LUCKY_WILD_MAX_DESTROY = 10
+const LUCKY_WILD_DESTROY_COUNTS = (() => {
+  const counts: number[] = []
+  for (let n = LUCKY_WILD_MIN_DESTROY; n <= LUCKY_WILD_MAX_DESTROY; n++) {
+    counts.push(n)
+  }
+  return counts
+})()
 
 /**
  * Weighted multiplier table for the per-spin symbol multiplier in super free spins.
@@ -74,10 +79,6 @@ export function onHandleGameFlow(ctx: Context) {
 
   // Set anticipation states based on scatters on board
   handleAnticipation(ctx)
-
-  // Assign instant-pay values to any Wild symbols on the initial board so the
-  // reveal event can display them before they are paid out.
-  assignWildValues(ctx)
 
   // Create event to tell the client what to render
   addRevealEvent(ctx)
@@ -281,114 +282,31 @@ function handleTumbles(ctx: Context): number {
 
   let spinTotal = 0
 
-  // Keep tumbling until no more wins
+  // Keep tumbling until no more wins AND no Wilds remain on the board.
   while (true) {
-    // ── Phase 1: process any Wild symbols present on the board ──────────────
-    // Wilds are detected BEFORE cluster evaluation so they pay and tumble out
-    // first. Any Wilds that drop in as replacements will be caught on the next
-    // iteration of this loop.
-    const boardReels = ctx.services.board.getBoardReels()
-    const wildsOnBoard: Array<{ reel: number; row: number }> = []
-
-    boardReels.forEach((reel, reelIdx) => {
-      reel.forEach((symbol, rowIdx) => {
-        if (symbol.id === "W") {
-          wildsOnBoard.push({ reel: reelIdx, row: rowIdx })
-        }
-      })
-    })
-
-    if (wildsOnBoard.length > 0) {
-      // Assign a pool value to every Wild that doesn't yet have one (i.e. it
-      // tumbled in during a previous iteration and wasn't present at reveal).
-      assignWildValues(ctx)
-
-      // Collect the value entries for the Wilds currently on the board.
-      const currentWildWins = ctx.state.userData.wildValues.filter((v) =>
-        wildsOnBoard.some((w) => w.reel === v.reel && w.row === v.row),
-      )
-
-      // Apply board-position multiplier and global FS multiplier to each Wild,
-      // mirroring the same mechanic used for cluster wins.
-      const wildWinDetails = currentWildWins.map((w) => {
-        const rawMult = ctx.state.userData.boardMultis[w.reel]?.[w.row] ?? 0
-        const boardMult = rawMult >= 2 ? rawMult : 1
-        const win = roundToDecimal(w.value * boardMult * ctx.state.userData.fsGlobalMulti)
-        return { reel: w.reel, row: w.row, baseValue: w.value, boardMult, globalMult: ctx.state.userData.fsGlobalMulti, win }
-      })
-
-      const wildTotal = roundToDecimal(
-        wildWinDetails.reduce((sum, w) => roundToDecimal(sum + w.win), 0),
-      )
-
-      spinTotal = roundToDecimal(spinTotal + wildTotal)
-
-      ctx.services.wallet.addTumbleWin(wildTotal)
-
-      ctx.services.data.addBookEvent({
-        type: "wildPayout",
-        data: {
-          wilds: wildWinDetails,
-          total: wildTotal,
-        },
-      })
-
-      // Clear the paid Wild entries from userData.
-      ctx.state.userData.wildValues = ctx.state.userData.wildValues.filter(
-        (v) => !currentWildWins.some((w) => w.reel === v.reel && w.row === v.row),
-      )
-
-      // Tumble Wilds out so new symbols drop in.
-      const symbolsToDelete = currentWildWins.map((w) => ({
-        reelIdx: w.reel,
-        rowIdx: w.row,
-      }))
-      // Count scatters already locked on the board BEFORE new symbols drop in;
-      // anticipation reflects only those, never a scatter landing this tumble.
-      const [scattersBeforeTumble] =
-        ctx.services.board.countSymbolsOnBoard(scatter)
-      const { newBoardSymbols } = ctx.services.board.tumbleBoard(symbolsToDelete)
-
-      // Keep non-bonus base spins at or below the near-miss cap (2 scatters).
-      capBaseScatters(ctx, newBoardSymbols)
-
-      const wildTumbleAnticipation = refreshTumbleAnticipation(
-        ctx,
-        scattersBeforeTumble,
-      )
-      ctx.services.data.addBookEvent({
-        type: "tumbleSymbols",
-        data: {
-          newBoardSymbols: Object.fromEntries(
-            Object.entries(newBoardSymbols).map(([reelIdx, symbols]) => [
-              reelIdx,
-              symbols.map((s) => {
-                const symbolData: Record<string, any> = { name: s.id }
-                if (s.properties.get("isScatter")) symbolData["Scatter"] = true
-                return symbolData
-              }),
-            ]),
-          ),
-          anticipation: wildTumbleAnticipation,
-        },
-      })
-
-      // Reached max win — stop early.
-      if (wildTotal >= ctx.config.maxWinX) {
-        ctx.state.triggeredMaxWin = true
-        break
-      }
-
-      // Restart the loop: check for more Wilds or clusters on the updated board.
-      continue
-    }
-
-    // ── Phase 2: evaluate cluster wins on the Wild-free board ───────────────
+    // ── Evaluate cluster wins ───────────────────────────────────────────────
+    // Wilds ("W") are inert here: ClusterWinType is created without a
+    // `wildSymbol`, and W has no `pays`, so it never forms or joins a cluster
+    // and is never returned in winCombinations. Wilds simply sit on the board
+    // while clusters resolve around them.
     const { payout: rawPayout, winCombinations } = cluster
       .evaluateWins(ctx.services.board.getBoardReels())
       .getWins()
 
-    if (rawPayout === 0) break
+    if (rawPayout === 0) {
+      // No clusters remain. Now (and only now) resolve every Wild currently on
+      // the board in a single LuckyWilds event. This removes the Wilds plus
+      // 5-10 random positions per Wild, bumps those positions' multipliers as
+      // if they had won, and tumbles fresh symbols in. If the resulting board
+      // produces new clusters (or new Wilds tumble in) we loop again; Wilds are
+      // never handled until the board has no winning connections left.
+      const wildsProcessed = handleLuckyWilds(ctx)
+      if (wildsProcessed) {
+        if (ctx.state.triggeredMaxWin) break
+        continue
+      }
+      break
+    }
 
     // For each cluster win, compute:
     //   boardMult  = sum of all active board-position multipliers (>=2) on the
@@ -511,6 +429,162 @@ function handleTumbles(ctx: Context): number {
   }
 
   return spinTotal
+}
+
+// Resolves every Wild ("W") currently on the board in a single LuckyWilds event.
+// Called only once the board has no remaining clusters. For each Wild we destroy
+// the Wild itself plus 5-10 randomly chosen other positions (never scatters, so
+// free-spin triggers and the scatter cap are unaffected, and never another Wild
+// — every Wild is removed anyway). Each destroyed position has its board
+// multiplier bumped as if it had been part of a win, then fresh symbols tumble
+// in. Returns true if at least one Wild was processed (board changed), false if
+// no Wilds were present.
+function handleLuckyWilds(ctx: Context): boolean {
+  const wild = ctx.config.symbols.get("W")!
+  const [wildCount] = ctx.services.board.countSymbolsOnBoard(wild)
+  if (wildCount === 0) return false
+
+  const scatter = ctx.config.symbols.get("S")!
+  const boardReels = ctx.services.board.getBoardReels()
+  const reelsCount = boardReels.length
+
+  const wildPositions: Array<{ reel: number; row: number }> = []
+  boardReels.forEach((reel, reelIdx) => {
+    reel.forEach((symbol, rowIdx) => {
+      if (symbol.id === "W") wildPositions.push({ reel: reelIdx, row: rowIdx })
+    })
+  })
+
+  const posKey = (p: { reel: number; row: number }) => `${p.reel}:${p.row}`
+
+  // Returns the up/down/left/right neighbours that exist on the board.
+  const getAdjacent = (reel: number, row: number): Array<{ reel: number; row: number }> => {
+    const adj: Array<{ reel: number; row: number }> = []
+    if (reel > 0) adj.push({ reel: reel - 1, row })
+    if (reel < reelsCount - 1) adj.push({ reel: reel + 1, row })
+    if (row > 0) adj.push({ reel, row: row - 1 })
+    if (row < boardReels[reel]!.length - 1) adj.push({ reel, row: row + 1 })
+    return adj
+  }
+
+  // Global claimed set starts with every Wild so two Wilds never expand into
+  // each other's cells. Scatters are also ineligible and are skipped in the
+  // frontier seed step below.
+  const claimed = new Set<string>()
+  for (const w of wildPositions) claimed.add(posKey(w))
+
+  // Per-Wild BFS expansion. Each Wild grows a connected group starting from its
+  // own cell: every added cell must be adjacent to at least one already-claimed
+  // cell (the group is always contiguous). The Wild's own position is included
+  // in clearedPositions so the event unambiguously lists every cell this Wild
+  // is responsible for removing.
+  const wildDetails = wildPositions.map((w) => {
+    const desired = ctx.services.rng.randomItem(LUCKY_WILD_DESTROY_COUNTS)
+
+    // frontier: eligible adjacent cells that could extend the group.
+    // Use a parallel Set for O(1) deduplication and an Array for random access.
+    const frontierSet = new Set<string>()
+    const frontierArr: Array<{ reel: number; row: number }> = []
+
+    const seedFrontier = (reel: number, row: number) => {
+      for (const adj of getAdjacent(reel, row)) {
+        const key = posKey(adj)
+        const sym = boardReels[adj.reel]![adj.row]!
+        if (!claimed.has(key) && !frontierSet.has(key) && !sym.properties.get("isScatter")) {
+          frontierSet.add(key)
+          frontierArr.push(adj)
+        }
+      }
+    }
+
+    seedFrontier(w.reel, w.row)
+
+    const destroyedPositions: Array<{ reel: number; row: number }> = []
+    while (destroyedPositions.length < desired && frontierArr.length > 0) {
+      // Pick a random frontier cell (swap-with-last for O(1) removal).
+      const idx = Math.min(
+        Math.floor(ctx.services.rng.randomFloat(0, frontierArr.length)),
+        frontierArr.length - 1,
+      )
+      const cell = frontierArr[idx]!
+      frontierArr[idx] = frontierArr[frontierArr.length - 1]!
+      frontierArr.pop()
+      frontierSet.delete(posKey(cell))
+
+      claimed.add(posKey(cell))
+      destroyedPositions.push(cell)
+      seedFrontier(cell.reel, cell.row)
+    }
+
+    // clearedPositions = Wild itself + all cells it destroyed. Listing the Wild
+    // first makes it unambiguous which cell is the source.
+    return {
+      wildPosition: w,
+      clearedPositions: [w, ...destroyedPositions],
+    }
+  })
+
+  // Flat union of every cleared cell for the board operations below.
+  const allRemoved: Array<{ reel: number; row: number }> = []
+  for (const wd of wildDetails) {
+    for (const p of wd.clearedPositions) allRemoved.push(p)
+  }
+
+  // Emit the LuckyWilds event before mutating the board so clients can animate.
+  // Each entry in `wilds` lists the Wild's own position first in clearedPositions,
+  // followed by the connected cells it destroyed.
+  ctx.services.data.addBookEvent({
+    type: "luckyWilds",
+    data: {
+      wilds: wildDetails,
+    },
+  })
+
+  // Bump the board multiplier at every destroyed position exactly as a cluster
+  // win would (0 -> 2, then doubling up to the active cap), then emit the update
+  // so the higher multipliers apply to whatever tumbles in.
+  const multiCap = getEffectiveMultiCap(ctx)
+  for (const cell of allRemoved) {
+    const current = ctx.state.userData.boardMultis[cell.reel]![cell.row]!
+    ctx.state.userData.boardMultis[cell.reel]![cell.row] =
+      current === 0 ? 2 : Math.min(current * 2, multiCap)
+  }
+
+  ctx.services.data.addBookEvent({
+    type: "updateMultipliers",
+    data: {
+      multipliers: ctx.state.userData.boardMultis.map((reel) => [...reel]),
+    },
+  })
+
+  // Tumble out every destroyed position so fresh symbols drop in.
+  const [scattersBeforeTumble] = ctx.services.board.countSymbolsOnBoard(scatter)
+  const { newBoardSymbols } = ctx.services.board.tumbleBoard(
+    allRemoved.map((p) => ({ reelIdx: p.reel, rowIdx: p.row })),
+  )
+
+  // Keep non-bonus base spins at or below the near-miss cap (2 scatters).
+  capBaseScatters(ctx, newBoardSymbols)
+
+  const tumbleAnticipation = refreshTumbleAnticipation(ctx, scattersBeforeTumble)
+  ctx.services.data.addBookEvent({
+    type: "tumbleSymbols",
+    data: {
+      newBoardSymbols: Object.fromEntries(
+        Object.entries(newBoardSymbols).map(([reelIdx, symbols]) => [
+          reelIdx,
+          symbols.map((s) => {
+            const symbolData: Record<string, any> = { name: s.id }
+            if (s.properties.get("isScatter")) symbolData["Scatter"] = true
+            return symbolData
+          }),
+        ]),
+      ),
+      anticipation: tumbleAnticipation,
+    },
+  })
+
+  return true
 }
 
 function checkFreespins(ctx: Context) {
@@ -672,9 +746,6 @@ function playFreeSpins(ctx: Context) {
 
     drawBoard(ctx)
     handleAnticipation(ctx)
-
-    // Assign instant-pay values to any Wilds on the newly drawn board.
-    assignWildValues(ctx)
 
     addRevealEvent(ctx)
 
@@ -877,9 +948,6 @@ function makeInitialBoardMultis(ctx: Context) {
   // Reset the free-spin tier state for the new base round.
   ctx.state.userData.fsTier = "normal"
   ctx.state.userData.fsGlobalMulti = 1
-  // Wild position values are paid and cleared during tumbling, but reset here
-  // as a safety net for the start of each simulation run.
-  ctx.state.userData.wildValues = []
   // Per-spin symbol multiplier — reset at the start of each base round.
   ctx.state.userData.globalSymbolMulti = null
 }
@@ -911,27 +979,6 @@ function drawGlobalSymbolMulti(ctx: Context) {
   })
 }
 
-// Assigns a random instant-pay value (drawn from WILD_PAY_POOL) to every Wild
-// symbol currently on the board that does not yet have a value recorded in
-// userData.wildValues.  Call this BEFORE addRevealEvent so the reveal payload
-// can include the Wild's value, and again at the start of each tumble iteration
-// so that newly dropped-in Wilds are covered.
-function assignWildValues(ctx: Context) {
-  const boardReels = ctx.services.board.getBoardReels()
-  boardReels.forEach((reel, reelIdx) => {
-    reel.forEach((symbol, rowIdx) => {
-      if (symbol.id !== "W") return
-      const alreadyAssigned = ctx.state.userData.wildValues.some(
-        (v) => v.reel === reelIdx && v.row === rowIdx,
-      )
-      if (!alreadyAssigned) {
-        const value = ctx.services.rng.randomItem([...WILD_PAY_POOL])
-        ctx.state.userData.wildValues.push({ reel: reelIdx, row: rowIdx, value })
-      }
-    })
-  })
-}
-
 // Builds the board event payload in cabin_fever format: each symbol is an object
 // `{ name, Scatter?, multiplier? }`, with `paddingPositions` (always zeros for this game)
 // and `anticipation` as a 0/1 array matching cabin_fever's reveal convention.
@@ -951,13 +998,6 @@ function addRevealEvent(ctx: Context) {
       const mult = ctx.state.userData.boardMultis?.[reelIndex]?.[rowIndex]
       if (mult !== undefined && mult > 0) {
         symbolData["multiplier"] = mult
-      }
-      // Include the instant-pay value for Wild symbols
-      const wildEntry = ctx.state.userData.wildValues.find(
-        (w) => w.reel === reelIndex && w.row === rowIndex,
-      )
-      if (wildEntry) {
-        symbolData["wildValue"] = wildEntry.value
       }
       return symbolData
     })

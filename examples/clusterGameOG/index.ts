@@ -25,9 +25,6 @@ export const userState = defineUserState({
   // Feature-wide global multiplier applied to every win. Stays 1x in the base
   // game and normal free spins; ramps up during super/hidden free spins.
   fsGlobalMulti: 1,
-  // Per-position Wild instant-pay values assigned at reveal time.
-  // Each entry maps a board position to the random pool value drawn for that Wild.
-  wildValues: [] as Array<{ reel: number; row: number; value: number }>,
   // Per-spin symbol multiplier for super/hidden free spins.
   // A random non-scatter symbol and multiplier are drawn at the start of each
   // free spin; all cluster wins for that symbol are boosted by the value.
@@ -63,8 +60,11 @@ export const symbols = defineSymbols({
       isScatter: true,
     },
   }),
-  // Wild pays an instant random amount from the WILD_PAY_POOL (defined in
-  // onHandleGameFlow) and tumbles out immediately — it never forms clusters.
+  // W is the "Lucky Wild": it has no value of its own and never forms or joins
+  // clusters. It stays on the board through all cluster wins and tumbles; only
+  // once no more clusters can form does `handleLuckyWilds` (in onHandleGameFlow)
+  // remove every Wild plus 5-10 random board positions per Wild, bump those
+  // positions' multipliers, and tumble in fresh symbols.
   W: new GameSymbol({
     id: "W",
     properties: {
@@ -915,11 +915,11 @@ game.configureOptimization({
         // knows the exact probability target for this fence, so FS fences keep
         // their absolute 1/150, 1/450, 1/800 rates (identical to base game).
         //   sum check: 1/10 + 1/1.124 + 1/150 + 1/450 + 1/800 ≈ 1.0 ✓
-        // Target avg_win = rtp * hitRate * cost = 0.948997 * 1.124 * 100 = ~107
+        // Target avg_win = rtp * hitRate * cost = 0.948797 * 1.124 * 100 = ~107
         // bets, well below the positive-win natural mean (~403), so the
         // optimizer fits a distribution without error.
         basegame: new OptimizationConditions({
-          rtp: 0.948997,
+          rtp: 0.948797,
           hitRate: 1.124,
           priority: 1,
         }),
@@ -1006,11 +1006,11 @@ game.configureOptimization({
         // knows the exact probability target for this fence, so FS fences keep
         // their absolute 1/150, 1/450, 1/800 rates (identical to base game).
         //   sum check: 1/10 + 1/1.124 + 1/150 + 1/450 + 1/800 ≈ 1.0 ✓
-        // Target avg_win = rtp * hitRate * cost = 0.9512765 * 1.124 * 500 = ~534
+        // Target avg_win = rtp * hitRate * cost = 0.9510765 * 1.124 * 500 = ~534
         // bets, well below the positive-win natural mean (~1920), so the
         // optimizer fits a distribution without error.
         basegame: new OptimizationConditions({
-          rtp: 0.9512765,
+          rtp: 0.9510765,
           hitRate: 1.124,
           priority: 1,
         }),
@@ -1172,7 +1172,7 @@ game.configureOptimization({
 })
 
 game.runTasks({
-  doSimulation: false,
+  doSimulation: true,
   doOptimization: true,
   optimizationOpts: {
     gameModes: [ "base", "bonusHunt", "bonusFeature", "superBonusFeature", "guaranteedBoardMultis", "guaranteedBoardMultisHigh", "MysteryBonusFeature" ],
