@@ -222,32 +222,52 @@ function refreshTumbleAnticipation(
   return ctx.services.board.getAnticipation().map((v) => (v ? 1 : 0))
 }
 
-// Hard-caps scatters on a NON-bonus base spin so it can never reach the trigger
-// threshold. Scatters are allowed to appear (0-2) at reveal and to tumble in
-// for near-miss anticipation, but the moment a tumble would push the board to 3
-// scatters, the excess freshly-dropped scatter(s) are converted into a random
-// regular cluster symbol — both on the board and in the `newBoardSymbols`
-// payload so the emitted tumbleSymbols event matches the capped board. This
-// keeps free-spin triggers exclusively in the forceFreespins result sets (the
-// free-spins simulation pool): a base spin can NEVER trigger, so the "3
-// scatters on screen but no free spins" state is impossible, with zero
-// acceptance-retry overhead. No-op on forced-freespins spins (which need their
-// forced scatter count) and during free spins (where scatters drive retriggers).
+// Caps the number of scatter symbols on the board after each tumble drop by
+// converting excess freshly-landed scatters into random regular cluster symbols
+// (both on the board and in `newBoardSymbols` so emitted events stay accurate).
+//
+// The maximum allowed scatter count is determined per spin context:
+//   • FREE_SPINS                              → 5 (global hard cap)
+//   • BASE_GAME, non-bonus result set         → anticipationTriggers (2): near-miss
+//                                               cap — a non-bonus spin can never
+//                                               reach the 3-scatter trigger.
+//   • BASE_GAME, forceFreespins "freespins"   → 3 (normal bonus buy tier)
+//   • BASE_GAME, forceFreespins "superfreespins" → 4 (super bonus buy tier)
+//   • BASE_GAME, forceFreespins "hiddenfreespins"/"maxwin" → 5 (global max)
+//
+// This prevents tumbling scatters from upgrading the player to a higher free-spin
+// tier than they paid for (e.g. a super-buy landing 5 scatters via tumbles and
+// silently triggering the hidden tier).
 function capBaseScatters(
   ctx: Context,
   newBoardSymbols: Record<string, GameSymbol[]>,
 ) {
-  if (
-    ctx.state.currentSpinType !== SPIN_TYPE.BASE_GAME ||
-    ctx.state.currentResultSet.forceFreespins
-  ) {
-    return
-  }
-
   const scatter = ctx.config.symbols.get("S")!
   const [totalScatters] = ctx.services.board.countSymbolsOnBoard(scatter)
 
-  const maxScatters = ctx.config.anticipationTriggers[SPIN_TYPE.BASE_GAME]
+  let maxScatters: number
+  if (ctx.state.currentSpinType === SPIN_TYPE.FREE_SPINS) {
+    // Global hard cap — free-spin retriggers must never exceed 5 scatters.
+    maxScatters = 5
+  } else if (!ctx.state.currentResultSet.forceFreespins) {
+    // Non-bonus base spin: keep scatters below the trigger threshold so the
+    // "3 scatters but no free spins" state can never occur.
+    maxScatters = ctx.config.anticipationTriggers[SPIN_TYPE.BASE_GAME]
+  } else {
+    // Forced-freespins base spin (bonus buy or standard forced trigger): cap
+    // tumble-in scatters to the tier the result set targets so tumbles can
+    // never silently upgrade the player to a higher-value free-spin tier.
+    const criteria = ctx.state.currentResultSet.criteria
+    if (criteria === "freespins") {
+      maxScatters = 3  // normal bonus buy
+    } else if (criteria === "superfreespins") {
+      maxScatters = 4  // super bonus buy
+    } else {
+      // hiddenfreespins (5) and maxwin (5): global max, no extra restriction.
+      maxScatters = 5
+    }
+  }
+
   let excess = totalScatters - maxScatters
   if (excess <= 0) return
 
@@ -387,7 +407,7 @@ function handleTumbles(ctx: Context): number {
     const { newBoardSymbols } =
       ctx.services.board.tumbleBoard(winSymbols)
 
-    // Keep non-bonus base spins at or below the near-miss cap (2 scatters).
+    // Cap tumble-in scatters to the limit for the current spin context.
     capBaseScatters(ctx, newBoardSymbols)
 
     const clusterTumbleAnticipation = refreshTumbleAnticipation(
@@ -563,7 +583,7 @@ function handleLuckyWilds(ctx: Context): boolean {
     allRemoved.map((p) => ({ reelIdx: p.reel, rowIdx: p.row })),
   )
 
-  // Keep non-bonus base spins at or below the near-miss cap (2 scatters).
+  // Cap tumble-in scatters to the limit for the current spin context.
   capBaseScatters(ctx, newBoardSymbols)
 
   const tumbleAnticipation = refreshTumbleAnticipation(ctx, scattersBeforeTumble)
