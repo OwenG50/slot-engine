@@ -11,7 +11,7 @@ const SYM_WEIGHTS = {
   // more clusters/tumbles, destroys itself plus 5-10 random board positions
   // (see handleLuckyWilds in onHandleGameFlow). Kept rare via a low weight.
   base: {
-    S: 8,
+    S: 5,
     W: 2,
     H1: 30,
     H2: 35,
@@ -26,7 +26,7 @@ const SYM_WEIGHTS = {
   // possible (3 -> +3, 4 -> +5, 5 -> +8 free spins). 6 scatters are rejected
   // at draw time so the board never exceeds 5 scatters.
   bonus: {
-    S: 6,
+    S: 5,
     W: 3,
     H1: 35,
     H2: 40,
@@ -39,7 +39,7 @@ const SYM_WEIGHTS = {
   // Super free-spin reels (4 scatters): premium-leaning so the super tier
   // consistently produces bigger clusters. Low S weight enables retriggers.
   superBonus: {
-    S: 6,
+    S: 5,
     W: 3,
     H1: 45,
     H2: 45,
@@ -52,7 +52,7 @@ const SYM_WEIGHTS = {
   // Hidden free-spin reels (5 scatters): the most premium-heavy profile for the
   // top tier. Low S weight enables retriggers.
   hiddenBonus: {
-    S: 6,
+    S: 5,
     W: 3,
     H1: 55,
     H2: 50,
