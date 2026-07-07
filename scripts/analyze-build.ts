@@ -223,7 +223,10 @@ async function analyseMode(
 
     // ── FS tier stats ─────────────────────────────────────────────────────
     const triggerEvt = book.events.find((e) => e.type === "freeSpinTrigger")
-    if (triggerEvt) {
+    // Keep tier-average reporting aligned with the FS criteria fences by
+    // excluding forced maxwin books (they can contain a hidden trigger event
+    // but do not represent the hiddenfreespins fence distribution).
+    if (triggerEvt && criteria !== "maxwin") {
       const tier = (triggerEvt.data?.tier as string | undefined) ?? "normal"
       if (!analysis.tiers[tier]) {
         analysis.tiers[tier] = { weightSum: 0, weightedFsWin: 0, weightedFsSpins: 0, count: 0 }
@@ -392,13 +395,14 @@ function printMode(a: ModeAnalysis) {
   if (Object.keys(a.tiers).length > 0) {
     console.log("")
     console.log("  " + bold(yellow("── Free Spin Tier Breakdown " + "─".repeat(43))))
+    console.log("  " + dim("Avg FS Win values are shown in base-bet multipliers (not divided by mode cost)."))
     console.log("")
 
     const tierHdr = [
       lpad(bold("Tier"),      12),
       rpad(bold("Hit Rate"),  16),
       rpad(bold("% of Bonus"),14),
-      rpad(bold("Avg FS Win"),12),
+      rpad(bold("Avg FS Win (base)"),19),
       rpad(bold("Avg Spins"), 11),
     ].join("  ")
     console.log("  " + tierHdr)
@@ -421,7 +425,7 @@ function printMode(a: ModeAnalysis) {
         lpad(tierLabel,               12),
         rpad(hitRate(prob),           16),
         rpad(bonusPct.toFixed(2)+"%", 14),
-        rpad(avgFsWin.toFixed(2)+"x", 12),
+        rpad(avgFsWin.toFixed(2)+"x", 19),
         rpad(avgSpins.toFixed(1)+" spins", 11),
       ].join("  ")
       console.log("  " + row)
@@ -518,7 +522,7 @@ function discoverModes(buildDir: string): ModeDescriptor[] {
 function parseArgs(): { buildDir: string; modes?: string[] } {
   const args = process.argv.slice(2)
   let buildDir = "./__build__"
-  let modeFilter: string[] | undefined
+  let modeFilter: string[] | undefined = ["guaranteedBoardMultis"]
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--build-dir" && args[i + 1]) {

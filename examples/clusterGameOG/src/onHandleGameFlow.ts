@@ -859,7 +859,15 @@ const BOARD_MULTI_INIT_WEIGHTS: Record<FsTier, Record<number, number>> = {
 // tumble. Low values are common; high values are rare but possible up to the
 // tier's multiCap.
 function initBoardMultis(ctx: Context, tier: FsTier) {
-  const weights = BOARD_MULTI_INIT_WEIGHTS[tier]
+  const modeName = ctx.services.game.getCurrentGameMode().name
+  const useSuperInitForGuaranteedHiddenFs =
+    modeName === "guaranteedBoardMultis" &&
+    ctx.state.currentSpinType === SPIN_TYPE.FREE_SPINS &&
+    tier === "hidden"
+
+  const weights = useSuperInitForGuaranteedHiddenFs
+    ? BOARD_MULTI_INIT_WEIGHTS.super
+    : BOARD_MULTI_INIT_WEIGHTS[tier]
   ctx.state.userData.boardMultis = ctx.state.userData.boardMultis.map((reel) =>
     reel.map(() => Number(ctx.services.rng.weightedRandom(weights))),
   )
@@ -986,7 +994,15 @@ function drawGlobalSymbolMulti(ctx: Context) {
   const isHighGuaranteedBaseSpin =
     modeName === "guaranteedBoardMultisHigh" &&
     ctx.state.currentSpinType === SPIN_TYPE.BASE_GAME
-  const useHighMulti = tier === "hidden" || isHighGuaranteedBaseSpin
+
+  // guaranteedBoardMultis hidden FS is intentionally dampened so its hidden-tier
+  // average aligns with base/bonusHunt rather than exploding from stacked highs.
+  const isGuaranteedHiddenFsDampened =
+    modeName === "guaranteedBoardMultis" &&
+    ctx.state.currentSpinType === SPIN_TYPE.FREE_SPINS &&
+    tier === "hidden"
+
+  const useHighMulti = (tier === "hidden" && !isGuaranteedHiddenFsDampened) || isHighGuaranteedBaseSpin
   const weights = useHighMulti
     ? FS_HIDDEN_SYMBOL_MULTI_WEIGHTS
     : FS_SYMBOL_MULTI_WEIGHTS
