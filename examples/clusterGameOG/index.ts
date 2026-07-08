@@ -600,10 +600,10 @@ export const game = createSlotGame<GameType>({
 
 game.configureSimulation({
   simRunsAmount: {
-    // base: 300000,
-    // bonusHunt: 300000,
+    base: 300000,
+    bonusHunt: 300000,
     guaranteedBoardMultis: 300000,
-    // guaranteedBoardMultisHigh: 100000,
+    guaranteedBoardMultisHigh: 300000,
     // bonusFeature: 100000,
     // superBonusFeature: 100000,
     // MysteryBonusFeature: 100000,
@@ -1047,8 +1047,12 @@ game.configureOptimization({
     guaranteedBoardMultisHigh: {
       conditions: {
         maxwin: new OptimizationConditions({
-          // 1-in-6,000: rtp = avgWin / hr / cost = 25000 / 6000 / 500
-          rtp: 0.00833,
+          // Calibrated slightly above the closed-form 1-in-10k target so the
+          // realized maxwin hit rate lands near 1 in 10k after optimizer
+          // interactions with adjacent high-win bands.
+          // This makes maxwin more frequent than guaranteedBoardMultis on a
+          // cost-relative basis.
+          rtp: 0.00575,
           avgWin: 25000,
           searchConditions: 25000,
           priority: 8,
@@ -1076,14 +1080,16 @@ game.configureOptimization({
         // Natural per-criteria AVERAGE win (bets), measured from the books:
         //     basegame positive-win mean ~1920, freespins ~502, super ~396, hidden ~1534
         //
-        // FS fence targets stay unchanged; each lands below its criteria mean:
-        //     freespins: 0.004667 * 150 * 500 = 350  (mean ~502)
-        //     super:     0.001244 * 450 * 500 = 280  (mean ~396)
-        //     hidden:    0.00275  * 800 * 500 = 1100 (mean ~1534)
+        // FS fence targets are lowered aggressively to move this mode much
+        // closer to the base/bonusHunt/guaranteedBoardMultis FS averages,
+        // while preserving the same trigger odds:
+        //     freespins: 0.00048 * 150 * 500 = 36
+        //     super:     0.00044 * 450 * 500 = 99
+        //     hidden:    0.00034 * 800 * 500 = 136
         // The bonus tiers take only a sliver of RTP; the base game absorbs the
         // rest. Bonus HIT RATES stay equal to base (150 / 450 / 800) as required.
         freespins: new OptimizationConditions({
-          rtp: 0.004667,
+          rtp: 0.00048,
           hitRate: 150,
           searchConditions: {
             criteria: "freespins",
@@ -1091,7 +1097,7 @@ game.configureOptimization({
           priority: 2,
         }),
         superfreespins: new OptimizationConditions({
-          rtp: 0.001244,
+          rtp: 0.00044,
           hitRate: 450,
           searchConditions: {
             criteria: "superfreespins",
@@ -1099,7 +1105,7 @@ game.configureOptimization({
           priority: 3,
         }),
         hiddenfreespins: new OptimizationConditions({
-          rtp: 0.00275,
+          rtp: 0.00034,
           hitRate: 800,
           searchConditions: {
             criteria: "hiddenfreespins",
@@ -1112,35 +1118,42 @@ game.configureOptimization({
         // knows the exact probability target for this fence, so FS fences keep
         // their absolute 1/150, 1/450, 1/800 rates (identical to base game).
         //   sum check: 1/10 + 1/1.124 + 1/150 + 1/450 + 1/800 ≈ 1.0 ✓
-        // Target avg_win = rtp * hitRate * cost = 0.9428 * 1.124 * 500 = ~530
+        // Target avg_win = rtp * hitRate * cost = 0.952926 * 1.124 * 500 = ~536
         // bets, well below the positive-win natural mean (~1920), so the
         // optimizer fits a distribution without error.
         basegame: new OptimizationConditions({
-          rtp: 0.9428,
+          rtp: 0.952926,
           hitRate: 1.124,
           priority: 1,
         }),
       },
       scaling: new OptimizationScaling([
-        // Suppress the 5K+ win range to keep P(win ≥ 5000x) ≤ 0.010.
-        // The natural distribution from 8x–256x board multipliers produces too
-        // many extreme wins; these scale factors redirect that mass into the
-        // 500x–2000x mid-range where the bulk of value should sit.
-        { criteria: "basegame", scaleFactor: 0.35, winRange: [5000,  10000], probability: 1 },
-        { criteria: "basegame", scaleFactor: 0.25, winRange: [10000, 25000], probability: 1 },
+        // Spread the basegame shape for the 500x-cost mode:
+        // trim the 100x-500x concentration, lift 500x-5000x bands, and keep
+        // very high tails controlled so maxwin remains a rare anchor.
+        { criteria: "basegame", scaleFactor: 0.24, winRange: [50,    100],   probability: 1 },
+        { criteria: "basegame", scaleFactor: 0.1,  winRange: [100,   250],   probability: 1 },
+        { criteria: "basegame", scaleFactor: 0.1,  winRange: [250,   500],   probability: 1 },
+        { criteria: "basegame", scaleFactor: 7.2,  winRange: [500,   1000],  probability: 1 },
+        { criteria: "basegame", scaleFactor: 4.4,  winRange: [1000,  2000],  probability: 1 },
+        { criteria: "basegame", scaleFactor: 3.2,  winRange: [2000,  5000],  probability: 1 },
+        { criteria: "basegame", scaleFactor: 1.8,  winRange: [5000,  10000], probability: 1 },
+        { criteria: "basegame", scaleFactor: 1.35, winRange: [10000, 25000], probability: 1 },
+        { criteria: "basegame", scaleFactor: 2.6,  winRange: [20000, 25000], probability: 1 },
         { criteria: "basegame", scaleFactor: 1,    winRange: [25000, 25000], probability: 1 },
-        // Boost mid-range to absorb the redistributed probability mass
-        { criteria: "basegame", scaleFactor: 1.5,  winRange: [500,   2000],  probability: 1 },
         // Cohesive FS feel: suppress sub-cost dribbles and push mass into the
         // tail so a triggered bonus reads as meaningful. Mild factors keep the
         // fences inside their feasible target window so the optimizer still
         // converges (these tiers carry little RTP, so headroom is thin).
-        { criteria: "freespins",       scaleFactor: 0.4, winRange: [0.01, 20],   probability: 1 },
-        { criteria: "freespins",       scaleFactor: 1.4, winRange: [200,  2000], probability: 1 },
-        { criteria: "superfreespins",  scaleFactor: 0.4, winRange: [0.01, 20],   probability: 1 },
-        { criteria: "superfreespins",  scaleFactor: 1.4, winRange: [150,  2000], probability: 1 },
-        { criteria: "hiddenfreespins", scaleFactor: 0.4, winRange: [0.01, 100],  probability: 1 },
-        { criteria: "hiddenfreespins", scaleFactor: 1.4, winRange: [800,  8000], probability: 1 },
+        { criteria: "freespins",       scaleFactor: 2.2,  winRange: [0.01, 250],   probability: 1 },
+        { criteria: "freespins",       scaleFactor: 0.12, winRange: [250,  2000],  probability: 1 },
+        { criteria: "freespins",       scaleFactor: 0.06, winRange: [2000, 25000], probability: 1 },
+        { criteria: "superfreespins",  scaleFactor: 2.0,  winRange: [0.01, 300],   probability: 1 },
+        { criteria: "superfreespins",  scaleFactor: 0.14, winRange: [300,  2000],  probability: 1 },
+        { criteria: "superfreespins",  scaleFactor: 0.08, winRange: [2000, 25000], probability: 1 },
+        { criteria: "hiddenfreespins", scaleFactor: 2.2,  winRange: [0.01, 500],   probability: 1 },
+        { criteria: "hiddenfreespins", scaleFactor: 0.1,  winRange: [500,  8000],  probability: 1 },
+        { criteria: "hiddenfreespins", scaleFactor: 0.04, winRange: [8000, 25000], probability: 1 },
       ]),
       parameters: new OptimizationParameters(),
     },
@@ -1278,15 +1291,15 @@ game.configureOptimization({
 })
 
 game.runTasks({
-  doSimulation: false,
+  doSimulation: true,
   doOptimization: true,
   optimizationOpts: {
       // gameModes: [ "base", "bonusHunt", "bonusFeature", "superBonusFeature", "guaranteedBoardMultis", "guaranteedBoardMultisHigh", "MysteryBonusFeature" ],
-    gameModes: ["guaranteedBoardMultis"],
+    gameModes: ["base", "bonusHunt", "guaranteedBoardMultis", "guaranteedBoardMultisHigh"],
   },
   doAnalysis: true,
   analysisOpts: {
     // gameModes: [ "base", "bonusHunt", "bonusFeature", "superBonusFeature", "guaranteedBoardMultis", "guaranteedBoardMultisHigh", "MysteryBonusFeature" ],
-    gameModes: ["guaranteedBoardMultis"],
+    gameModes: ["base", "bonusHunt", "guaranteedBoardMultis", "guaranteedBoardMultisHigh"],
   },
 })

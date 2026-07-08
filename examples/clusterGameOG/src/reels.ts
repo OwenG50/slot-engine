@@ -67,15 +67,15 @@ const SYM_WEIGHTS = {
   // also true on the maxwin result set, so getReelStopsForSymbol must return
   // non-empty arrays for all 6 reels).
   maxwin: {
-    S: 12,
+    S: 5,
     W: 3,
-    H1: 200,
-    H2: 30,
-    H3: 20,
-    H4: 15,
-    L1: 10,
-    L2: 8,
-    L3: 5,
+    H1: 70,
+    H2: 60,
+    H3: 55,
+    H4: 50,
+    L1: 40,
+    L2: 40,
+    L3: 40,
   },
 } as const
 
