@@ -88,6 +88,7 @@ interface TierStats {
   weightedFsWin: number     // sum(weight * freeSpinEnd.amount)
   weightedFsSpins: number   // sum(weight * totalFs)
   count: number
+  fsWinWeights: Map<number, number> // weighted distribution of FS-end wins
 }
 
 interface BucketStats {
@@ -229,15 +230,23 @@ async function analyseMode(
     if (triggerEvt && criteria !== "maxwin") {
       const tier = (triggerEvt.data?.tier as string | undefined) ?? "normal"
       if (!analysis.tiers[tier]) {
-        analysis.tiers[tier] = { weightSum: 0, weightedFsWin: 0, weightedFsSpins: 0, count: 0 }
+        analysis.tiers[tier] = {
+          weightSum: 0,
+          weightedFsWin: 0,
+          weightedFsSpins: 0,
+          count: 0,
+          fsWinWeights: new Map<number, number>(),
+        }
       }
       const ts = analysis.tiers[tier]
       ts.weightSum += weight
       ts.count++
       const fsEndEvt = book.events.find((e) => e.type === "freeSpinEnd")
       if (fsEndEvt) {
-        ts.weightedFsWin += weight * ((fsEndEvt.data?.amount as number) ?? 0)
+        const fsEndAmount = (fsEndEvt.data?.amount as number) ?? 0
+        ts.weightedFsWin += weight * fsEndAmount
         ts.weightedFsSpins += weight * ((triggerEvt.data?.totalFs as number) ?? 0)
+        ts.fsWinWeights.set(fsEndAmount, (ts.fsWinWeights.get(fsEndAmount) ?? 0) + weight)
       }
     }
 
@@ -282,6 +291,26 @@ function lpad(s: string, len: number): string { return pad(s, len, false) }
 function bar(fraction: number, width = 20): string {
   const filled = Math.round(fraction * width)
   return "█".repeat(filled) + "░".repeat(width - filled)
+}
+
+function weightedQuantile(weightsByValue: Map<number, number>, q: number): number {
+  if (weightsByValue.size === 0) return 0
+
+  const points = [...weightsByValue.entries()]
+    .filter(([, w]) => w > 0)
+    .sort((a, b) => a[0] - b[0])
+
+  const totalWeight = points.reduce((s, [, w]) => s + w, 0)
+  if (totalWeight <= 0) return 0
+
+  const target = Math.max(0, Math.min(1, q)) * totalWeight
+  let acc = 0
+  for (const [value, weight] of points) {
+    acc += weight
+    if (acc >= target) return value
+  }
+
+  return points[points.length - 1]![0]
 }
 
 // ─── Report printer ────────────────────────────────────────────────────────
@@ -395,18 +424,20 @@ function printMode(a: ModeAnalysis) {
   if (Object.keys(a.tiers).length > 0) {
     console.log("")
     console.log("  " + bold(yellow("── Free Spin Tier Breakdown " + "─".repeat(43))))
-    console.log("  " + dim("Avg FS Win values are shown in base-bet multipliers (not divided by mode cost)."))
+    console.log("  " + dim("Avg FS Win is weighted mean in base-bet multipliers (not divided by mode cost)."))
+    console.log("  " + dim("Median FS Win is weighted P50 from the same FS-end distribution."))
     console.log("")
 
     const tierHdr = [
       lpad(bold("Tier"),      12),
       rpad(bold("Hit Rate"),  16),
       rpad(bold("% of Bonus"),14),
-      rpad(bold("Avg FS Win (base)"),19),
+      rpad(bold("Avg FS Win (mean)"),18),
+      rpad(bold("Median FS Win"),15),
       rpad(bold("Avg Spins"), 11),
     ].join("  ")
     console.log("  " + tierHdr)
-    console.log("  " + dim("─".repeat(68)))
+    console.log("  " + dim("─".repeat(90)))
 
     const tierOrder = ["normal", "super", "hidden"]
     const sortedTiers = Object.keys(a.tiers).sort((a, b) => {
@@ -419,13 +450,15 @@ function printMode(a: ModeAnalysis) {
       const prob      = ts.weightSum / tw
       const bonusPct  = bonusProb > 0 ? (ts.weightSum / bonusWeight) * 100 : 0
       const avgFsWin  = ts.weightSum > 0 ? ts.weightedFsWin / ts.weightSum : 0
+      const medianFsWin = weightedQuantile(ts.fsWinWeights, 0.5)
       const avgSpins  = ts.weightSum > 0 ? ts.weightedFsSpins / ts.weightSum : 0
       const tierLabel = tier === "hidden" ? red(tier) : tier === "super" ? yellow(tier) : green(tier)
       const row = [
         lpad(tierLabel,               12),
         rpad(hitRate(prob),           16),
         rpad(bonusPct.toFixed(2)+"%", 14),
-        rpad(avgFsWin.toFixed(2)+"x", 19),
+        rpad(avgFsWin.toFixed(2)+"x", 18),
+        rpad(medianFsWin.toFixed(2)+"x", 15),
         rpad(avgSpins.toFixed(1)+" spins", 11),
       ].join("  ")
       console.log("  " + row)
@@ -522,7 +555,8 @@ function discoverModes(buildDir: string): ModeDescriptor[] {
 function parseArgs(): { buildDir: string; modes?: string[] } {
   const args = process.argv.slice(2)
   let buildDir = "./__build__"
-  let modeFilter: string[] | undefined = ["base", "bonusHunt", "guaranteedBoardMultis", "guaranteedBoardMultisHigh"]
+  // let modeFilter: string[] | undefined = ["base", "bonusHunt", "bonusFeature", "superBonusFeature", "guaranteedBoardMultis", "guaranteedBoardMultisHigh", "MysteryBonusFeature"]
+  let modeFilter: string[] | undefined = ["base", "bonusHunt", "bonusFeature", "superBonusFeature", "MysteryBonusFeature"]
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--build-dir" && args[i + 1]) {
