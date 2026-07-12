@@ -601,13 +601,13 @@ export const game = createSlotGame<GameType>({
 
 game.configureSimulation({
   simRunsAmount: {
-    // base: 300000,
+    base: 300000,
     // bonusHunt: 300000,
     // guaranteedBoardMultis: 300000,
     // guaranteedBoardMultisHigh: 300000,
     // bonusFeature: 100000,
-    superBonusFeature: 100000,
-    // MysteryBonusFeature: 100000,
+    // superBonusFeature: 100000,
+    MysteryBonusFeature: 100000,
   },
   concurrency: 8,
 })
@@ -1172,10 +1172,10 @@ game.configureOptimization({
     //   - super is more volatile with a lower center,
     //   - hidden is higher and less volatile.
     // (avgWin = rtp × hitRate × cost):
-    //   normal  0.1140 × 1.667 × 500 ≈   95 bets
-    //   super   0.2856 × 3.333 × 500 ≈  476 bets
-    //   hidden  0.5522 × 10    × 500 ≈ 2761 bets
-    // Total: 0.00833 + 0.1140 + 0.2856 + 0.5522 = 0.960 ✓
+    //   normal  0.1177 × 1.667 × 500 ≈   98 bets
+    //   super   0.2875 × 3.333 × 500 ≈  479 bets
+    //   hidden  0.5530 × 10    × 500 ≈ 2765 bets
+    // Total: 0.0018 + 0.1177 + 0.2875 + 0.5530 = 0.960 ✓
     //
     // IMPORTANT – maxwin priority MUST be higher than all FS fence priorities
     // (freespins=3, super=4, hidden=5). The Rust optimizer processes fences in
@@ -1184,8 +1184,8 @@ game.configureOptimization({
     // organic 25000x books get high per-book weights (hr 1.667–10) and dominate
     // the maxwinHitRate (~1/15k), making the dedicated fence (1/400k) irrelevant.
     // With maxwin at priority 8 it runs first, claims every win=25000 book, and
-    // the FS fences only see non-maxwin wins. Result: maxwinHitRate = 6k.
-    // hr = avgWin / rtp / cost = 25000 / 0.00833 / 500 = 6,000.
+    // the FS fences only see non-maxwin wins. Result: maxwinHitRate ~= 27.8k.
+    // hr = avgWin / rtp / cost = 25000 / 0.0018 / 500 ~= 27,778.
     //
     // RTP FLOOR COMPENSATION: Because MysteryBonusFeature has no "0" or
     // basegame result sets, EVERY simulation book is a triggered bonus session.
@@ -1198,13 +1198,13 @@ game.configureOptimization({
     MysteryBonusFeature: {
       conditions: {
         maxwin: new OptimizationConditions({
-          rtp: 0.00833,
+          rtp: 0.0018,
           avgWin: 25000,
           searchConditions: 25000,
           priority: 8,
         }),
         freespins: new OptimizationConditions({
-          rtp: 0.114,
+          rtp: 0.1177,
           hitRate: 1.667,
           searchConditions: {
             criteria: "freespins",
@@ -1212,7 +1212,7 @@ game.configureOptimization({
           priority: 3,
         }),
         superfreespins: new OptimizationConditions({
-          rtp: 0.2856,
+          rtp: 0.2875,
           hitRate: 3.333,
           searchConditions: {
             criteria: "superfreespins",
@@ -1220,7 +1220,7 @@ game.configureOptimization({
           priority: 4,
         }),
         hiddenfreespins: new OptimizationConditions({
-          rtp: 0.55217,
+          rtp: 0.553,
           hitRate: 10,
           searchConditions: {
             criteria: "hiddenfreespins",
@@ -1248,9 +1248,9 @@ game.configureOptimization({
         { criteria: "freespins", scaleFactor: 0.03,  winRange: [500,    1000],   probability: 1 },
         { criteria: "freespins", scaleFactor: 0.015, winRange: [1000,   2000],   probability: 1 },
         { criteria: "freespins", scaleFactor: 0.008, winRange: [2000,   5000],   probability: 1 },
-        { criteria: "freespins", scaleFactor: 0.004, winRange: [5000,   10000],  probability: 1 },
-        { criteria: "freespins", scaleFactor: 0.002, winRange: [10000,  25000],  probability: 1 },
-        { criteria: "freespins", scaleFactor: 1,     winRange: [25000,  25000],  probability: 1 },
+        { criteria: "freespins", scaleFactor: 0.00015, winRange: [5000,   10000],  probability: 1 },
+        { criteria: "freespins", scaleFactor: 0.00005, winRange: [10000,  25000],  probability: 1 },
+        { criteria: "freespins", scaleFactor: 0.2,     winRange: [25000,  25000],  probability: 1 },
         // super free spins (avg ~476x per trigger): lower median with a wider
         // left side plus a reinforced high tail for volatility.
         { criteria: "superfreespins", scaleFactor: 0.20,  winRange: [0.01,   1],      probability: 1 },
@@ -1263,11 +1263,11 @@ game.configureOptimization({
         { criteria: "superfreespins", scaleFactor: 1.00,  winRange: [100,    200],    probability: 1 },
         { criteria: "superfreespins", scaleFactor: 0.30,  winRange: [200,    500],    probability: 1 },
         { criteria: "superfreespins", scaleFactor: 0.25,  winRange: [500,    1000],   probability: 1 },
-        { criteria: "superfreespins", scaleFactor: 1.60,  winRange: [1000,   2000],   probability: 1 },
-        { criteria: "superfreespins", scaleFactor: 3.40,  winRange: [2000,   5000],   probability: 1 },
-        { criteria: "superfreespins", scaleFactor: 3.60,  winRange: [5000,   10000],  probability: 1 },
-        { criteria: "superfreespins", scaleFactor: 3.00,  winRange: [10000,  25000],  probability: 1 },
-        { criteria: "superfreespins", scaleFactor: 1,     winRange: [25000,  25000],  probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 2.50,  winRange: [1000,   2000],   probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 2.80,  winRange: [2000,   5000],   probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 0.60,  winRange: [5000,   10000],  probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 0.35,  winRange: [10000,  25000],  probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 0.25,  winRange: [25000,  25000],  probability: 1 },
         // hidden free spins (avg ~2760x per trigger): higher center with a
         // smoother, less-spiky distribution to make strong returns more repeatable.
         { criteria: "hiddenfreespins", scaleFactor: 0.01,  winRange: [0.01,   1],      probability: 1 },
@@ -1280,11 +1280,11 @@ game.configureOptimization({
         { criteria: "hiddenfreespins", scaleFactor: 0.70,  winRange: [100,    200],    probability: 1 },
         { criteria: "hiddenfreespins", scaleFactor: 1.60,  winRange: [200,    500],    probability: 1 },
         { criteria: "hiddenfreespins", scaleFactor: 2.80,  winRange: [500,    1000],   probability: 1 },
-        { criteria: "hiddenfreespins", scaleFactor: 3.80,  winRange: [1000,   2000],   probability: 1 },
-        { criteria: "hiddenfreespins", scaleFactor: 4.20,  winRange: [2000,   5000],   probability: 1 },
-        { criteria: "hiddenfreespins", scaleFactor: 2.40,  winRange: [5000,   10000],  probability: 1 },
-        { criteria: "hiddenfreespins", scaleFactor: 1.10,  winRange: [10000,  25000],  probability: 1 },
-        { criteria: "hiddenfreespins", scaleFactor: 1,     winRange: [25000,  25000],  probability: 1 },
+        { criteria: "hiddenfreespins", scaleFactor: 4.80,  winRange: [1000,   2000],   probability: 1 },
+        { criteria: "hiddenfreespins", scaleFactor: 3.60,  winRange: [2000,   5000],   probability: 1 },
+        { criteria: "hiddenfreespins", scaleFactor: 0.30,  winRange: [5000,   10000],  probability: 1 },
+        { criteria: "hiddenfreespins", scaleFactor: 0.12,  winRange: [10000,  25000],  probability: 1 },
+        { criteria: "hiddenfreespins", scaleFactor: 0.2,   winRange: [25000,  25000],  probability: 1 },
       ]),
       parameters: new OptimizationParameters({
         minMeanToMedian: 2,
@@ -1299,11 +1299,11 @@ game.runTasks({
   doOptimization: true,
   optimizationOpts: {
     // gameModes: [ "base", "bonusHunt", "bonusFeature", "superBonusFeature", "guaranteedBoardMultis", "guaranteedBoardMultisHigh", "MysteryBonusFeature" ],
-    gameModes: ["superBonusFeature"],
+    gameModes: ["base", "MysteryBonusFeature"],
   },
   doAnalysis: true,
   analysisOpts: {
     // gameModes: [ "base", "bonusHunt", "bonusFeature", "superBonusFeature", "guaranteedBoardMultis", "guaranteedBoardMultisHigh", "MysteryBonusFeature" ],
-    gameModes: ["superBonusFeature"],
+    gameModes: ["base", "MysteryBonusFeature"],
   },
 })
