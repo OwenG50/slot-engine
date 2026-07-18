@@ -602,11 +602,11 @@ export const game = createSlotGame<GameType>({
 game.configureSimulation({
   simRunsAmount: {
     base: 300000,
-    // bonusHunt: 300000,
-    // guaranteedBoardMultis: 300000,
-    // guaranteedBoardMultisHigh: 300000,
-    // bonusFeature: 100000,
-    // superBonusFeature: 100000,
+    bonusHunt: 300000,
+    guaranteedBoardMultis: 300000,
+    guaranteedBoardMultisHigh: 300000,
+    bonusFeature: 100000,
+    superBonusFeature: 100000,
     MysteryBonusFeature: 100000,
   },
   concurrency: 8,
@@ -1298,12 +1298,12 @@ game.runTasks({
   doSimulation: true,
   doOptimization: true,
   optimizationOpts: {
-    // gameModes: [ "base", "bonusHunt", "bonusFeature", "superBonusFeature", "guaranteedBoardMultis", "guaranteedBoardMultisHigh", "MysteryBonusFeature" ],
-    gameModes: ["base", "MysteryBonusFeature"],
+    gameModes: [ "base", "bonusHunt", "bonusFeature", "superBonusFeature", "guaranteedBoardMultis", "guaranteedBoardMultisHigh", "MysteryBonusFeature" ],
+    // gameModes: ["base"],
   },
   doAnalysis: true,
   analysisOpts: {
-    // gameModes: [ "base", "bonusHunt", "bonusFeature", "superBonusFeature", "guaranteedBoardMultis", "guaranteedBoardMultisHigh", "MysteryBonusFeature" ],
-    gameModes: ["base", "MysteryBonusFeature"],
+    gameModes: [ "base", "bonusHunt", "bonusFeature", "superBonusFeature", "guaranteedBoardMultis", "guaranteedBoardMultisHigh", "MysteryBonusFeature" ],
+    // gameModes: ["base"],
   },
 })

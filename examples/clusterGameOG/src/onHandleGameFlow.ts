@@ -53,6 +53,72 @@ function roundToDecimal(value: number, decimals: number = 1): number {
   return Math.round(value * factor) / factor
 }
 
+function capToMaxWin(ctx: Context, value: number): number {
+  return roundToDecimal(Math.min(value, ctx.config.maxWinX))
+}
+
+function getRemainingMaxWin(ctx: Context): number {
+  const remaining =
+    ctx.config.maxWinX -
+    ctx.services.wallet.getCurrentWin() -
+    ctx.services.wallet.getCurrentSpinWin()
+  return roundToDecimal(Math.max(0, remaining))
+}
+
+function trimClusterWinsToMaxWin(
+  wins: Array<{
+    symbol: string
+    kind: number
+    win: number
+    positions: Array<{ reel: number; row: number }>
+    meta: {
+      multiplier: number
+      winWithoutMult: number
+      symbolMult: number
+    }
+  }>,
+  remainingMaxWin: number,
+) {
+  if (remainingMaxWin <= 0 || wins.length === 0) return []
+
+  let accumulated = 0
+  const keptWins: typeof wins = []
+
+  for (const win of wins) {
+    const nextAccumulated = roundToDecimal(accumulated + win.win)
+
+    if (nextAccumulated < remainingMaxWin) {
+      keptWins.push(win)
+      accumulated = nextAccumulated
+      continue
+    }
+
+    if (nextAccumulated === remainingMaxWin) {
+      keptWins.push(win)
+      return keptWins
+    }
+
+    const triggerWinAmount = roundToDecimal(remainingMaxWin - accumulated)
+    if (triggerWinAmount <= 0) return keptWins
+
+    const originalWin = win.win <= 0 ? 1 : win.win
+    const ratio = triggerWinAmount / originalWin
+
+    keptWins.push({
+      ...win,
+      win: triggerWinAmount,
+      meta: {
+        ...win.meta,
+        winWithoutMult: roundToDecimal(win.meta.winWithoutMult * ratio),
+      },
+    })
+
+    return keptWins
+  }
+
+  return keptWins
+}
+
 /**
  * 6x5 cluster-pays game flow with tumbling reels.
  * After all wins on a board are paid, the winning symbols are removed and new
@@ -335,7 +401,7 @@ function handleTumbles(ctx: Context): number {
     //   winWithoutMult = basePayout (base cluster value, no multipliers)
     // This mirrors cabin_fever's per-line win breakdown exactly.
     let totalPayout = 0
-    const wins = winCombinations.map((wc) => {
+    let wins = winCombinations.map((wc) => {
       const clusterMultiplier = wc.symbols.reduce((sum, s) => {
         const mult = ctx.state.userData.boardMultis[s.reelIndex]![s.posIndex]!
         return mult >= 2 ? sum + mult : sum
@@ -363,6 +429,19 @@ function handleTumbles(ctx: Context): number {
       }
     })
 
+    const remainingMaxWin = getRemainingMaxWin(ctx)
+    const cappedTotalPayout = capToMaxWin(ctx, Math.min(totalPayout, remainingMaxWin))
+
+    if (totalPayout > cappedTotalPayout) {
+      wins = trimClusterWinsToMaxWin(wins, remainingMaxWin)
+    }
+
+    totalPayout = cappedTotalPayout
+    if (totalPayout <= 0) {
+      ctx.state.triggeredMaxWin = true
+      break
+    }
+
     spinTotal = roundToDecimal(spinTotal + totalPayout)
 
     // Deduplicate win symbols for board multiplier updates and tumbling.
@@ -378,6 +457,12 @@ function handleTumbles(ctx: Context): number {
 
     // `addTumbleWin` already calls `addSpinWin`, so no need to do it here.
     ctx.services.wallet.addTumbleWin(totalPayout)
+
+    // As soon as this tumble reaches the cap, the round ends immediately.
+    if (totalPayout >= remainingMaxWin) {
+      ctx.state.triggeredMaxWin = true
+      break
+    }
 
     // Update board-position multipliers after wins are paid:
     //   0 (unvisited) → 2 (active: contributes 2x on next tumble win)
@@ -430,12 +515,6 @@ function handleTumbles(ctx: Context): number {
         anticipation: clusterTumbleAnticipation,
       },
     })
-
-    // Reached max win, stop win calculation
-    if (totalPayout >= ctx.config.maxWinX) {
-      ctx.state.triggeredMaxWin = true
-      break
-    }
   }
 
   if (spinTotal > 0) {
