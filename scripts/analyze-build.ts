@@ -86,7 +86,7 @@ interface CriteriaStats {
 interface TierStats {
   weightSum: number
   weightedFsWin: number     // sum(weight * freeSpinEnd.amount)
-  weightedFsSpins: number   // sum(weight * totalFs)
+  weightedFsSpins: number   // sum(weight * actual "updateFreeSpin" event count, i.e. initial award + retriggers)
   count: number
   fsWinWeights: Map<number, number> // weighted distribution of FS-end wins
 }
@@ -245,7 +245,14 @@ async function analyseMode(
       if (fsEndEvt) {
         const fsEndAmount = (fsEndEvt.data?.amount as number) ?? 0
         ts.weightedFsWin += weight * fsEndAmount
-        ts.weightedFsSpins += weight * ((triggerEvt.data?.totalFs as number) ?? 0)
+        // Count actual "updateFreeSpin" events rather than reading the
+        // trigger event's `totalFs` field — that field only reflects the
+        // INITIAL award (e.g. 12), not any additional spins granted by
+        // scatter retriggers during the feature. One "updateFreeSpin" event
+        // is emitted per free spin actually played, so counting them gives
+        // the true total (initial + all retriggers).
+        const actualFsSpins = book.events.filter((e) => e.type === "updateFreeSpin").length
+        ts.weightedFsSpins += weight * actualFsSpins
         ts.fsWinWeights.set(fsEndAmount, (ts.fsWinWeights.get(fsEndAmount) ?? 0) + weight)
       }
     }
@@ -556,7 +563,7 @@ function parseArgs(): { buildDir: string; modes?: string[] } {
   const args = process.argv.slice(2)
   let buildDir = "./__build__"
   // let modeFilter: string[] | undefined = ["base", "bonusHunt", "bonusFeature", "superBonusFeature", "guaranteedBoardMultis", "guaranteedBoardMultisHigh", "MysteryBonusFeature"]
-  let modeFilter: string[] | undefined = ["base", "bonusHunt", "bonusFeature", "superBonusFeature", "MysteryBonusFeature"]
+  let modeFilter: string[] | undefined = ["base"]
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--build-dir" && args[i + 1]) {
