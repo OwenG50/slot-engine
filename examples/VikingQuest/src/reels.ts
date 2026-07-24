@@ -15,7 +15,7 @@ const SYM_WEIGHTS = {
     L5: 60,
   },
   freespin: {
-    S: 1,
+    S: 3,
     W: 10,
     H1: 40,
     H2: 40,
@@ -28,7 +28,7 @@ const SYM_WEIGHTS = {
     L5: 55,
   },
   superfreespin: {
-    S: 1,
+    S: 3,
     W: 12,
     H1: 40,
     H2: 40,
@@ -46,7 +46,7 @@ const SYM_WEIGHTS = {
   // solvable on every generated reel strip (S:1 previously starved some
   // reels of any scatter occurrence, crashing forced-scatter draws).
   hiddenfreespin: {
-    S: 1,
+    S: 3,
     W: 15,
     H1: 40,
     H2: 40,
@@ -61,7 +61,7 @@ const SYM_WEIGHTS = {
   // maxwin: start identical to hiddenfreespin for now; this dedicated strip
   // can be tuned independently later for max-win shaping.
   maxwin: {
-    S: 1,
+    S: 3,
     W: 20,
     H1: 50,
     H2: 50,
@@ -72,6 +72,22 @@ const SYM_WEIGHTS = {
     L3: 35,
     L4: 35,
     L5: 35,
+  },
+  // featureSpin: identical to base except a bumped wild weight so the
+  // guaranteed 2-5 wilds forced onto every spin (see onHandleGameFlow) can
+  // be found and reach that count without excessive retries.
+  featureSpin: {
+    S: 3,
+    W: 12,
+    H1: 35,
+    H2: 35,
+    H3: 40,
+    H4: 40,
+    L1: 50,
+    L2: 50,
+    L3: 50,
+    L4: 55,
+    L5: 60,
   },
 } as const
 
@@ -145,6 +161,28 @@ export const GENERATORS = {
     symbolWeights: SYM_WEIGHTS.maxwin,
     limitSymbolsToReels: {
 
+    },
+    spaceBetweenSameSymbols: {
+      S: 5,
+    },
+    spaceBetweenSymbols: {
+
+    },
+  }),
+  // featureSpin: guarantees at least one W (and one S, for the forced
+  // 3/4/5-scatter bonus trigger draws that also use this reel set) on
+  // every physical reel so the guaranteed-2-to-5-wilds forcing logic in
+  // onHandleGameFlow never runs out of eligible reels to pick from.
+  featureSpin: new GeneratedReelSet({
+    id: "featureSpin",
+    overrideExisting: false,
+    symbolWeights: SYM_WEIGHTS.featureSpin,
+    limitSymbolsToReels: {
+
+    },
+    symbolQuotas: {
+      S: 1,
+      W: 1,
     },
     spaceBetweenSameSymbols: {
       S: 5,

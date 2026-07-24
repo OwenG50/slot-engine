@@ -89,6 +89,8 @@ interface TierStats {
   weightedFsSpins: number   // sum(weight * actual "updateFreeSpin" event count, i.e. initial award + retriggers)
   count: number
   fsWinWeights: Map<number, number> // weighted distribution of FS-end wins
+  maxFsSpins: number        // max actual FS spins played (initial award + retriggers) seen in any single round
+  retriggerWeightSum: number // weight of rounds that had at least one "addAdditionalFreeSpins" (retrigger) event
 }
 
 interface BucketStats {
@@ -236,6 +238,8 @@ async function analyseMode(
           weightedFsSpins: 0,
           count: 0,
           fsWinWeights: new Map<number, number>(),
+          maxFsSpins: 0,
+          retriggerWeightSum: 0,
         }
       }
       const ts = analysis.tiers[tier]
@@ -254,6 +258,13 @@ async function analyseMode(
         const actualFsSpins = book.events.filter((e) => e.type === "updateFreeSpin").length
         ts.weightedFsSpins += weight * actualFsSpins
         ts.fsWinWeights.set(fsEndAmount, (ts.fsWinWeights.get(fsEndAmount) ?? 0) + weight)
+        if (actualFsSpins > ts.maxFsSpins) ts.maxFsSpins = actualFsSpins
+
+        // A round retriggered at least once if it emitted any
+        // "addAdditionalFreeSpins" event (added in checkFreespins whenever
+        // scatters land during an active free-spin round).
+        const hadRetrigger = book.events.some((e) => e.type === "addAdditionalFreeSpins")
+        if (hadRetrigger) ts.retriggerWeightSum += weight
       }
     }
 
@@ -433,6 +444,8 @@ function printMode(a: ModeAnalysis) {
     console.log("  " + bold(yellow("── Free Spin Tier Breakdown " + "─".repeat(43))))
     console.log("  " + dim("Avg FS Win is weighted mean in base-bet multipliers (not divided by mode cost)."))
     console.log("  " + dim("Median FS Win is weighted P50 from the same FS-end distribution."))
+    console.log("  " + dim("Max Spins is the largest total FS spins (initial award + retriggers) seen in any single round."))
+    console.log("  " + dim("Retrigger Freq is the weighted % of rounds in this tier that landed at least one retrigger."))
     console.log("")
 
     const tierHdr = [
@@ -442,9 +455,11 @@ function printMode(a: ModeAnalysis) {
       rpad(bold("Avg FS Win (mean)"),18),
       rpad(bold("Median FS Win"),15),
       rpad(bold("Avg Spins"), 11),
+      rpad(bold("Max Spins"), 11),
+      rpad(bold("Retrigger Freq"), 15),
     ].join("  ")
     console.log("  " + tierHdr)
-    console.log("  " + dim("─".repeat(90)))
+    console.log("  " + dim("─".repeat(120)))
 
     const tierOrder = ["normal", "super", "hidden"]
     const sortedTiers = Object.keys(a.tiers).sort((a, b) => {
@@ -459,6 +474,7 @@ function printMode(a: ModeAnalysis) {
       const avgFsWin  = ts.weightSum > 0 ? ts.weightedFsWin / ts.weightSum : 0
       const medianFsWin = weightedQuantile(ts.fsWinWeights, 0.5)
       const avgSpins  = ts.weightSum > 0 ? ts.weightedFsSpins / ts.weightSum : 0
+      const retriggerPct = ts.weightSum > 0 ? (ts.retriggerWeightSum / ts.weightSum) * 100 : 0
       const tierLabel = tier === "hidden" ? red(tier) : tier === "super" ? yellow(tier) : green(tier)
       const row = [
         lpad(tierLabel,               12),
@@ -467,6 +483,8 @@ function printMode(a: ModeAnalysis) {
         rpad(avgFsWin.toFixed(2)+"x", 18),
         rpad(medianFsWin.toFixed(2)+"x", 15),
         rpad(avgSpins.toFixed(1)+" spins", 11),
+        rpad(ts.maxFsSpins.toFixed(0)+" spins", 11),
+        rpad(retriggerPct.toFixed(2)+"%", 15),
       ].join("  ")
       console.log("  " + row)
     }
@@ -563,7 +581,7 @@ function parseArgs(): { buildDir: string; modes?: string[] } {
   const args = process.argv.slice(2)
   let buildDir = "./__build__"
   // let modeFilter: string[] | undefined = ["base", "bonusHunt", "bonusFeature", "superBonusFeature", "guaranteedBoardMultis", "guaranteedBoardMultisHigh", "MysteryBonusFeature"]
-  let modeFilter: string[] | undefined = ["base"]
+  let modeFilter: string[] | undefined = ["base", "bonusHunt", "featureSpin", "bonusFeature", "superBonusFeature", "mysteryBonusFeature"]
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--build-dir" && args[i + 1]) {
