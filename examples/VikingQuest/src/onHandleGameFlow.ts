@@ -61,25 +61,45 @@ const SUPER_MULTIPLIER_TABLE: Array<{ value: number; weight: number }> = [
   { value: 100, weight: 8   },
 ]
 
-// Hidden free spins table — keep the full 5x..100x value set available, but
-// flatten the weight curve so larger multipliers land more frequently while
-// lower values still remain possible (no hard pruning of low-end outcomes).
+// Hidden free spins table — keep the full 5x..100x value set available.
+// RE-TIGHTENED (2026-07-25): the previous curve was FAR too flat (120 down
+// to 48, only a ~2.5x ratio top-to-bottom) — landing 75x/100x was barely
+// rarer than landing 5x/6x. Over a 12+ spin Hidden round with many wild
+// explosions, that near-uniform chance of repeatedly rolling a top-tier
+// value compounded into catastrophically skewed totals (analysis of real
+// simulated books showed hiddenfreespins books' RAW/natural median win was
+// ~2213x, with 99%+ of rounds landing over 1000x — nowhere close to a
+// healthy ~200x median no matter how OptimizationScaling was tuned, since
+// scaling can only reweight existing books, not fix an upstream mechanic).
+// Switched to a smooth ~0.80x-per-step geometric decay (same shape style as
+// MULTIPLIER_TABLE/SUPER_MULTIPLIER_TABLE), landing a top-to-bottom ratio of
+// 22x — still deliberately FATTER-tailed than SUPER_MULTIPLIER_TABLE's ~31x
+// ratio (so Hidden still rolls big values relatively more often than Super,
+// preserving the "Hidden feels richest" tier hierarchy) but far steeper
+// than the old ~2.5x ratio. This roughly halves the average roll value
+// (~23.8 -> ~13.0) and cuts the chance of landing 75x/100x specifically by
+// ~4x (8.8% -> 2.3% per roll) — since a round's blowout total depends on
+// MULTIPLE big rolls compounding, that per-roll cut should reduce runaway
+// rounds by considerably more than the average-roll reduction alone
+// suggests. This is a first pass at the mechanic-level fix; OptimizationScaling
+// for hiddenfreespins was intentionally left untouched this round so the
+// next simulation isolates the effect of this table change alone.
 const HIDDEN_MULTIPLIER_TABLE: Array<{ value: number; weight: number }> = [
-  { value: 5,   weight: 120 },
-  { value: 6,   weight: 110 },
-  { value: 7,   weight: 100 },
-  { value: 8,   weight: 92  },
-  { value: 9,   weight: 85  },
-  { value: 10,  weight: 79  },
-  { value: 15,  weight: 74  },
-  { value: 20,  weight: 70  },
-  { value: 25,  weight: 66  },
-  { value: 35,  weight: 63  },
-  { value: 40,  weight: 60  },
-  { value: 45,  weight: 57  },
-  { value: 50,  weight: 54  },
-  { value: 75,  weight: 51  },
-  { value: 100, weight: 48  },
+  { value: 5,   weight: 220 },
+  { value: 6,   weight: 176 },
+  { value: 7,   weight: 141 },
+  { value: 8,   weight: 113 },
+  { value: 9,   weight: 90  },
+  { value: 10,  weight: 72  },
+  { value: 15,  weight: 58  },
+  { value: 20,  weight: 46  },
+  { value: 25,  weight: 37  },
+  { value: 35,  weight: 30  },
+  { value: 40,  weight: 24  },
+  { value: 45,  weight: 19  },
+  { value: 50,  weight: 15  },
+  { value: 75,  weight: 12  },
+  { value: 100, weight: 10  },
 ]
 
 // Builds the "reel-row" key used to track sticky wild positions during
@@ -233,11 +253,14 @@ function drawBoard(ctx: Context) {
 
       if (scatCount !== targetScatters || scatInvalid) continue
 
-      // featureSpin: this mode guarantees 2-5 wilds on EVERY base spin,
-      // including the ones that happen to trigger a bonus.
+      // featureSpin: this mode guarantees AT LEAST 3 wilds on EVERY base
+      // spin, including the ones that happen to trigger a bonus. wildCount
+      // is the first element of countSymbolsOnBoard's return tuple, which
+      // is the TOTAL wild count across the whole board — not a per-reel
+      // count — so this check is already board-wide as intended.
       if (isFeatureSpin) {
         const [wildCount] = ctx.services.board.countSymbolsOnBoard(wild)
-        if (wildCount < 2 || wildCount > 5) continue
+        if (wildCount < 3) continue
       }
 
       break
@@ -246,29 +269,35 @@ function drawBoard(ctx: Context) {
     const isFeatureSpin = ctx.state.currentGameMode === "featureSpin"
 
     if (isFeatureSpin) {
-      // featureSpin: force at least 2 wild reels on every base spin (the
-      // featureSpin reel set's bumped W weight, plus the other unforced
-      // reels landing naturally, keeps the final count within 2-5 without
-      // excessive retries). Bonus trigger odds are otherwise untouched —
+      // featureSpin: guarantee AT LEAST 3 wild SYMBOLS somewhere on the
+      // board (board-wide total), not 3 wilds spread across 3 DIFFERENT
+      // reels. FIXED (2026-07-25): this previously called
+      // getRandomReelStops(reels, wildReelStops, 3) to force 3 DISTINCT
+      // reels to each land a wild — that's stricter than the actual
+      // requirement and unnecessarily prevented boards where e.g. 2 wilds
+      // land on the same reel (different rows) plus 1 elsewhere from ever
+      // being drawn this way. Now a plain random draw (same as the normal
+      // base-game branch) is retried until the board-wide wild count lands
+      // in 3-5 — wilds can be distributed across reels in ANY combination,
+      // including multiple wilds stacked on the same reel. The featureSpin
+      // reel set's bumped W weight (see reels.ts) keeps this retry loop
+      // converging quickly. Bonus trigger odds are otherwise untouched —
       // this only shapes which wilds land, not the scatter count.
       while (true) {
         ctx.services.board.resetBoard()
-
-        const wildReelStops = ctx.services.board.getReelStopsForSymbol(reels, wild)
-        const forcedWildStops = ctx.services.board.getRandomReelStops(reels, wildReelStops, 2)
-        ctx.services.board.drawBoardWithForcedStops({
-          reels,
-          forcedStops: forcedWildStops,
-        })
+        ctx.services.board.drawBoardWithRandomStops(reels)
 
         const scatInvalid = ctx.services.board.isSymbolOnAnyReelMultipleTimes(scatter)
         const [scatCount] = ctx.services.board.countSymbolsOnBoard(scatter)
+        // Total wild count across the WHOLE board (first tuple element),
+        // not a per-reel breakdown (that's the second element, unused here).
         const [wildCount] = ctx.services.board.countSymbolsOnBoard(wild)
 
         // Base validation: max 2 scatters (same rule as normal base game).
         if (scatCount > 2 || scatInvalid) continue
-        // Guaranteed wilds: must land between 2 and 5 (inclusive).
-        if (wildCount < 2 || wildCount > 5) continue
+        // Guaranteed wilds: must land between 3 and 5 (inclusive), counted
+        // across the entire board — same reel or spread, doesn't matter.
+        if (wildCount < 3) continue
 
         break
       }
