@@ -580,7 +580,7 @@ function discoverModes(buildDir: string): ModeDescriptor[] {
 function parseArgs(): { buildDir: string; modes?: string[] } {
   const args = process.argv.slice(2)
   let buildDir = "./__build__"
-  let modeFilter: string[] | undefined = ["base", "bonusHunt", "featureSpin", "bonusFeature", "superBonusFeature", "mysteryBonusFeature"]
+  let modeFilter: string[] | undefined = ["mysteryBonusFeature"]
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--build-dir" && args[i + 1]) {
