@@ -37,6 +37,8 @@ const C = {
   white: "\x1b[37m",
 }
 
+const OUTPUT_DIR = path.resolve(path.dirname(__filename), "..", "Math Mode Analysis")
+
 function bold(s: string) { return C.bold + s + C.reset }
 function cyan(s: string) { return C.cyan + s + C.reset }
 function yellow(s: string) { return C.yellow + s + C.reset }
@@ -44,6 +46,82 @@ function green(s: string) { return C.green + s + C.reset }
 function dim(s: string) { return C.dim + s + C.reset }
 function magenta(s: string) { return C.magenta + s + C.reset }
 function red(s: string) { return C.red + s + C.reset }
+
+function stripAnsi(value: string): string {
+  return value.replace(/\x1b\[[0-9;]*m/g, "")
+}
+
+function sanitizeFileName(value: string): string {
+  return value
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\s*[-_]+\s*/g, " - ")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+function deriveGameName(buildDir: string): string {
+  const base = path.basename(buildDir)
+  if (base === "__build__") {
+    return path.basename(path.dirname(buildDir)) || "game"
+  }
+  return base || "game"
+}
+
+function formatTimestamp(date = new Date()): string {
+  const yyyy = date.getFullYear()
+  const mm = String(date.getMonth() + 1).padStart(2, "0")
+  const dd = String(date.getDate()).padStart(2, "0")
+  const hh = String(date.getHours()).padStart(2, "0")
+  const mi = String(date.getMinutes()).padStart(2, "0")
+  const ss = String(date.getSeconds()).padStart(2, "0")
+  return `${yyyy}-${mm}-${dd}_${hh}-${mi}-${ss}`
+}
+
+let reportStream: fs.WriteStream | null = null
+let reportFilePath = ""
+
+function createReportWriter(filePath: string, gameName: string, buildDir: string, timestamp: string) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true })
+  reportFilePath = filePath
+  reportStream = fs.createWriteStream(filePath, { flags: "w" })
+  reportStream.write(`Slot Engine Build Analysis\n`)
+  reportStream.write(`Game: ${gameName}\n`)
+  reportStream.write(`Timestamp: ${timestamp}\n`)
+  reportStream.write(`Build Dir: ${buildDir}\n\n`)
+
+  const originalConsoleLog = console.log.bind(console)
+  const originalConsoleWarn = console.warn.bind(console)
+  const originalConsoleError = console.error.bind(console)
+
+  const formatArgs = (args: unknown[]) => args.map((arg) => String(arg)).join(" ")
+
+  console.log = (...args: unknown[]) => {
+    const text = formatArgs(args)
+    reportStream?.write(stripAnsi(text) + "\n")
+  }
+
+  console.warn = (...args: unknown[]) => {
+    const text = `[warn] ${formatArgs(args)}`
+    reportStream?.write(stripAnsi(text) + "\n")
+  }
+
+  console.error = (...args: unknown[]) => {
+    const text = `[error] ${formatArgs(args)}`
+    reportStream?.write(stripAnsi(text) + "\n")
+  }
+
+  return () => {
+    if (reportStream) {
+      reportStream.end()
+      reportStream = null
+    }
+    console.log = originalConsoleLog
+    console.warn = originalConsoleWarn
+    console.error = originalConsoleError
+  }
+}
 
 // ─── Win-distribution buckets ────────────────────────────────────────────────
 
@@ -66,12 +144,31 @@ const WIN_BUCKETS: Array<{ label: string; min: number; max: number }> = [
   { label: "Max Win (exact)",min:24999.99,max: Infinity },
 ]
 
+const SPIN_BUCKETS: Array<{ label: string; min: number; max: number }> = [
+  { label: "0 spins",    min: 0, max: 0 },
+  { label: "1–3 spins", min: 1, max: 3 },
+  { label: "4–6 spins", min: 4, max: 6 },
+  { label: "7–10 spins",min: 7, max: 10 },
+  { label: "11–15 spins",min: 11, max: 15 },
+  { label: "16–20 spins",min: 16, max: 20 },
+  { label: "21–30 spins",min: 21, max: 30 },
+  { label: "31+ spins", min: 31, max: Infinity },
+]
+
 function getBucket(win: number): number {
   if (win === 0) return 0
   for (let i = WIN_BUCKETS.length - 1; i >= 0; i--) {
     if (win > WIN_BUCKETS[i].min) return i
   }
   return 0
+}
+
+function getSpinBucket(spins: number): number {
+  if (spins <= 0) return 0
+  for (let i = SPIN_BUCKETS.length - 1; i >= 0; i--) {
+    if (spins >= SPIN_BUCKETS[i].min) return i
+  }
+  return SPIN_BUCKETS.length - 1
 }
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -81,6 +178,8 @@ interface CriteriaStats {
   weightedWin: number       // sum(weight * payoutMultiplier)
   count: number             // raw book count
   maxWin: number
+  buckets: BucketStats[]    // win spread by logarithmic bucket
+  winWeights: Map<number, number> // weighted distribution of result wins
 }
 
 interface TierStats {
@@ -89,6 +188,9 @@ interface TierStats {
   weightedFsSpins: number   // sum(weight * actual "updateFreeSpin" event count, i.e. initial award + retriggers)
   count: number
   fsWinWeights: Map<number, number> // weighted distribution of FS-end wins
+  spinWeights: Map<number, number>  // weighted distribution of actual spin counts
+  fsWinBuckets: BucketStats[]       // FS win spread by logarithmic bucket
+  fsSpinBuckets: BucketStats[]      // actual spin-count spread by bucket
   maxFsSpins: number        // max actual FS spins played (initial award + retriggers) seen in any single round
   retriggerWeightSum: number // weight of rounds that had at least one "addAdditionalFreeSpins" (retrigger) event
 }
@@ -216,13 +318,24 @@ async function analyseMode(
 
     // ── Accumulate criteria stats ─────────────────────────────────────────
     if (!analysis.criteria[criteria]) {
-      analysis.criteria[criteria] = { weightSum: 0, weightedWin: 0, count: 0, maxWin: 0 }
+      analysis.criteria[criteria] = {
+        weightSum: 0,
+        weightedWin: 0,
+        count: 0,
+        maxWin: 0,
+        buckets: WIN_BUCKETS.map(() => ({ weightSum: 0, weightedWin: 0 })),
+        winWeights: new Map<number, number>(),
+      }
     }
     const cs = analysis.criteria[criteria]
     cs.weightSum += weight
     cs.weightedWin += weight * payout
     cs.count++
     if (payout > cs.maxWin) cs.maxWin = payout
+    const critBucketIndex = getBucket(payout)
+    cs.buckets[critBucketIndex].weightSum += weight
+    cs.buckets[critBucketIndex].weightedWin += weight * payout
+    cs.winWeights.set(payout, (cs.winWeights.get(payout) ?? 0) + weight)
 
     // ── FS tier stats ─────────────────────────────────────────────────────
     const triggerEvt = book.events.find((e) => e.type === "freeSpinTrigger")
@@ -238,6 +351,9 @@ async function analyseMode(
           weightedFsSpins: 0,
           count: 0,
           fsWinWeights: new Map<number, number>(),
+          spinWeights: new Map<number, number>(),
+          fsWinBuckets: WIN_BUCKETS.map(() => ({ weightSum: 0, weightedWin: 0 })),
+          fsSpinBuckets: SPIN_BUCKETS.map(() => ({ weightSum: 0, weightedWin: 0 })),
           maxFsSpins: 0,
           retriggerWeightSum: 0,
         }
@@ -258,6 +374,13 @@ async function analyseMode(
         const actualFsSpins = book.events.filter((e) => e.type === "updateFreeSpin").length
         ts.weightedFsSpins += weight * actualFsSpins
         ts.fsWinWeights.set(fsEndAmount, (ts.fsWinWeights.get(fsEndAmount) ?? 0) + weight)
+        ts.spinWeights.set(actualFsSpins, (ts.spinWeights.get(actualFsSpins) ?? 0) + weight)
+        const fsWinBucketIndex = getBucket(fsEndAmount)
+        ts.fsWinBuckets[fsWinBucketIndex].weightSum += weight
+        ts.fsWinBuckets[fsWinBucketIndex].weightedWin += weight * fsEndAmount
+        const spinBucketIndex = getSpinBucket(actualFsSpins)
+        ts.fsSpinBuckets[spinBucketIndex].weightSum += weight
+        ts.fsSpinBuckets[spinBucketIndex].weightedWin += weight * actualFsSpins
         if (actualFsSpins > ts.maxFsSpins) ts.maxFsSpins = actualFsSpins
 
         // A round retriggered at least once if it emitted any
@@ -329,6 +452,34 @@ function weightedQuantile(weightsByValue: Map<number, number>, q: number): numbe
   }
 
   return points[points.length - 1]![0]
+}
+
+function printBucketBreakdown(
+  title: string,
+  buckets: BucketStats[],
+  bucketDefs: Array<{ label: string; min: number; max: number }>,
+  totalWeight: number,
+  totalValue: number,
+  valueLabel: string,
+) {
+  console.log("")
+  console.log("  " + bold(title))
+  console.log("  " + dim(`   bucket${" ".repeat(16)}| % of set | % of ${valueLabel} | visual`))
+  console.log("  " + dim("─".repeat(76)))
+
+  for (let i = 0; i < buckets.length; i++) {
+    const b = buckets[i]
+    if (b.weightSum === 0) continue
+    const setPct = totalWeight > 0 ? (b.weightSum / totalWeight) * 100 : 0
+    const valuePct = totalValue > 0 ? (b.weightedWin / totalValue) * 100 : 0
+    const row = [
+      lpad(bucketDefs[i].label, 22),
+      rpad(setPct.toFixed(3) + "%", 10),
+      rpad(valuePct.toFixed(3) + "%", 14),
+      dim(bar(Math.min(setPct / 20, 1), 18)),
+    ].join("  ")
+    console.log("  " + row)
+  }
 }
 
 // ─── Report printer ────────────────────────────────────────────────────────
@@ -425,6 +576,9 @@ function printMode(a: ModeAnalysis) {
     const prob    = cs.weightSum / tw
     const rtpC    = cs.weightedWin / tw / a.cost
     const avgWin  = cs.weightSum > 0 ? cs.weightedWin / cs.weightSum : 0
+    const medianWin = weightedQuantile(cs.winWeights, 0.5)
+    const p90Win = weightedQuantile(cs.winWeights, 0.9)
+    const p95Win = weightedQuantile(cs.winWeights, 0.95)
     const isBonus = crit !== "0" && crit !== "basegame" && crit !== "unknown"
     const critLabel = isBonus ? magenta(crit) : (crit === "0" ? dim(crit) : crit)
     const row = [
@@ -436,6 +590,16 @@ function printMode(a: ModeAnalysis) {
       rpad(cs.maxWin.toFixed(1) + "x",    10),
     ].join("  ")
     console.log("  " + row)
+
+    console.log("  " + dim(`    spread: median=${medianWin.toFixed(2)}x  p90=${p90Win.toFixed(2)}x  p95=${p95Win.toFixed(2)}x`))
+    printBucketBreakdown(
+      `  ${critLabel} win spread`,
+      cs.buckets,
+      WIN_BUCKETS,
+      cs.weightSum,
+      cs.weightedWin,
+      "win",
+    )
   }
 
   // ── FS tier breakdown ─────────────────────────────────────────────────────
@@ -473,7 +637,11 @@ function printMode(a: ModeAnalysis) {
       const bonusPct  = bonusProb > 0 ? (ts.weightSum / bonusWeight) * 100 : 0
       const avgFsWin  = ts.weightSum > 0 ? ts.weightedFsWin / ts.weightSum : 0
       const medianFsWin = weightedQuantile(ts.fsWinWeights, 0.5)
+      const p90FsWin = weightedQuantile(ts.fsWinWeights, 0.9)
+      const p95FsWin = weightedQuantile(ts.fsWinWeights, 0.95)
       const avgSpins  = ts.weightSum > 0 ? ts.weightedFsSpins / ts.weightSum : 0
+      const medianSpins = weightedQuantile(ts.spinWeights, 0.5)
+      const p90Spins = weightedQuantile(ts.spinWeights, 0.9)
       const retriggerPct = ts.weightSum > 0 ? (ts.retriggerWeightSum / ts.weightSum) * 100 : 0
       const tierLabel = tier === "hidden" ? red(tier) : tier === "super" ? yellow(tier) : green(tier)
       const row = [
@@ -487,6 +655,23 @@ function printMode(a: ModeAnalysis) {
         rpad(retriggerPct.toFixed(2)+"%", 15),
       ].join("  ")
       console.log("  " + row)
+      console.log("  " + dim(`    spread: fs median=${medianFsWin.toFixed(2)}x  p90=${p90FsWin.toFixed(2)}x  p95=${p95FsWin.toFixed(2)}x  spins median=${medianSpins.toFixed(1)}  p90=${p90Spins.toFixed(1)}`))
+      printBucketBreakdown(
+        `  ${tierLabel} FS win spread`,
+        ts.fsWinBuckets,
+        WIN_BUCKETS,
+        ts.weightSum,
+        ts.weightedFsWin,
+        "FS win",
+      )
+      printBucketBreakdown(
+        `  ${tierLabel} spin-count spread`,
+        ts.fsSpinBuckets,
+        SPIN_BUCKETS,
+        ts.weightSum,
+        ts.weightedFsSpins,
+        "spins",
+      )
     }
   }
 
@@ -556,7 +741,7 @@ function discoverModes(buildDir: string): ModeDescriptor[] {
       lutPath = path.join(buildDir, `lookUpTable_${name}.csv`)
     }
     if (!fs.existsSync(lutPath)) {
-      process.stderr.write(`  [warn] No LUT found for mode "${name}", skipping.\n`)
+      console.warn(`No LUT found for mode "${name}", skipping.`)
       continue
     }
 
@@ -580,7 +765,7 @@ function discoverModes(buildDir: string): ModeDescriptor[] {
 function parseArgs(): { buildDir: string; modes?: string[] } {
   const args = process.argv.slice(2)
   let buildDir = "./__build__"
-  let modeFilter: string[] | undefined = ["base"]
+  let modeFilter: string[] | undefined = ["base", "featureSpin", "bonusHunt", "bonusFeature", "superBonusFeature", "mysteryBonusFeature"]
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--build-dir" && args[i + 1]) {
@@ -605,6 +790,11 @@ async function main() {
     console.error(`Error: build directory not found: ${buildDir}`)
     process.exit(1)
   }
+
+  const gameName = deriveGameName(buildDir)
+  const timestamp = formatTimestamp()
+  const outputFile = path.join(OUTPUT_DIR, `${sanitizeFileName(gameName)} - ${timestamp}.txt`)
+  const restoreConsole = createReportWriter(outputFile, gameName, buildDir, timestamp)
 
   console.log(bold("\n  Slot Engine Build Analyser"))
   console.log(dim("  " + buildDir))
@@ -636,6 +826,8 @@ async function main() {
   }
 
   console.log(bold(cyan("\n  Analysis complete.\n")))
+  restoreConsole()
+  process.stdout.write(`\nReport saved to ${outputFile}\n`)
 }
 
 main().catch((err) => {
