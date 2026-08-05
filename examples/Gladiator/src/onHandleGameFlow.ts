@@ -756,6 +756,28 @@ function playFreeSpins(ctx: Context) {
 function endFreeSpins(ctx: Context) {
   ctx.state.currentFreespinAmount = 0
 
+  // Hidden tier guarantees a minimum 100x total win, topped up onto the
+  // REAL wallet total (not just the display event) so it affects payout.
+  const HIDDEN_MIN_WIN = 100
+  if (
+    ctx.state.userData.isHiddenFreeSpins &&
+    ctx.state.userData.totalFreeSpinsWin < HIDDEN_MIN_WIN
+  ) {
+    const topUp = roundToDecimal(
+      HIDDEN_MIN_WIN - ctx.state.userData.totalFreeSpinsWin,
+    )
+    ctx.services.wallet.addSpinWin(topUp)
+    ctx.services.wallet.confirmSpinWin()
+    ctx.state.userData.totalFreeSpinsWin = capToMaxWin(
+      ctx,
+      ctx.state.userData.totalFreeSpinsWin + topUp,
+    )
+    ctx.services.data.addBookEvent({
+      type: "hiddenGuaranteeTopUp",
+      data: { amount: topUp },
+    })
+  }
+
   // Free spins ended
   const totalWin = capToMaxWin(ctx, ctx.state.userData.totalFreeSpinsWin)
   const winLevel = calculateWinLevel(totalWin)

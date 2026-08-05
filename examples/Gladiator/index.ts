@@ -458,6 +458,62 @@ function neutralScaling(...criterias: string[]) {
   )
 }
 
+// Shape a single criteria into a chosen curve. `factors` maps 1:1 onto
+// `bins` (defaults to NEUTRAL_BINS).
+function customScaling(
+  criteria: string,
+  factors: number[],
+  bins: Array<[number, number]> = NEUTRAL_BINS,
+) {
+  return bins.map(([lo, hi], i) => ({
+    criteria,
+    scaleFactor: factors[i],
+    winRange: [lo, hi] as [number, number],
+    probability: 1,
+  }))
+}
+
+// Basegame shaping bins: splits the dust bin into 0.01-0.5x/0.5-1x so each
+// can be scaled independently.
+const BASEGAME_BINS: Array<[number, number]> = [
+  [0.01, 0.5],
+  [0.5, 1],
+  [1, 2],
+  [2, 5],
+  [5, 10],
+  [10, 20],
+  [20, 50],
+  [50, 100],
+  [100, 200],
+  [200, 500],
+  [500, 1000],
+  [1000, 2000],
+  [2000, 5000],
+  [5000, 10000],
+  [10000, 15000],
+  [15000, 15000],
+]
+
+// Free-spin shaping bins aligned to the analyzer's win-range buckets so the
+// bell curves can be tuned bucket-by-bucket with precise control.
+const FS_BINS: Array<[number, number]> = [
+  [0.01, 1],
+  [1, 2],
+  [2, 5],
+  [5, 10],
+  [10, 20],
+  [20, 50],
+  [50, 100],
+  [100, 200],
+  [200, 500],
+  [500, 1000],
+  [1000, 2000],
+  [2000, 5000],
+  [5000, 10000],
+  [10000, 15000],
+  [15000, 15000],
+]
+
 // Add or remove from this to choose what gets simulated or not.
 game.configureSimulation({
   simRunsAmount: {
@@ -488,12 +544,12 @@ game.configureOptimization({
           priority: 5,
         }),
         basegame: new OptimizationConditions({
-          rtp: 0.2125,
-          hitRate: 8,
+          rtp: 0.12,
+          hitRate: 6,
           priority: 1,
         }),
         freespins: new OptimizationConditions({
-          rtp: 0.265,
+          rtp: 0.345,
           hitRate: 150,
           searchConditions: {
             criteria: "freespins",
@@ -501,7 +557,7 @@ game.configureOptimization({
           priority: 2,
         }),
         superfreespins: new OptimizationConditions({
-          rtp: 0.178,
+          rtp: 0.2,
           hitRate: 500,
           searchConditions: {
             criteria: "superfreespins",
@@ -509,7 +565,7 @@ game.configureOptimization({
           priority: 3,
         }),
         hiddenfreespins: new OptimizationConditions({
-          rtp: 0.2995,
+          rtp: 0.29,
           hitRate: 1000,
           searchConditions: {
             criteria: "hiddenfreespins",
@@ -517,11 +573,57 @@ game.configureOptimization({
           priority: 4,
         }),
       },
-      scaling: new OptimizationScaling(
-        neutralScaling("basegame", "freespins", "superfreespins", "hiddenfreespins"),
-      ),
+      scaling: new OptimizationScaling([
+        // Basegame: crush 0.01-0.5x further, lift 0.5x-20x harder (skewed
+        // toward the cheaper 1-2x/2-5x end since basegame's fixed 0.68x mean
+        // caps how much probability the pricier 10-20x end can absorb).
+        // 1-2x pushed further, 2-5x eased back, per explicit request.
+        ...customScaling(
+          "basegame",
+          [
+            0.05, 10, 100, 15, 10, 6, 0.05, 0.05, 0.05, 0.05, 1, 1, 1, 1, 1, 1,
+          ],
+          BASEGAME_BINS,
+        ),
+        // Normal FS: single-peaked bell centred on ~50-100x. Bins aligned to
+        // the analyzer buckets; the dominant natural 10-25x spike is crushed.
+        // Reshaped bell: crush the 100-200x secondary hump, ease the 20-50x
+        // spike, and build up 5-10x/10-20x so weight skews to the low end.
+        ...customScaling(
+          "freespins",
+          [
+            0.7, 1.1, 1.1, 1.2, 0.8, 1.5, 3.2, 1.2, 6.0, 9.0, 0.1, 0.1,
+            0.04, 0.02, 1,
+          ],
+          FS_BINS,
+        ),
+        // Super FS: single-peaked bell weighted toward the high end. The
+        // natural 5-50x hump is crushed broadly and 50-200x boosted so the
+        // rise into the 200-500x peak is smooth and not bimodal; 200x+ is
+        // boosted further so it spreads a bit more into the upper ranges.
+        ...customScaling(
+          "superfreespins",
+          [
+            0.2, 0.35, 0.5, 0.3, 0.2, 0.05, 15, 8, 40, 35, 12, 6,
+            0.08, 0.03, 1,
+          ],
+          FS_BINS,
+        ),
+        // Hidden FS: bell weighted toward the high end. Sub-100x is nearly
+        // moot since endFreeSpins now tops up any round under 100x to the
+        // guaranteed floor; 200-500x is eased and 500x+ boosted hard so
+        // hidden carries a larger share of the game's big wins.
+        ...customScaling(
+          "hiddenfreespins",
+          [
+            0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.8, 0.5, 40, 15, 8,
+            4, 2, 1,
+          ],
+          FS_BINS,
+        ),
+      ]),
       parameters: new OptimizationParameters({
-        minMeanToMedian: 2,
+        minMeanToMedian: 0.5,
         maxMeanToMedian: 20,
       }),
     },
@@ -718,7 +820,7 @@ game.configureOptimization({
 })
 
 game.runTasks({
-  doSimulation: true,
+  doSimulation: false,
   doOptimization: true,
   optimizationOpts: {
     gameModes: ["base"],
