@@ -3,7 +3,7 @@ import { GeneratedReelSet } from "@slot-engine/core"
 const SYM_WEIGHTS = {
   base: {
     S: 3,
-    W: 8,
+    WR: 8,
     H1: 35,
     H2: 35,
     H3: 40,
@@ -16,7 +16,7 @@ const SYM_WEIGHTS = {
   },
   freespin: {
     S: 3,
-    W: 10,
+    WR: 10,
     H1: 40,
     H2: 40,
     H3: 45,
@@ -29,7 +29,7 @@ const SYM_WEIGHTS = {
   },
   superfreespin: {
     S: 3,
-    W: 12,
+    WR: 12,
     H1: 40,
     H2: 40,
     H3: 45,
@@ -40,25 +40,12 @@ const SYM_WEIGHTS = {
     L4: 55,
     L5: 55,
   },
-  // hiddenfreespin: WILD FREQUENCY CUT (2026-07-25) — W lowered 15->10 (now
-  // matching freespin's baseline instead of being the richest of the three
-  // FS tiers by frequency). Real simulated data showed hiddenfreespins
-  // rounds compounding to a catastrophic raw median of ~2213x even after
-  // flattening HIDDEN_MULTIPLIER_TABLE's per-roll values (onHandleGameFlow.ts)
-  // — the fix for VALUE alone wasn't enough because reelMultipliers
-  // ACCUMULATE across every wild explosion for the whole 12-24 spin round,
-  // so a high wild-LANDING FREQUENCY compounds many modest rolls into a huge
-  // total regardless of how small each individual roll is. Cutting the
-  // frequency directly reduces how many explosion events can stack up per
-  // round. Hidden still feels richest via HIDDEN_MULTIPLIER_TABLE's higher
-  // value floor (5x min) and fatter tail vs Normal/Super — just no longer
-  // via landing frequency too. S kept >= freespin/superfreespin so forcing
-  // 5-of-6 scatter reels stays solvable on every generated reel strip (S:1
-  // previously starved some reels of any scatter occurrence, crashing
-  // forced-scatter draws).
+  // hiddenfreespin: richest tier by multiplier VALUE (see HIDDEN_MULTIPLIER_TABLE
+  // in onHandleGameFlow.ts, 10x min floor) but kept at the same WR landing
+  // frequency as freespin so hidden rounds don't compound too many expansions.
   hiddenfreespin: {
     S: 3,
-    W: 10,
+    WR: 10,
     H1: 40,
     H2: 40,
     H3: 45,
@@ -73,7 +60,7 @@ const SYM_WEIGHTS = {
   // can be tuned independently later for max-win shaping.
   maxwin: {
     S: 3,
-    W: 18,
+    WR: 18,
     H1: 50,
     H2: 50,
     H3: 45,
@@ -84,13 +71,12 @@ const SYM_WEIGHTS = {
     L4: 35,
     L5: 35,
   },
-  // featureSpin: identical to base except a bumped wild weight so the
-  // guaranteed AT LEAST 3 wilds (3-5) forced onto every spin (see
-  // onHandleGameFlow) can be found and reach that count without excessive
-  // retries.
+  // featureSpin: identical to base except a bumped WR weight so the
+  // guaranteed wild-reel forced onto every spin (see onHandleGameFlow) can
+  // be found without excessive retries.
   featureSpin: {
     S: 3,
-    W: 12,
+    WR: 20,
     H1: 35,
     H2: 35,
     H3: 40,
@@ -119,10 +105,13 @@ export const GENERATORS = {
       S: 1,
     },
     spaceBetweenSameSymbols: {
-      S: 5
+      S: 4,
+      WR: 4,
     },
+    // 5 (not 4) is required so S/WR can never both fall inside the same
+    // 6-row visible reel window (1 top pad + 4 main rows + 1 bottom pad).
     spaceBetweenSymbols: {
-
+      S: { WR: 5 },
     },
   }),
   freespin: new GeneratedReelSet({
@@ -133,10 +122,11 @@ export const GENERATORS = {
 
     },
     spaceBetweenSameSymbols: {
-      S: 5,
+      S: 4,
+      WR: 4,
     },
     spaceBetweenSymbols: {
-
+      S: { WR: 5 },
     },
   }),
   superfreespin: new GeneratedReelSet({
@@ -147,10 +137,11 @@ export const GENERATORS = {
 
     },
     spaceBetweenSameSymbols: {
-      S: 5,
+      S: 4,
+      WR: 4,
     },
     spaceBetweenSymbols: {
-
+      S: { WR: 5 },
     },
   }),
   hiddenfreespin: new GeneratedReelSet({
@@ -161,10 +152,11 @@ export const GENERATORS = {
 
     },
     spaceBetweenSameSymbols: {
-      S: 5,
+      S: 4,
+      WR: 4,
     },
     spaceBetweenSymbols: {
-
+      S: { WR: 5 },
     },
   }),
   maxwin: new GeneratedReelSet({
@@ -175,15 +167,16 @@ export const GENERATORS = {
 
     },
     spaceBetweenSameSymbols: {
-      S: 5,
+      S: 4,
+      WR: 4,
     },
     spaceBetweenSymbols: {
-
+      S: { WR: 5 },
     },
   }),
-  // featureSpin: guarantees at least one W (and one S, for the forced
+  // featureSpin: guarantees at least one WR (and one S, for the forced
   // 3/4/5-scatter bonus trigger draws that also use this reel set) on
-  // every physical reel so the guaranteed-2-to-5-wilds forcing logic in
+  // every physical reel so the guaranteed-wild-reel forcing logic in
   // onHandleGameFlow never runs out of eligible reels to pick from.
   featureSpin: new GeneratedReelSet({
     id: "featureSpin",
@@ -194,13 +187,14 @@ export const GENERATORS = {
     },
     symbolQuotas: {
       S: 1,
-      W: 1,
+      WR: 1,
     },
     spaceBetweenSameSymbols: {
-      S: 5,
+      S: 4,
+      WR: 4,
     },
     spaceBetweenSymbols: {
-
+      S: { WR: 5 },
     },
   }),
 } as const

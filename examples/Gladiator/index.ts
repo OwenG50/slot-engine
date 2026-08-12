@@ -17,11 +17,13 @@ import { GENERATORS } from "./src/reels"
 import { onHandleGameFlow } from "./src/onHandleGameFlow"
 
 export const userState = defineUserState({
-  // Sticky wilds carry their own accumulated multiplier, keyed by "reel-row".
-  persistentWilds: new Map<string, number>(),
+  // Sticky wild-reel multipliers, keyed by reel index.
+  persistentWildReels: new Map<number, number>(),
   totalFreeSpinsWin: 0,
   isSuperFreeSpins: false,
+  isFirstSuperFreeSpin: false,
   isHiddenFreeSpins: false,
+  isFirstHiddenFreeSpin: false,
 })
 
 export type UserStateType = typeof userState
@@ -33,13 +35,13 @@ export const symbols = defineSymbols({
       isScatter: true,
     },
   }),
-  W: new GameSymbol({
-    id: "W",
+  // Expanding wild reel: fills the entire reel with wilds and carries a
+  // rolled-in multiplier (see resolveWildReelMultipliers in onHandleGameFlow.ts).
+  WR: new GameSymbol({
+    id: "WR",
     properties: {
+      isWildReel: true,
       isWild: true,
-    },
-    pays: {
-      6: 20,
     },
   }),
   H1: new GameSymbol({
@@ -48,7 +50,6 @@ export const symbols = defineSymbols({
       3: 5,
       4: 10,
       5: 20,
-      6: 50,
     },
   }),
   H2: new GameSymbol({
@@ -57,7 +58,6 @@ export const symbols = defineSymbols({
       3: 3,
       4: 6,
       5: 12,
-      6: 30,
     },
   }),
   H3: new GameSymbol({
@@ -66,7 +66,6 @@ export const symbols = defineSymbols({
       3: 2,
       4: 4,
       5: 8,
-      6: 18,
     },
   }),
   H4: new GameSymbol({
@@ -75,7 +74,6 @@ export const symbols = defineSymbols({
       3: 1.5,
       4: 3,
       5: 6,
-      6: 12,
     },
   }),
   L1: new GameSymbol({
@@ -84,7 +82,6 @@ export const symbols = defineSymbols({
       3: 0.4,
       4: 0.8,
       5: 1.6,
-      6: 3,
     },
   }),
   L2: new GameSymbol({
@@ -93,7 +90,6 @@ export const symbols = defineSymbols({
       3: 0.3,
       4: 0.6,
       5: 1.2,
-      6: 2.5,
     },
   }),
   L3: new GameSymbol({
@@ -102,7 +98,6 @@ export const symbols = defineSymbols({
       3: 0.2,
       4: 0.5,
       5: 1,
-      6: 2,
     },
   }),
   L4: new GameSymbol({
@@ -111,7 +106,6 @@ export const symbols = defineSymbols({
       3: 0.1,
       4: 0.4,
       5: 0.8,
-      6: 1.5,
     },
   }),
   L5: new GameSymbol({
@@ -120,7 +114,6 @@ export const symbols = defineSymbols({
       3: 0.1,
       4: 0.3,
       5: 0.6,
-      6: 1.2,
     },
   }),
 })
@@ -132,8 +125,8 @@ export const gameModes = defineGameModes({
     name: "base",
     cost: 1,
     rtp: 0.96,
-    reelsAmount: 6,
-    symbolsPerReel: [5, 5, 5, 5, 5, 5],
+    reelsAmount: 5,
+    symbolsPerReel: [4, 4, 4, 4, 4],
     isBonusBuy: false,
     reelSets: [...Object.values(GENERATORS)],
     resultSets: [
@@ -198,8 +191,8 @@ export const gameModes = defineGameModes({
     name: "bonusHunt",
     cost: 3,
     rtp: 0.96,
-    reelsAmount: 6,
-    symbolsPerReel: [5, 5, 5, 5, 5, 5],
+    reelsAmount: 5,
+    symbolsPerReel: [4, 4, 4, 4, 4],
     isBonusBuy: false,
     reelSets: [...Object.values(GENERATORS)],
     resultSets: [
@@ -253,8 +246,8 @@ export const gameModes = defineGameModes({
     name: "bonusFeature",
     cost: 100,
     rtp: 0.96,
-    reelsAmount: 6,
-    symbolsPerReel: [5, 5, 5, 5, 5, 5],
+    reelsAmount: 5,
+    symbolsPerReel: [4, 4, 4, 4, 4],
     isBonusBuy: true,
     reelSets: [...Object.values(GENERATORS)],
     resultSets: [
@@ -273,8 +266,8 @@ export const gameModes = defineGameModes({
     name: "superBonusFeature",
     cost: 500,
     rtp: 0.96,
-    reelsAmount: 6,
-    symbolsPerReel: [5, 5, 5, 5, 5, 5],
+    reelsAmount: 5,
+    symbolsPerReel: [4, 4, 4, 4, 4],
     isBonusBuy: true,
     reelSets: [...Object.values(GENERATORS)],
     resultSets: [
@@ -293,8 +286,8 @@ export const gameModes = defineGameModes({
     name: "mysteryBonusFeature",
     cost: 500,
     rtp: 0.96,
-    reelsAmount: 6,
-    symbolsPerReel: [5, 5, 5, 5, 5, 5],
+    reelsAmount: 5,
+    symbolsPerReel: [4, 4, 4, 4, 4],
     isBonusBuy: true,
     reelSets: [...Object.values(GENERATORS)],
     resultSets: [
@@ -329,10 +322,10 @@ export const gameModes = defineGameModes({
   }),
   featureSpin: new GameMode({
     name: "featureSpin",
-    cost: 100,
+    cost: 50,
     rtp: 0.96,
-    reelsAmount: 6,
-    symbolsPerReel: [5, 5, 5, 5, 5, 5],
+    reelsAmount: 5,
+    symbolsPerReel: [4, 4, 4, 4, 4],
     isBonusBuy: true,
     reelSets: [...Object.values(GENERATORS)],
     resultSets: [
@@ -517,12 +510,12 @@ const FS_BINS: Array<[number, number]> = [
 // Add or remove from this to choose what gets simulated or not.
 game.configureSimulation({
   simRunsAmount: {
-    base: 100000,
-    // bonusHunt: 300000,
-    // featureSpin: 100000,
-    // bonusFeature: 100000,
-    // mysteryBonusFeature: 100000,
-    // superBonusFeature: 100000,
+    base: 10000,
+    bonusHunt: 10000,
+    featureSpin: 10000,
+    bonusFeature: 10000,
+    mysteryBonusFeature: 10000,
+    superBonusFeature: 10000,
   },
   concurrency: 24,
 })
@@ -611,13 +604,14 @@ game.configureOptimization({
         ),
         // Hidden FS: bell weighted toward the high end. Sub-100x is nearly
         // moot since endFreeSpins now tops up any round under 100x to the
-        // guaranteed floor; 200-500x is eased and 500x+ boosted hard so
-        // hidden carries a larger share of the game's big wins.
+        // guaranteed floor; 100-200x (which absorbed the floor top-ups plus
+        // the freed 200-500x weight) is crushed hard so the set spreads
+        // out across 200x-15000x instead of bunching at one bucket.
         ...customScaling(
           "hiddenfreespins",
           [
-            0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.8, 0.5, 40, 15, 8,
-            4, 2, 1,
+            0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.15, 3, 50, 20, 10,
+            5, 2.5, 1,
           ],
           FS_BINS,
         ),
@@ -820,12 +814,12 @@ game.configureOptimization({
 })
 
 game.runTasks({
-  doSimulation: false,
-  doOptimization: true,
+  doSimulation: true,
+  doOptimization: false,
   optimizationOpts: {
-    gameModes: ["base"],
+    gameModes: ["base", "bonusHunt", "featureSpin", "bonusFeature", "superBonusFeature", "mysteryBonusFeature"],
   },
-  doAnalysis: true,
+  doAnalysis: false,
   analysisOpts: {
     gameModes: ["base"],
   },
