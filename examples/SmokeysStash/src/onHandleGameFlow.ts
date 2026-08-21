@@ -1,4 +1,4 @@
-import { GameContext, GameSymbol, LinesWinType, SPIN_TYPE } from "@slot-engine/core"
+import { GameContext, GameSymbol, LinesWinType, Reels, SPIN_TYPE } from "@slot-engine/core"
 import { GameModesType, SymbolsType, UserStateType } from ".."
 
 type Context = GameContext<GameModesType, SymbolsType, UserStateType>
@@ -32,8 +32,6 @@ const MULTIPLIER_TABLE: Array<{ value: number; weight: number }> = [
   { value: 50,  weight: 4   },
   { value: 75,  weight: 2   },
   { value: 100, weight: 1   },
-  { value: 150, weight: 1   },
-  { value: 250, weight: 1   },
 ]
 
 function pickWeightedMultiplier(
@@ -49,16 +47,105 @@ function pickWeightedMultiplier(
   return table[table.length - 1]!.value
 }
 
+function posKey(reel: number, row: number): string {
+  return `${reel}-${row}`
+}
+
+// Sums every wild-reel multiplier currently sitting on one physical reel —
+// this combined total is the effective multiplier for any winning line that
+// touches that reel via a wild position.
+function reelMultiplierTotal(wildPositions: Map<string, number>, reelIndex: number): number {
+  let total = 0
+  wildPositions.forEach((mult, key) => {
+    if (Number(key.split("-")[0]) === reelIndex) total += mult
+  })
+  return total
+}
+
+const INITIAL_FREE_SPINS = 10
+
+function getScatterCounts(ctx: Context): { sCount: number; ssCount: number } {
+  const s = ctx.config.symbols.get("S")!
+  const ss = ctx.config.symbols.get("SS")!
+  const [sCount] = ctx.services.board.countSymbolsOnBoard(s)
+  const [ssCount] = ctx.services.board.countSymbolsOnBoard(ss)
+  return { sCount, ssCount }
+}
+
+// No reel may ever show more than one scatter-type cell, whether S, SS, or
+// two of the same type.
+function hasScatterReelConflict(ctx: Context): boolean {
+  return ctx.services.board
+    .getBoardReels()
+    .some((reel) => reel.filter((symbol) => symbol.properties.get("isScatter")).length > 1)
+}
+
+// Neither scatter type may ever land more than 3 times in one spin.
+function isScatterCountValid(sCount: number, ssCount: number): boolean {
+  return sCount <= 3 && ssCount <= 3
+}
+
+// Normal: 3 S. Super: 3 SS. Hidden: a MIXED 2-of-one + 3-of-other split
+// (checked first since it overlaps with the single-type 3 count otherwise).
+function getBonusTier(sCount: number, ssCount: number): "normal" | "super" | "hidden" | null {
+  if ((sCount === 2 && ssCount === 3) || (sCount === 3 && ssCount === 2)) return "hidden"
+  if (sCount >= 3) return "normal"
+  if (ssCount >= 3) return "super"
+  return null
+}
+
+function collectScatterPositions(ctx: Context): Array<{ reel: number; row: number; type: "S" | "SS" }> {
+  const positions: Array<{ reel: number; row: number; type: "S" | "SS" }> = []
+  ctx.services.board.getBoardReels().forEach((reel, reelIndex) => {
+    reel.forEach((symbol, rowIndex) => {
+      if (symbol.id === "S" || symbol.id === "SS") {
+        positions.push({ reel: reelIndex, row: rowIndex, type: symbol.id })
+      }
+    })
+  })
+  return positions
+}
+
+// Forces an exact (targetS, targetSS) scatter split onto disjoint reels —
+// each reel can only ever be assigned to one of the two symbols.
+function forceScatterCombo(
+  ctx: Context,
+  reels: Reels,
+  targetS: number,
+  targetSS: number,
+): Record<string, number> {
+  const scatterS = ctx.config.symbols.get("S")!
+  const scatterSS = ctx.config.symbols.get("SS")!
+
+  const sForced =
+    targetS > 0
+      ? ctx.services.board.getRandomReelStops(
+          reels,
+          ctx.services.board.getReelStopsForSymbol(reels, scatterS),
+          targetS,
+        )
+      : {}
+
+  const usedReels = new Set(Object.keys(sForced).map(Number))
+  const ssStops = ctx.services.board
+    .getReelStopsForSymbol(reels, scatterSS)
+    .map((stops, reelIndex) => (usedReels.has(reelIndex) ? [] : stops))
+
+  const ssForced = targetSS > 0 ? ctx.services.board.getRandomReelStops(reels, ssStops, targetSS) : {}
+
+  return { ...sForced, ...ssForced }
+}
+
 export function onHandleGameFlow(ctx: Context) {
   const isFreeSpin = ctx.state.currentSpinType === SPIN_TYPE.FREE_SPINS
 
   drawBoard(ctx)
   handleAnticipation(ctx)
 
-  const wildReelMultipliers = resolveWildReelMultipliers(ctx, isFreeSpin)
-  addRevealEvent(ctx, wildReelMultipliers)
+  const wildPositions = resolveWildReelMultipliers(ctx, isFreeSpin)
+  addRevealEvent(ctx, wildPositions)
 
-  const currentSpinWin = handleWins(ctx, wildReelMultipliers, isFreeSpin)
+  const currentSpinWin = handleWins(ctx, wildPositions, isFreeSpin)
   ctx.services.wallet.confirmSpinWin()
 
   const spinTypeBeforeCheck = ctx.state.currentSpinType
@@ -102,23 +189,20 @@ export function onHandleGameFlow(ctx: Context) {
 
 function drawBoard(ctx: Context) {
   const reels = ctx.services.board.getRandomReelset()
-  const scatter = ctx.config.symbols.get("S")!
   const wildReel = ctx.config.symbols.get("WR")!
   const isFreeSpin = ctx.state.currentSpinType === SPIN_TYPE.FREE_SPINS
 
   if (isFreeSpin) {
-    // Keep redrawing until max 4 scatters land (the 5-scatter Hidden bonus
-    // can only be triggered from the base game, never as an FS retrigger).
+    // Scatters remain fully live during free spins (each landed S/SS grants
+    // +1 extra spin, see checkFreespins) — just keep the universal caps.
     while (true) {
       ctx.services.board.resetBoard()
       ctx.services.board.drawBoardWithRandomStops(reels)
 
-      const scatInvalid = ctx.services.board.isSymbolOnAnyReelMultipleTimes(scatter)
-      const [scatCount] = ctx.services.board.countSymbolsOnBoard(scatter)
+      if (hasScatterReelConflict(ctx)) continue
+      const { sCount, ssCount } = getScatterCounts(ctx)
+      if (!isScatterCountValid(sCount, ssCount)) continue
 
-      if (scatCount > 4 || scatInvalid) continue
-
-      if (ctx.state.userData.isFirstHiddenFreeSpin && countWildReels(ctx) < 2) continue
       if (ctx.state.userData.isFirstSuperFreeSpin && countWildReels(ctx) < 1) continue
 
       break
@@ -131,49 +215,63 @@ function drawBoard(ctx: Context) {
       ctx.state.userData.isFirstHiddenFreeSpin = false
     }
 
-    // Restore sticky wild reels (with their fixed initial multiplier) — during
-    // free spins a landed wild reel stays expanded for the rest of the feature.
-    const persistentWildReels = ctx.state.userData.persistentWildReels
-    if (persistentWildReels.size > 0) {
+    // Restore sticky wild-reel positions with their fixed multiplier — only
+    // the exact cell that landed stays wild; every other cell on that reel
+    // (including other rows of the same reel) is still freshly drawn.
+    const persistentWildPositions = ctx.state.userData.persistentWildReels
+    if (persistentWildPositions.size > 0) {
       const boardReels = ctx.services.board.getBoardReels()
-      persistentWildReels.forEach((_multiplier, reelIndex) => {
+      persistentWildPositions.forEach((_multiplier, key) => {
+        const [reelIndex, row] = key.split("-").map(Number)
         const reel = boardReels[reelIndex]
-        if (!reel) return
-        for (let row = 0; row < reel.length; row++) {
-          reel[row] = wildReel
-        }
+        if (!reel || reel[row] === undefined) return
+        reel[row] = wildReel
       })
     }
   } else if (ctx.state.currentResultSet.forceFreespins) {
-    // Force scatter trigger in base game
+    // Force the exact scatter combo needed for this criteria's tier.
     const criteria = ctx.state.currentResultSet.criteria
-    const targetScatters = criteria.includes("hidden") ? 5 : criteria.includes("super") ? 4 : 3
     const isFeatureSpin = ctx.state.currentGameMode === "featureSpin"
-    // With S/WR forbidden from sharing a reel, a wild reel can only land on
-    // a reel NOT forced to scatter — impossible once every reel is forced
-    // (hidden tier forces all 5), so the guarantee only applies when at
-    // least one reel is left free.
-    const hasFreeReelForWildReel = targetScatters < reels.length
+
+    let targetS: number
+    let targetSS: number
+
+    if (criteria.includes("hidden")) {
+      // Mixed 2-and-3 split, randomly assigned between S/SS.
+      if (ctx.services.rng.randomFloat(0, 1) < 0.5) {
+        targetS = 2
+        targetSS = 3
+      } else {
+        targetS = 3
+        targetSS = 2
+      }
+    } else if (criteria.includes("super")) {
+      targetS = 0
+      targetSS = 3
+    } else {
+      targetS = 3
+      targetSS = 0
+    }
+
+    // With scatters forbidden from sharing a reel, a wild reel can only land
+    // on a reel NOT forced to a scatter — impossible once every reel is
+    // forced (hidden tier forces all 5), so the guarantee only applies when
+    // at least one reel is left free.
+    const hasFreeReelForWildReel = targetS + targetSS < reels.length
 
     while (true) {
       ctx.services.board.resetBoard()
 
-      const reelStops = ctx.services.board.getReelStopsForSymbol(reels, scatter)
-      const scatterReelStops = ctx.services.board.getRandomReelStops(
-        reels,
-        reelStops,
-        targetScatters, // Force 3, 4 or 5 scatters depending on tier
-      )
+      const forcedStops = forceScatterCombo(ctx, reels, targetS, targetSS)
 
       ctx.services.board.drawBoardWithForcedStops({
         reels,
-        forcedStops: scatterReelStops,
+        forcedStops,
       })
 
-      const scatInvalid = ctx.services.board.isSymbolOnAnyReelMultipleTimes(scatter)
-      const [scatCount] = ctx.services.board.countSymbolsOnBoard(scatter)
-
-      if (scatCount !== targetScatters || scatInvalid) continue
+      if (hasScatterReelConflict(ctx)) continue
+      const { sCount, ssCount } = getScatterCounts(ctx)
+      if (sCount !== targetS || ssCount !== targetSS) continue
 
       // featureSpin: guarantee at least one expanding wild reel on EVERY base
       // spin, including the ones that trigger a bonus.
@@ -205,26 +303,23 @@ function drawBoard(ctx: Context) {
           ctx.services.board.drawBoardWithRandomStops(reels)
         }
 
-        const scatInvalid = ctx.services.board.isSymbolOnAnyReelMultipleTimes(scatter)
-        const [scatCount] = ctx.services.board.countSymbolsOnBoard(scatter)
-
-        // Base validation: max 2 scatters (same rule as normal base game).
-        if (scatCount > 2 || scatInvalid) continue
+        if (hasScatterReelConflict(ctx)) continue
+        const { sCount, ssCount } = getScatterCounts(ctx)
+        // Base validation: never let an organic spin accidentally trigger a bonus.
+        if (!isScatterCountValid(sCount, ssCount) || getBonusTier(sCount, ssCount)) continue
         if (!boardHasWildReel(ctx)) continue
 
         break
       }
     } else {
-      // Normal base game - limit to max 2 scatters
+      // Normal base game — never let an organic spin accidentally trigger a bonus.
       while (true) {
         ctx.services.board.resetBoard()
         ctx.services.board.drawBoardWithRandomStops(reels)
 
-        const scatInvalid = ctx.services.board.isSymbolOnAnyReelMultipleTimes(scatter)
-        const [scatCount] = ctx.services.board.countSymbolsOnBoard(scatter)
-
-        // Base validation: max 2 scatters
-        if (scatCount > 2 || scatInvalid) continue
+        if (hasScatterReelConflict(ctx)) continue
+        const { sCount, ssCount } = getScatterCounts(ctx)
+        if (!isScatterCountValid(sCount, ssCount) || getBonusTier(sCount, ssCount)) continue
 
         break
       }
@@ -248,35 +343,38 @@ function countWildReels(ctx: Context): number {
     )
 }
 
-// Expanding wild reel: a landed WR reel rolls ONE initial multiplier from the
-// tier-appropriate pool and fills the whole reel with wilds. During free
-// spins that multiplier is fixed/sticky for the rest of the feature — it
-// never grows or re-rolls once set (see checkFreespins/endFreeSpins for the
-// reset points).
-function resolveWildReelMultipliers(ctx: Context, isFreeSpin: boolean): Map<number, number> {
+// Wild reels now land per-position — more than one can occupy the same
+// physical reel. Returns a map of "reel-row" -> that cell's own rolled
+// multiplier. During free spins, once a cell rolls its multiplier it becomes
+// sticky and is restored (same value, same position) every subsequent spin;
+// every other cell on that reel is still redrawn normally each spin.
+function resolveWildReelMultipliers(ctx: Context, isFreeSpin: boolean): Map<string, number> {
   const boardReels = ctx.services.board.getBoardReels()
-  const wildReelMultipliers = new Map<number, number>()
-  const persistentWildReels = ctx.state.userData.persistentWildReels
+  const wildPositions = new Map<string, number>()
+  const persistentWildPositions = ctx.state.userData.persistentWildReels
 
   boardReels.forEach((reel, reelIndex) => {
-    const hasWildReel = reel.some((symbol) => symbol.properties.get("isWildReel"))
-    if (!hasWildReel) return
+    reel.forEach((symbol, row) => {
+      const key = posKey(reelIndex, row)
 
-    if (isFreeSpin && persistentWildReels.has(reelIndex)) {
-      // Sticky wild reel — keep its fixed initial multiplier.
-      wildReelMultipliers.set(reelIndex, persistentWildReels.get(reelIndex)!)
-      return
-    }
+      if (isFreeSpin && persistentWildPositions.has(key)) {
+        // Sticky wild position — keep its fixed initial multiplier.
+        wildPositions.set(key, persistentWildPositions.get(key)!)
+        return
+      }
 
-    const mult = pickWeightedMultiplier(MULTIPLIER_TABLE, () => ctx.services.rng.randomFloat(0, 1))
-    wildReelMultipliers.set(reelIndex, mult)
+      if (!symbol.properties.get("isWildReel")) return
 
-    if (isFreeSpin) {
-      persistentWildReels.set(reelIndex, mult)
-    }
+      const mult = pickWeightedMultiplier(MULTIPLIER_TABLE, () => ctx.services.rng.randomFloat(0, 1))
+      wildPositions.set(key, mult)
+
+      if (isFreeSpin) {
+        persistentWildPositions.set(key, mult)
+      }
+    })
   })
 
-  return wildReelMultipliers
+  return wildPositions
 }
 
 function capToMaxWin(ctx: Context, value: number) {
@@ -393,51 +491,43 @@ function scaleWinsToCap(
   })
 }
 
-function addRevealEvent(ctx: Context, wildReelMultipliers: Map<number, number>) {
+function addRevealEvent(ctx: Context, wildPositions: Map<string, number>) {
   const boardReels = ctx.services.board.getBoardReels()
   const paddingTop = ctx.services.board.getPaddingTop()
   const paddingBottom = ctx.services.board.getPaddingBottom()
   const anticipation = ctx.services.board.getAnticipation()
-  const wildReelSymbol = ctx.config.symbols.get("WR")!
+
+  const buildSymbolData = (symbol: GameSymbol, reelIndex: number, row: number | null) => {
+    const symbolData: Record<string, any> = {
+      name: symbol.id,
+    }
+
+    if (symbol.properties.get("isWild")) {
+      symbolData["Wild"] = true
+    }
+    if (symbol.properties.get("isWildReel")) {
+      symbolData["Wild Reel"] = true
+      const mult = row !== null ? wildPositions.get(posKey(reelIndex, row)) : undefined
+      if (mult !== undefined) symbolData["multiplier"] = mult
+    }
+    if (symbol.properties.get("isScatter")) {
+      symbolData["Scatter"] = true
+    }
+
+    return symbolData
+  }
 
   // Build the board data structure with symbol info, including padding
   // Each reel array contains: [paddingTop symbols, main symbols, paddingBottom symbols]
   const board = boardReels.map((reel, reelIndex) => {
-    const isWildReelExpanded = wildReelMultipliers.has(reelIndex)
     const topPad = paddingTop[reelIndex] || []
     const bottomPad = paddingBottom[reelIndex] || []
-    // Padding cells reflect the reel's true (unrelated) strip stop and can
-    // otherwise still show a scatter even though the reel itself is fully
-    // expanded to wild — force them to the wild reel symbol too so S/WR
-    // can never visually share a reel.
-    const allSymbols: GameSymbol[] = isWildReelExpanded
-      ? [
-          ...topPad.map(() => wildReelSymbol),
-          ...reel,
-          ...bottomPad.map(() => wildReelSymbol),
-        ]
-      : [...topPad, ...reel, ...bottomPad]
-    const mult = wildReelMultipliers.get(reelIndex)
 
-    return allSymbols.map((symbol: GameSymbol) => {
-      const symbolData: Record<string, any> = {
-        name: symbol.id,
-      }
-
-      // Add symbol properties if they exist
-      if (symbol.properties.get("isWild")) {
-        symbolData["Wild"] = true
-      }
-      if (symbol.properties.get("isWildReel")) {
-        symbolData["Wild Reel"] = true
-        if (mult !== undefined) symbolData["multiplier"] = mult
-      }
-      if (symbol.properties.get("isScatter")) {
-        symbolData["Scatter"] = true
-      }
-
-      return symbolData
-    })
+    return [
+      ...topPad.map((symbol) => buildSymbolData(symbol, reelIndex, null)),
+      ...reel.map((symbol, row) => buildSymbolData(symbol, reelIndex, row)),
+      ...bottomPad.map((symbol) => buildSymbolData(symbol, reelIndex, null)),
+    ]
   })
 
   // Get the padding positions (reel stops used for drawing)
@@ -458,32 +548,32 @@ function addRevealEvent(ctx: Context, wildReelMultipliers: Map<number, number>) 
 }
 
 function handleAnticipation(ctx: Context) {
-  const scatter = ctx.config.symbols.get("S")!
-  const [_, scatterCount] = ctx.services.board.countSymbolsOnBoard(scatter)
-
   let count = 0
 
   for (const [i, reel] of ctx.services.board.getBoardReels().entries()) {
-    // If we already have 2 scatters, set anticipation for remaining reels
+    // If we already have 2 scatters (either type, combined), set anticipation for remaining reels
     if (count >= 2) {
       ctx.services.board.setAnticipationForReel(i, true)
     }
-    // Count scatters on this reel
-    if (scatterCount[i] > 0) {
+    // Count scatters (S or SS) on this reel
+    if (reel.some((symbol) => symbol.properties.get("isScatter"))) {
       count++
     }
   }
 }
 
-function handleWins(ctx: Context, wildReelMultipliers: Map<number, number>, isFreeSpin = false): number {
+function handleWins(ctx: Context, wildPositions: Map<string, number>, isFreeSpin = false): number {
   const boardReels = ctx.services.board.getBoardReels()
   const wildReelSymbol = ctx.config.symbols.get("WR")!
 
-  // Expand: any reel carrying a wild-reel multiplier becomes fully wild for
-  // win evaluation (WR itself already reports isWild, but every row must be
-  // wild for the whole reel to count, not just the row it physically landed on).
+  const wildReels = new Set<number>()
+  wildPositions.forEach((_mult, key) => wildReels.add(Number(key.split("-")[0])))
+
+  // Win evaluation treats any reel containing a wild position as fully wild
+  // across every row (not just the landed cell) — the reveal event still
+  // shows the real per-cell layout, this expansion is evaluation-only.
   const modifiedBoardReels = boardReels.map((reel, reelIndex) =>
-    wildReelMultipliers.has(reelIndex) ? reel.map(() => wildReelSymbol) : reel,
+    wildReels.has(reelIndex) ? reel.map(() => wildReelSymbol) : reel,
   )
 
   // 5-reel x 4-row payline map: 4 straight lines, 3 adjacent-row-pair
@@ -515,15 +605,16 @@ function handleWins(ctx: Context, wildReelMultipliers: Map<number, number>, isFr
 
   let totalPayout = 0
   let processedWins = winCombinations.map((combo) => {
-    // Sum the multipliers of every distinct wild reel touched by this line;
-    // falls back to 1x if no wild reel is involved.
+    // A line touches a reel's wild multiplier if that reel has any wild
+    // position on it at all; the reel's combined total (every wild position
+    // on that reel summed) is then used as the multiplier.
     const touchedReels = new Set<number>()
     combo.symbols.forEach((sym) => {
-      if (wildReelMultipliers.has(sym.reelIndex)) touchedReels.add(sym.reelIndex)
+      if (wildReels.has(sym.reelIndex)) touchedReels.add(sym.reelIndex)
     })
 
     const comboMultiplier = touchedReels.size > 0
-      ? Array.from(touchedReels).reduce((sum, reelIndex) => sum + (wildReelMultipliers.get(reelIndex) ?? 1), 0)
+      ? Array.from(touchedReels).reduce((sum, reelIndex) => sum + reelMultiplierTotal(wildPositions, reelIndex), 0)
       : 1
 
     const comboPayout = roundToDecimal(combo.payout * comboMultiplier)
@@ -603,7 +694,7 @@ function handleWins(ctx: Context, wildReelMultipliers: Map<number, number>, isFr
 function calculateWinLevel(payout: number): number {
   const multiplier = payout
 
-  if (multiplier === 15000) return 6
+  if (multiplier === 25000) return 6
   if (multiplier >= 200) return 5
   if (multiplier >= 50) return 4
   if (multiplier >= 25) return 3
@@ -614,95 +705,66 @@ function calculateWinLevel(payout: number): number {
 }
 
 function checkFreespins(ctx: Context) {
-  const scatter = ctx.config.symbols.get("S")!
-  const [scatCount] = ctx.services.board.countSymbolsOnBoard(scatter)
-
-  let freespinsAwarded = ctx.services.game.getFreeSpinsForScatters(
-    ctx.state.currentSpinType,
-    scatCount,
-  )
-
-  if (freespinsAwarded <= 0) return
-
-  // Determine the free-spin tier from the number of triggering scatters:
-  //   3 scatters -> normal, 4 -> super, 5+ -> hidden.
-  const isHiddenBonus = scatCount >= 5
-  const isSuperBonus = !isHiddenBonus && scatCount >= 4
   const isTriggerSpin = ctx.state.currentSpinType === SPIN_TYPE.BASE_GAME
-  const currentGameMode = ctx.state.currentGameMode
-
-  // Fixed free-spin counts for specific bonus-buy modes, overriding the
-  // shared scatter-count table above.
-  if (isTriggerSpin) {
-    if (currentGameMode === "bonusFeature" || currentGameMode === "superBonusFeature") {
-      freespinsAwarded = 8
-    } else if (currentGameMode === "mysteryBonusFeature" && isHiddenBonus) {
-      freespinsAwarded = 8
-    }
-  }
-
-  ctx.services.game.awardFreespins(freespinsAwarded)
+  const { sCount, ssCount } = getScatterCounts(ctx)
 
   if (isTriggerSpin) {
-    const positions: Array<{ reel: number; row: number }> = []
-    const boardReels = ctx.services.board.getBoardReels()
+    const tier = getBonusTier(sCount, ssCount)
+    if (!tier) return
 
-    boardReels.forEach((reel, reelIndex) => {
-      reel.forEach((symbol, rowIndex) => {
-        if (symbol.properties.get("isScatter")) {
-          positions.push({ reel: reelIndex, row: rowIndex })
-        }
-      })
-    })
+    ctx.services.game.awardFreespins(INITIAL_FREE_SPINS)
 
-    const tier = isHiddenBonus ? "hidden" : isSuperBonus ? "super" : "normal"
+    const positions = collectScatterPositions(ctx)
 
     ctx.services.data.addBookEvent({
       type: "freeSpinTrigger",
       data: {
-        totalFs: freespinsAwarded,
+        totalFs: INITIAL_FREE_SPINS,
         positions,
         tier,
       },
     })
 
-    // Initialize free spins state. Sticky wild reels start fresh for the
-    // feature and keep their fixed multiplier across its spins (reset again
-    // at endFreeSpins).
+    // Initialize free spins state. Sticky wild-reel positions start fresh for
+    // the feature and keep their fixed multiplier across its spins (reset
+    // again at endFreeSpins).
     ctx.state.userData.persistentWildReels = new Map()
-    ctx.state.userData.isSuperFreeSpins = isSuperBonus
-    ctx.state.userData.isFirstSuperFreeSpin = isSuperBonus
-    ctx.state.userData.isHiddenFreeSpins = isHiddenBonus
-    ctx.state.userData.isFirstHiddenFreeSpin = isHiddenBonus
+    ctx.state.userData.isSuperFreeSpins = tier === "super"
+    ctx.state.userData.isFirstSuperFreeSpin = tier === "super"
+    ctx.state.userData.isHiddenFreeSpins = tier === "hidden"
+    ctx.state.userData.isFirstHiddenFreeSpin = tier === "hidden"
 
     ctx.state.currentSpinType = SPIN_TYPE.FREE_SPINS
     playFreeSpins(ctx)
     return
   }
 
-  // Free spins retrigger
-  if (ctx.state.currentSpinType === SPIN_TYPE.FREE_SPINS) {
-    const positions: Array<{ reel: number; row: number }> = []
-    const boardReels = ctx.services.board.getBoardReels()
+  // Mid-feature: every landed scatter of the relevant type(s) for this tier
+  // grants +1 free spin each, with no cap on the number of retriggers.
+  //   normal tier (S only reel) -> count S
+  //   super tier  (SS only reel) -> count SS
+  //   hidden tier (both on reel) -> count S + SS
+  const additionalFs = ctx.state.userData.isHiddenFreeSpins
+    ? sCount + ssCount
+    : ctx.state.userData.isSuperFreeSpins
+      ? ssCount
+      : sCount
 
-    boardReels.forEach((reel, reelIndex) => {
-      reel.forEach((symbol, rowIndex) => {
-        if (symbol.properties.get("isScatter")) {
-          positions.push({ reel: reelIndex, row: rowIndex })
-        }
-      })
-    })
+  if (additionalFs <= 0) return
 
-    ctx.services.data.addBookEvent({
-      type: "addAdditionalFreeSpins",
-      data: {
-        additionalFs: freespinsAwarded,
-        remainingFs: ctx.state.currentFreespinAmount,
-        totalFs: ctx.state.totalFreespinAmount,
-        positions,
-      },
-    })
-  }
+  ctx.services.game.awardFreespins(additionalFs)
+
+  const positions = collectScatterPositions(ctx)
+
+  ctx.services.data.addBookEvent({
+    type: "addAdditionalFreeSpins",
+    data: {
+      additionalFs,
+      remainingFs: ctx.state.currentFreespinAmount,
+      totalFs: ctx.state.totalFreespinAmount,
+      positions,
+    },
+  })
 }
 
 function playFreeSpins(ctx: Context) {
@@ -722,9 +784,9 @@ function playFreeSpins(ctx: Context) {
     })
 
     drawBoard(ctx)
-    const wildReelMultipliers = resolveWildReelMultipliers(ctx, true)
-    addRevealEvent(ctx, wildReelMultipliers)
-    handleWins(ctx, wildReelMultipliers, true)
+    const wildPositions = resolveWildReelMultipliers(ctx, true)
+    addRevealEvent(ctx, wildPositions)
+    handleWins(ctx, wildPositions, true)
     ctx.services.wallet.confirmSpinWin()
 
     if (hasReachedMaxWin(ctx)) {
@@ -740,28 +802,6 @@ function playFreeSpins(ctx: Context) {
 
 function endFreeSpins(ctx: Context) {
   ctx.state.currentFreespinAmount = 0
-
-  // Hidden tier guarantees a minimum 100x total win, topped up onto the
-  // REAL wallet total (not just the display event) so it affects payout.
-  const HIDDEN_MIN_WIN = 100
-  if (
-    ctx.state.userData.isHiddenFreeSpins &&
-    ctx.state.userData.totalFreeSpinsWin < HIDDEN_MIN_WIN
-  ) {
-    const topUp = roundToDecimal(
-      HIDDEN_MIN_WIN - ctx.state.userData.totalFreeSpinsWin,
-    )
-    ctx.services.wallet.addSpinWin(topUp)
-    ctx.services.wallet.confirmSpinWin()
-    ctx.state.userData.totalFreeSpinsWin = capToMaxWin(
-      ctx,
-      ctx.state.userData.totalFreeSpinsWin + topUp,
-    )
-    ctx.services.data.addBookEvent({
-      type: "hiddenGuaranteeTopUp",
-      data: { amount: topUp },
-    })
-  }
 
   // Free spins ended
   const totalWin = capToMaxWin(ctx, ctx.state.userData.totalFreeSpinsWin)

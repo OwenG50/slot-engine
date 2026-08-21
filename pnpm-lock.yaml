@@ -97,7 +97,7 @@ importers:
         specifier: 5.9.3
         version: 5.9.3
 
-  examples/Gladiator:
+  examples/SmokeysStash:
     dependencies:
       '@slot-engine/core':
         specifier: 0.1.11

@@ -3,6 +3,7 @@ import { GeneratedReelSet } from "@slot-engine/core"
 const SYM_WEIGHTS = {
   base: {
     S: 3,
+    SS: 3,
     WR: 8,
     H1: 35,
     H2: 35,
@@ -14,6 +15,7 @@ const SYM_WEIGHTS = {
     L4: 55,
     L5: 60,
   },
+  // freespin: normal-tier bonus reel, S only (never SS) — see forceScatterCombo.
   freespin: {
     S: 3,
     WR: 10,
@@ -27,8 +29,9 @@ const SYM_WEIGHTS = {
     L4: 55,
     L5: 55,
   },
+  // superfreespin: super-tier bonus reel, SS only (never S).
   superfreespin: {
-    S: 3,
+    SS: 3,
     WR: 12,
     H1: 40,
     H2: 40,
@@ -43,8 +46,11 @@ const SYM_WEIGHTS = {
   // hiddenfreespin: richest tier by multiplier VALUE (see HIDDEN_MULTIPLIER_TABLE
   // in onHandleGameFlow.ts, 10x min floor) but kept at the same WR landing
   // frequency as freespin so hidden rounds don't compound too many expansions.
+  // S+SS combined weight (1.5+1.5=3) matches freespin.S/superfreespin.SS's
+  // single-type weight, so this tier doesn't get double the scatter density.
   hiddenfreespin: {
-    S: 3,
+    S: 1.5,
+    SS: 1.5,
     WR: 10,
     H1: 40,
     H2: 40,
@@ -76,6 +82,7 @@ const SYM_WEIGHTS = {
   // be found without excessive retries.
   featureSpin: {
     S: 3,
+    SS: 3,
     WR: 20,
     H1: 35,
     H2: 35,
@@ -98,22 +105,25 @@ export const GENERATORS = {
 
     },
     // Guarantees at least a couple of scatter stops on every reel so the
-    // forced 3/4/5-scatter bonus-trigger draws (drawBoard's forceFreespins
-    // branch, which always uses this "base" reel set for the trigger spin)
-    // never run out of eligible reels, regardless of random weighted luck.
+    // forced trigger draws (drawBoard's forceFreespins branch, which always
+    // uses this "base" reel set for the trigger spin) never run out of
+    // eligible reels for either scatter type, regardless of random weighted luck.
     symbolQuotas: {
       S: 1,
+      SS: 1,
     },
+    // Self-spacing keeps 2 of the same scatter off one reel strip; cross
+    // spacing keeps S/SS off each other's reel, and both off WR's reel.
     spaceBetweenSameSymbols: {
       S: 4,
-      WR: 4,
+      SS: 4,
     },
-    // 5 (not 4) is required so S/WR can never both fall inside the same
-    // 6-row visible reel window (1 top pad + 4 main rows + 1 bottom pad).
     spaceBetweenSymbols: {
-      S: { WR: 5 },
+      S: { WR: 5, SS: 5 },
+      SS: { WR: 5 },
     },
   }),
+  // freespin: normal-tier bonus reel, only S can land (see forceScatterCombo).
   freespin: new GeneratedReelSet({
     id: "freespin",
     overrideExisting: false,
@@ -123,12 +133,12 @@ export const GENERATORS = {
     },
     spaceBetweenSameSymbols: {
       S: 4,
-      WR: 4,
     },
     spaceBetweenSymbols: {
       S: { WR: 5 },
     },
   }),
+  // superfreespin: super-tier bonus reel, only SS can land.
   superfreespin: new GeneratedReelSet({
     id: "superfreespin",
     overrideExisting: false,
@@ -137,13 +147,13 @@ export const GENERATORS = {
 
     },
     spaceBetweenSameSymbols: {
-      S: 4,
-      WR: 4,
+      SS: 4,
     },
     spaceBetweenSymbols: {
-      S: { WR: 5 },
+      SS: { WR: 5 },
     },
   }),
+  // hiddenfreespin: both S and SS can land (see SYM_WEIGHTS.hiddenfreespin).
   hiddenfreespin: new GeneratedReelSet({
     id: "hiddenfreespin",
     overrideExisting: false,
@@ -153,10 +163,11 @@ export const GENERATORS = {
     },
     spaceBetweenSameSymbols: {
       S: 4,
-      WR: 4,
+      SS: 4,
     },
     spaceBetweenSymbols: {
-      S: { WR: 5 },
+      S: { WR: 5, SS: 5 },
+      SS: { WR: 5 },
     },
   }),
   maxwin: new GeneratedReelSet({
@@ -168,15 +179,14 @@ export const GENERATORS = {
     },
     spaceBetweenSameSymbols: {
       S: 4,
-      WR: 4,
     },
     spaceBetweenSymbols: {
       S: { WR: 5 },
     },
   }),
-  // featureSpin: guarantees at least one WR (and one S, for the forced
-  // 3/4/5-scatter bonus trigger draws that also use this reel set) on
-  // every physical reel so the guaranteed-wild-reel forcing logic in
+  // featureSpin: guarantees at least one WR (and one of each scatter, for the
+  // forced bonus trigger draws that also use this reel set) on every
+  // physical reel so the guaranteed-wild-reel forcing logic in
   // onHandleGameFlow never runs out of eligible reels to pick from.
   featureSpin: new GeneratedReelSet({
     id: "featureSpin",
@@ -187,14 +197,16 @@ export const GENERATORS = {
     },
     symbolQuotas: {
       S: 1,
+      SS: 1,
       WR: 1,
     },
     spaceBetweenSameSymbols: {
       S: 4,
-      WR: 4,
+      SS: 4,
     },
     spaceBetweenSymbols: {
-      S: { WR: 5 },
+      S: { WR: 5, SS: 5 },
+      SS: { WR: 5 },
     },
   }),
 } as const

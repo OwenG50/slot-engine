@@ -569,6 +569,7 @@ function handleAnticipation(ctx: Context) {
 function handleWins(ctx: Context, isFreeSpin = false): number {
   const boardReels = ctx.services.board.getBoardReels()
   const reelMultipliers = ctx.state.userData.reelMultipliers
+  const winningWildPositions = new Set<string>()
 
   // 6-reel x 5-row payline map
   const lines = new LinesWinType({
@@ -597,6 +598,14 @@ function handleWins(ctx: Context, isFreeSpin = false): number {
 
   let totalPayout = 0
   let processedWins = winCombinations.map((combo) => {
+    if (isFreeSpin) {
+      combo.symbols.forEach((symbol) => {
+        if (boardReels[symbol.reelIndex]![symbol.posIndex]!.properties.get("isWild")) {
+          winningWildPositions.add(posKey(symbol.reelIndex, symbol.posIndex))
+        }
+      })
+    }
+
     // Any win line "uses" whichever reels its matched symbols occupy. The
     // multiplier applied to that line is the SUM of those reels' accumulated
     // exploded-wild values — regardless of whether a wild itself is part of
@@ -680,8 +689,36 @@ function handleWins(ctx: Context, isFreeSpin = false): number {
     }
   }
 
+  resolveWinningWildExplosions(ctx, winningWildPositions)
   ctx.services.wallet.addSpinWin(totalPayout)
   return totalPayout
+}
+
+// A free-spin wild can participate in several paylines, but it receives only
+// one additional roll for that spin. The resulting reel value applies from the
+// next spin onward because the current spin's wins have already been resolved.
+function resolveWinningWildExplosions(ctx: Context, winningWildPositions: Set<string>) {
+  if (winningWildPositions.size === 0) return
+
+  const table = pickMultiplierTable(ctx)
+  const reelMultipliers = ctx.state.userData.reelMultipliers
+  const explosions: Array<{ reel: number; row: number; addedMult: number; reelMultiplier: number }> = []
+
+  winningWildPositions.forEach((key) => {
+    const [reelValue, rowValue] = key.split("-")
+    const reel = Number(reelValue)
+    const row = Number(rowValue)
+    const addedMult = pickWeightedMultiplier(table, () => ctx.services.rng.randomFloat(0, 1))
+    const reelMultiplier = roundToDecimal((reelMultipliers.get(reel) ?? 0) + addedMult)
+
+    reelMultipliers.set(reel, reelMultiplier)
+    explosions.push({ reel, row, addedMult, reelMultiplier })
+  })
+
+  ctx.services.data.addBookEvent({
+    type: "wildExplode",
+    data: { explosions },
+  })
 }
 
 function calculateWinLevel(payout: number): number {
