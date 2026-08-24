@@ -737,11 +737,12 @@ game.configureOptimization({
         { criteria: "superfreespins", scaleFactor: 0.8, winRange: [200, 500], probability: 1 },
         { criteria: "superfreespins", scaleFactor: 124.5, winRange: [500, 1000], probability: 1 },
         { criteria: "superfreespins", scaleFactor: 36, winRange: [1000, 2000], probability: 1 },
-        { criteria: "superfreespins", scaleFactor: 12.6, winRange: [2000, 5000], probability: 1 },
-        // ROUND 2 (2026-07-27): user still needs 5000x+/10000x+ less
-        // frequent. Cut further ~1.6x (8->5, 6->3.5).
-        { criteria: "superfreespins", scaleFactor: 5, winRange: [5000, 10000], probability: 1 },
-        { criteria: "superfreespins", scaleFactor: 3.5, winRange: [10000, 15000], probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 15, winRange: [2000, 5000], probability: 1 },
+        // Cert fix round 2 (2026-08-21): the 1.8/1.0 cut brought P(win>=5000x)
+        // from 1.359% down to 0.5274%, still over the stricter 0.500% ceiling.
+        // Cut further for real margin, not a bare pass.
+        { criteria: "superfreespins", scaleFactor: 0.75, winRange: [5000, 10000], probability: 1 },
+        { criteria: "superfreespins", scaleFactor: 0.4, winRange: [10000, 15000], probability: 1 },
         { criteria: "superfreespins", scaleFactor: 1, winRange: [15000, 15000], probability: 1 },
       ]),
       parameters: new OptimizationParameters({
