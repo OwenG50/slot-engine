@@ -1,0 +1,135 @@
+Slot Engine Build Analysis
+Game: SmokeysStash
+Timestamp: 2026-08-29_19-05-16
+Build Dir: C:\Users\opgei\Desktop\Github Local\slot-engine\examples\SmokeysStash\__build__
+
+
+  Slot Engine Build Analyser
+  C:\Users\opgei\Desktop\Github Local\slot-engine\examples\SmokeysStash\__build__
+
+  Found 1 mode(s): mysteryBonusFeature
+  Analysing (this may take a moment for large files)...
+
+[warn] Mode "mysteryBonusFeature": book ids are offset by -1 relative to the LUT - correcting.
+
+════════════════════════════════════════════════════════════════════════
+  MODE: mysteryBonusFeature  (cost=500x, target RTP=96.0%)
+════════════════════════════════════════════════════════════════════════
+
+  Overall RTP:        880.5170%  (target 96.0%)
+  Max Win Seen:       25000.0x bet
+  Non-Zero Hit Rate:  49.983%  (1 in 2.00 spins)
+  Null Hit Rate:      50.017%  (1 in 2.00 spins)
+  Max Win Hit Rate:   1 in 100.0  (1.000333%)
+
+  ── Bonus Entry Odds ───────────────────────────────────────────────────
+  Any Bonus:                   1 in 2.00
+  Super FS  (4 scatters):      1 in 2.57
+  Hidden FS (5 scatters):      1 in 10.00
+
+  ── Result Set Distribution ────────────────────────────────────────────
+
+  Criteria                   Probability          Hit Rate    RTP Contrib      Avg Win     Max Win
+  ──────────────────────────────────────────────────────────────────────────────────────────
+  0                             50.0167%         1 in 2.00        0.0000%        0.00x        0.0x
+      spread: median=0.00x  p90=0.00x  p95=0.00x
+
+    0 win spread
+     bucket                | % of set | % of win | visual
+  ────────────────────────────────────────────────────────────────────────────
+  0 (null)                  100.000%          0.000%  ██████████████████
+  superfreespins                38.9797%         1 in 2.57      648.8791%     8323.30x    24922.7x
+      spread: median=6550.80x  p90=19302.70x  p95=21499.60x
+
+    superfreespins win spread
+     bucket                | % of set | % of win | visual
+  ────────────────────────────────────────────────────────────────────────────
+  50x – 100x                  0.257%          0.003%  ░░░░░░░░░░░░░░░░░░
+  100x – 200x                 2.224%          0.037%  ██░░░░░░░░░░░░░░░░
+  200x – 500x                 4.962%          0.200%  ████░░░░░░░░░░░░░░
+  500x – 1000x                5.902%          0.524%  █████░░░░░░░░░░░░░
+  1000x – 2000x               9.495%          1.685%  █████████░░░░░░░░░
+  2000x – 5000x              20.103%          8.168%  ██████████████████
+  5000x – 10000x             20.616%         18.230%  ██████████████████
+  10000x – maxwin            36.441%         71.154%  ██████████████████
+  hiddenfreespins               10.0033%        1 in 10.00      181.6212%     9078.04x    24742.2x
+      spread: median=7471.80x  p90=18477.00x  p95=21424.00x
+
+    hiddenfreespins win spread
+     bucket                | % of set | % of win | visual
+  ────────────────────────────────────────────────────────────────────────────
+  1000x – 2000x              12.333%          2.095%  ███████████░░░░░░░
+  2000x – 5000x              26.000%          9.790%  ██████████████████
+  5000x – 10000x             20.000%         16.092%  ██████████████████
+  10000x – maxwin            41.667%         72.023%  ██████████████████
+  maxwin                         1.0003%        1 in 100.0       50.0167%    25000.00x    25000.0x
+      spread: median=25000.00x  p90=25000.00x  p95=25000.00x
+
+    maxwin win spread
+     bucket                | % of set | % of win | visual
+  ────────────────────────────────────────────────────────────────────────────
+  Max Win (exact)           100.000%        100.000%  ██████████████████
+
+  ── Free Spin Tier Breakdown ───────────────────────────────────────────
+  Avg FS Win is weighted mean in base-bet multipliers (not divided by mode cost).
+  Median FS Win is weighted P50 from the same FS-end distribution.
+  Max Spins is the largest total FS spins (initial award + retriggers) seen in any single round.
+  Retrigger Freq is the weighted % of rounds in this tier that landed at least one retrigger.
+
+  Tier                  Hit Rate      % of Bonus   Avg FS Win (mean)    Median FS Win    Avg Spins    Max Spins   Retrigger Freq
+  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  super                1 in 2.57          77.99%            8323.30x         6550.80x   10.4 spins     15 spins           21.47%
+      spread: fs median=6550.80x  p90=19302.70x  p95=21499.60x  spins median=10.0  p90=12.0
+
+    super FS win spread
+     bucket                | % of set | % of FS win | visual
+  ────────────────────────────────────────────────────────────────────────────
+  50x – 100x                  0.257%          0.003%  ░░░░░░░░░░░░░░░░░░
+  100x – 200x                 2.224%          0.037%  ██░░░░░░░░░░░░░░░░
+  200x – 500x                 4.962%          0.200%  ████░░░░░░░░░░░░░░
+  500x – 1000x                5.902%          0.524%  █████░░░░░░░░░░░░░
+  1000x – 2000x               9.495%          1.685%  █████████░░░░░░░░░
+  2000x – 5000x              20.103%          8.168%  ██████████████████
+  5000x – 10000x             20.616%         18.230%  ██████████████████
+  10000x – maxwin            36.441%         71.154%  ██████████████████
+
+    super spin-count spread
+     bucket                | % of set | % of spins | visual
+  ────────────────────────────────────────────────────────────────────────────
+  7–10 spins                 78.529%         75.743%  ██████████████████
+  11–15 spins                21.471%         24.257%  ██████████████████
+  hidden              1 in 10.00          20.01%            9078.04x         7471.80x   10.3 spins     13 spins           19.00%
+      spread: fs median=7471.80x  p90=18477.00x  p95=21424.00x  spins median=10.0  p90=11.0
+
+    hidden FS win spread
+     bucket                | % of set | % of FS win | visual
+  ────────────────────────────────────────────────────────────────────────────
+  1000x – 2000x              12.333%          2.095%  ███████████░░░░░░░
+  2000x – 5000x              26.000%          9.790%  ██████████████████
+  5000x – 10000x             20.000%         16.092%  ██████████████████
+  10000x – maxwin            41.667%         72.023%  ██████████████████
+
+    hidden spin-count spread
+     bucket                | % of set | % of spins | visual
+  ────────────────────────────────────────────────────────────────────────────
+  7–10 spins                 81.000%         78.768%  ██████████████████
+  11–15 spins                19.000%         21.232%  █████████████████░
+
+  ── Win Distribution ───────────────────────────────────────────────────
+
+  Win Range                 % of Spins      % of RTP                  Visual
+  ────────────────────────────────────────────────────────────────────────
+  0 (null)                     50.017%        0.000%  ██████████████████████
+  50x – 100x                    0.100%        0.002%  ░░░░░░░░░░░░░░░░░░░░░░
+  100x – 200x                   0.867%        0.028%  █░░░░░░░░░░░░░░░░░░░░░
+  200x – 500x                   1.934%        0.147%  █░░░░░░░░░░░░░░░░░░░░░
+  500x – 1000x                  2.301%        0.386%  █░░░░░░░░░░░░░░░░░░░░░
+  1000x – 2000x                 4.935%        1.674%  ███░░░░░░░░░░░░░░░░░░░
+  2000x – 5000x                10.437%        8.038%  ███████░░░░░░░░░░░░░░░
+  5000x – 10000x               10.037%       16.753%  ██████░░░░░░░░░░░░░░░░
+  10000x – maxwin              18.373%       67.291%  ████████████░░░░░░░░░░
+  Max Win (exact)               1.000%        5.680%  █░░░░░░░░░░░░░░░░░░░░░
+
+
+  Analysis complete.
+

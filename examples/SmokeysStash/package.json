@@ -3,10 +3,11 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "build": "tsx ./index.ts && tsx ./scripts/normalize-lookup-ids.ts"
+    "build": "tsx ./index.ts --slot-engine-run && tsx ./scripts/normalize-lookup-ids.ts"
   },
   "dependencies": {
-    "@slot-engine/core": "0.1.11"
+    "@slot-engine/core": "0.3.2",
+    "@slot-engine/optimizer": "0.1.0"
   },
   "devDependencies": {
     "@types/node": "^24.7.2",

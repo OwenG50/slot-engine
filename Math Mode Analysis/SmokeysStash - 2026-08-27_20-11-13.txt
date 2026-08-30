@@ -1,0 +1,14 @@
+Slot Engine Build Analysis
+Game: SmokeysStash
+Timestamp: 2026-08-27_20-11-13
+Build Dir: C:\Users\opgei\Desktop\Github Local\slot-engine\examples\SmokeysStash\__build__
+
+
+  Slot Engine Build Analyser
+  C:\Users\opgei\Desktop\Github Local\slot-engine\examples\SmokeysStash\__build__
+
+  Found 1 mode(s): base
+  Analysing (this may take a moment for large files)...
+
+
+════════════════════════════════════════════════════════════════════════

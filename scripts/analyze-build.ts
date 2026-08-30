@@ -21,6 +21,7 @@
 import * as fs from "fs"
 import * as path from "path"
 import * as readline from "readline"
+import * as zlib from "zlib"
 
 // ─── ANSI helpers ────────────────────────────────────────────────────────────
 
@@ -110,6 +111,9 @@ function createReportWriter(filePath: string, gameName: string, buildDir: string
   console.error = (...args: unknown[]) => {
     const text = `[error] ${formatArgs(args)}`
     reportStream?.write(stripAnsi(text) + "\n")
+    // Also echo to the real stderr - the report stream may not have
+    // finished opening yet if the process exits right after an error.
+    originalConsoleError(text)
   }
 
   return () => {
@@ -224,14 +228,29 @@ interface PublishIndex {
 
 function loadMathConfig(buildDir: string): Map<string, { cost: number; rtp: number }> {
   const out = new Map<string, { cost: number; rtp: number }>()
+
+  // core 0.3.x: costs are published in publish_files/index.json.
+  const indexPath = path.join(buildDir, "publish_files", "index.json")
+  if (fs.existsSync(indexPath)) {
+    try {
+      const idx: PublishIndex = JSON.parse(fs.readFileSync(indexPath, "utf8"))
+      for (const m of idx.modes ?? []) {
+        out.set(m.name, { cost: m.cost, rtp: 0.96 })
+      }
+    } catch { /* ignore parse errors */ }
+  }
+
+  // core 0.1.x: math_config.json (also carries per-mode rtp).
   const p = path.join(buildDir, "math_config.json")
-  if (!fs.existsSync(p)) return out
-  try {
-    const cfg: MathConfig = JSON.parse(fs.readFileSync(p, "utf8"))
-    for (const m of cfg.bet_modes ?? []) {
-      out.set(m.bet_mode, { cost: m.cost, rtp: m.rtp })
-    }
-  } catch { /* ignore parse errors */ }
+  if (fs.existsSync(p)) {
+    try {
+      const cfg: MathConfig = JSON.parse(fs.readFileSync(p, "utf8"))
+      for (const m of cfg.bet_modes ?? []) {
+        out.set(m.bet_mode, { cost: m.cost, rtp: m.rtp })
+      }
+    } catch { /* ignore parse errors */ }
+  }
+
   return out
 }
 
@@ -259,16 +278,71 @@ async function loadLut(csvPath: string): Promise<Map<number, { weight: number; w
   return lut
 }
 
+/**
+ * Finds the minimum book `id` across one or more books files via a cheap
+ * regex scan (avoids a full JSON.parse of every line just to read one field).
+ */
+async function findMinBookId(booksPaths: string[]): Promise<number | null> {
+  let minId: number | null = null
+  const idPattern = /"id":(\d+)/
+  for await (const line of readBooksLines(booksPaths)) {
+    if (!line.trim()) continue
+    const m = idPattern.exec(line)
+    if (!m) continue
+    const id = Number(m[1])
+    if (minId === null || id < minId) minId = id
+  }
+  return minId
+}
+
 // ─── Book streaming + stat accumulation ──────────────────────────────────────
+
+/**
+ * Yields text lines across one or more books files. Since core 0.3.x, book
+ * chunks are Zstandard-compressed (`.jsonl.zst`). Each chunk is decompressed
+ * fully in memory (chunks are small, ~10MB) rather than streamed, since the
+ * merged publish_files books file concatenates many independent zstd frames
+ * that Node's streaming zstd decompressor cannot follow past the first frame.
+ * Plain uncompressed `.jsonl` files (older core versions) are read as-is.
+ */
+async function* readBooksLines(booksPaths: string[]): AsyncGenerator<string> {
+  for (const booksPath of booksPaths) {
+    if (booksPath.endsWith(".zst")) {
+      const decompressed = zlib.zstdDecompressSync(fs.readFileSync(booksPath))
+      for (const line of decompressed.toString("utf8").split("\n")) {
+        yield line
+      }
+      continue
+    }
+
+    const rl = readline.createInterface({
+      input: fs.createReadStream(booksPath),
+      crlfDelay: Infinity,
+    })
+    for await (const line of rl) yield line
+  }
+}
 
 async function analyseMode(
   name: string,
   cost: number,
   targetRtp: number,
-  booksPath: string,
+  booksPaths: string[],
   lutPath: string,
 ): Promise<ModeAnalysis> {
   const lut = await loadLut(lutPath)
+
+  // The published LUT's own numbering (0-based vs 1-based) isn't a stable
+  // convention across runs (depends on whether normalize-lookup-ids.ts ran)
+  // - derive the real offset by comparing actual observed minimums instead
+  // of assuming one.
+  let lutMinId = Infinity
+  for (const id of lut.keys()) if (id < lutMinId) lutMinId = id
+  const booksMinId = await findMinBookId(booksPaths)
+  const bookIdOffset = booksMinId === null || !Number.isFinite(lutMinId) ? 0 : lutMinId - booksMinId
+  if (bookIdOffset !== 0) {
+    console.warn(`Mode "${name}": book ids are offset by ${bookIdOffset} relative to the LUT - correcting.`)
+  }
 
   const analysis: ModeAnalysis = {
     name,
@@ -282,12 +356,7 @@ async function analyseMode(
     maxWin: 0,
   }
 
-  const rl = readline.createInterface({
-    input: fs.createReadStream(booksPath),
-    crlfDelay: Infinity,
-  })
-
-  for await (const line of rl) {
+  for await (const line of readBooksLines(booksPaths)) {
     if (!line.trim()) continue
 
     let book: { id: number; payoutMultiplier: number; events: Array<{ type: string; data: Record<string, unknown> }> }
@@ -298,7 +367,7 @@ async function analyseMode(
     }
 
     // Look up published weight for this book
-    const lutEntry = lut.get(book.id)
+    const lutEntry = lut.get(book.id + bookIdOffset)
     const weight = lutEntry?.weight ?? 0
     if (weight === 0) continue
 
@@ -712,7 +781,7 @@ function printMode(a: ModeAnalysis) {
 
 interface ModeDescriptor {
   name: string
-  booksPath: string
+  booksPaths: string[]
   lutPath: string
   cost: number
   rtp: number
@@ -721,18 +790,12 @@ interface ModeDescriptor {
 function discoverModes(buildDir: string): ModeDescriptor[] {
   const mathConfig = loadMathConfig(buildDir)
   const publishDir = path.join(buildDir, "publish_files")
+  const chunksDir = path.join(buildDir, "books_chunks")
   const modes: ModeDescriptor[] = []
   const seen = new Set<string>()
 
-  // Scan for all books_*.jsonl files
-  const entries = fs.readdirSync(buildDir)
-  for (const entry of entries) {
-    const m = entry.match(/^books_(.+)\.jsonl$/)
-    if (!m) continue
-    const name = m[1]
-    if (seen.has(name)) continue
-
-    const booksPath = path.join(buildDir, entry)
+  const addMode = (name: string, booksPaths: string[]) => {
+    if (seen.has(name) || booksPaths.length === 0) return
 
     // Prefer published LUT from publish_files/
     let lutPath = path.join(publishDir, `lookUpTable_${name}_0.csv`)
@@ -742,12 +805,35 @@ function discoverModes(buildDir: string): ModeDescriptor[] {
     }
     if (!fs.existsSync(lutPath)) {
       console.warn(`No LUT found for mode "${name}", skipping.`)
-      continue
+      return
     }
 
     const cfg = mathConfig.get(name) ?? { cost: 1, rtp: 0.96 }
-    modes.push({ name, booksPath, lutPath, cost: cfg.cost, rtp: cfg.rtp })
+    modes.push({ name, booksPaths, lutPath, cost: cfg.cost, rtp: cfg.rtp })
     seen.add(name)
+  }
+
+  // core 0.3.x: per-worker, per-chunk Zstandard-compressed books live in
+  // books_chunks/. Reading these small files individually (instead of the
+  // merged publish_files/books_<mode>.jsonl.zst) avoids decompressing many
+  // GB into memory and a Node zstd streaming bug with concatenated frames.
+  if (fs.existsSync(chunksDir)) {
+    const chunksByMode = new Map<string, string[]>()
+    for (const entry of fs.readdirSync(chunksDir)) {
+      const m = entry.match(/^books_(.+)_chunk_\d+-\d+\.jsonl\.zst$/)
+      if (!m) continue
+      const name = m[1]
+      if (!chunksByMode.has(name)) chunksByMode.set(name, [])
+      chunksByMode.get(name)!.push(path.join(chunksDir, entry))
+    }
+    for (const [name, paths] of chunksByMode) addMode(name, paths)
+  }
+
+  // core 0.1.x/0.2.x: plain uncompressed books live at the __build__ root.
+  for (const entry of fs.readdirSync(buildDir)) {
+    const m = entry.match(/^books_(.+)\.jsonl$/)
+    if (!m) continue
+    addMode(m[1], [path.join(buildDir, entry)])
   }
 
   // Sort to give a consistent order matching math_config ordering
@@ -765,7 +851,8 @@ function discoverModes(buildDir: string): ModeDescriptor[] {
 function parseArgs(): { buildDir: string; modes?: string[] } {
   const args = process.argv.slice(2)
   let buildDir = "./__build__"
-  let modeFilter: string[] | undefined = ["base", "featureSpin", "bonusHunt", "bonusFeature", "superBonusFeature", "mysteryBonusFeature"]
+  // No default filter - analyze every discovered mode unless --mode is given.
+  let modeFilter: string[] | undefined
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--build-dir" && args[i + 1]) {
@@ -819,7 +906,7 @@ async function main() {
     }
 
     process.stdout.write(dim(`  Loading ${md.name}...`))
-    const analysis = await analyseMode(md.name, md.cost, md.rtp, md.booksPath, md.lutPath)
+    const analysis = await analyseMode(md.name, md.cost, md.rtp, md.booksPaths, md.lutPath)
     process.stdout.write("\r" + " ".repeat(40) + "\r")
 
     printMode(analysis)

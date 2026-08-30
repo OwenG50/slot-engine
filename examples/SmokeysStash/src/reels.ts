@@ -1,98 +1,134 @@
 import { GeneratedReelSet } from "@slot-engine/core"
 
+// Shared spacing rules:
+// - Same-scatter spacing 4 keeps two of the same scatter out of one visible
+//   4-row board window.
+// - S<->SS spacing 4 enforces "max one scatter of any type per reel".
+// - WR<->W1/W2/W3 spacing 5 keeps wild reels off any reel showing a tiered
+//   wild (covers the padding rows too).
+// - WR<->S/SS spacing 5 keeps wild reels off any reel showing a scatter, so
+//   an expanding WR can never cover/eat a scatter symbol.
+const SCATTER_SPACING = {
+  S: 4,
+  SS: 4,
+} as const
+
+const WILD_SPACING = {
+  S: { SS: 4 },
+  WR: { W1: 5, W2: 5, W3: 5, S: 5, SS: 5 },
+} as const
+
 const SYM_WEIGHTS = {
   base: {
     S: 3,
     SS: 3,
-    WR: 8,
-    H1: 35,
-    H2: 35,
-    H3: 40,
-    H4: 40,
-    L1: 50,
-    L2: 50,
+    WR: 2,
+    W1: 4,
+    W2: 2,
+    W3: 1,
+    H1: 30,
+    H2: 32,
+    H3: 34,
+    H4: 36,
+    H5: 38,
+    L1: 45,
+    L2: 48,
     L3: 50,
-    L4: 55,
-    L5: 60,
+    L4: 52,
+    L5: 55,
   },
-  // freespin: normal-tier bonus reel, S only (never SS) — see forceScatterCombo.
+  // Normal bonus reels: both scatters stay live (S = +1 spin, SS = +2 spins)
+  // but are made very rare so retriggers stay uncommon.
   freespin: {
-    S: 3,
-    WR: 10,
-    H1: 40,
-    H2: 40,
-    H3: 45,
-    H4: 45,
-    L1: 50,
-    L2: 55,
-    L3: 55,
-    L4: 55,
-    L5: 55,
-  },
-  // superfreespin: super-tier bonus reel, SS only (never S).
-  superfreespin: {
-    SS: 3,
-    WR: 12,
-    H1: 40,
-    H2: 40,
-    H3: 45,
-    H4: 45,
-    L1: 50,
-    L2: 55,
-    L3: 55,
-    L4: 55,
-    L5: 55,
-  },
-  // hiddenfreespin: richest tier by multiplier VALUE (see HIDDEN_MULTIPLIER_TABLE
-  // in onHandleGameFlow.ts, 10x min floor) but kept at the same WR landing
-  // frequency as freespin so hidden rounds don't compound too many expansions.
-  // S+SS combined weight (1.5+1.5=3) matches freespin.S/superfreespin.SS's
-  // single-type weight, so this tier doesn't get double the scatter density.
-  hiddenfreespin: {
-    S: 1.5,
-    SS: 1.5,
-    WR: 10,
-    H1: 40,
-    H2: 40,
-    H3: 45,
-    H4: 45,
-    L1: 50,
-    L2: 55,
-    L3: 55,
-    L4: 55,
-    L5: 55,
-  },
-  // maxwin: start identical to hiddenfreespin for now; this dedicated strip
-  // can be tuned independently later for max-win shaping.
-  maxwin: {
-    S: 3,
-    WR: 18,
-    H1: 50,
-    H2: 50,
-    H3: 45,
-    H4: 45,
-    L1: 40,
-    L2: 35,
-    L3: 35,
-    L4: 35,
-    L5: 35,
-  },
-  // featureSpin: identical to base except a bumped WR weight so the
-  // guaranteed wild-reel forced onto every spin (see onHandleGameFlow) can
-  // be found without excessive retries.
-  featureSpin: {
-    S: 3,
-    SS: 3,
-    WR: 20,
-    H1: 35,
-    H2: 35,
-    H3: 40,
-    H4: 40,
-    L1: 50,
-    L2: 50,
+    S: 0.2,
+    SS: 0.1,
+    WR: 3,
+    W1: 5,
+    W2: 3,
+    W3: 1,
+    H1: 30,
+    H2: 32,
+    H3: 34,
+    H4: 36,
+    H5: 38,
+    L1: 45,
+    L2: 48,
     L3: 50,
-    L4: 55,
-    L5: 60,
+    L4: 52,
+    L5: 55,
+  },
+  superfreespin: {
+    S: 0.2,
+    SS: 0.1,
+    WR: 4,
+    W1: 4,
+    W2: 4,
+    W3: 2,
+    H1: 30,
+    H2: 32,
+    H3: 34,
+    H4: 36,
+    H5: 38,
+    L1: 45,
+    L2: 48,
+    L3: 50,
+    L4: 52,
+    L5: 55,
+  },
+  // Hidden bonus reels: NO tier 1 wilds - only W2/W3 can appear.
+  hiddenfreespin: {
+    S: 0.2,
+    SS: 0.1,
+    WR: 4,
+    W2: 4,
+    W3: 3,
+    H1: 30,
+    H2: 32,
+    H3: 34,
+    H4: 36,
+    H5: 38,
+    L1: 45,
+    L2: 48,
+    L3: 50,
+    L4: 52,
+    L5: 55,
+  },
+  // featureSpin: no scatters at all (this mode never triggers a bonus).
+  // Every spin forces >=1 WR and >=3 tiered wilds (W1/W2/W3 combined) via
+  // drawBoard, so WR/wild weights are boosted for feasibility.
+  featureSpin: {
+    WR: 6,
+    W1: 6,
+    W2: 4,
+    W3: 2,
+    H1: 28,
+    H2: 30,
+    H3: 32,
+    H4: 34,
+    H5: 36,
+    L1: 40,
+    L2: 42,
+    L3: 44,
+    L4: 46,
+    L5: 48,
+  },
+  // featureSpin's forced-maxwin reel: no scatters, heavily boosted WR/W3
+  // density so a single spin can plausibly reach the 25000x cap.
+  featureSpinMaxwin: {
+    WR: 14,
+    W1: 4,
+    W2: 8,
+    W3: 14,
+    H1: 15,
+    H2: 16,
+    H3: 17,
+    H4: 18,
+    H5: 19,
+    L1: 22,
+    L2: 23,
+    L3: 24,
+    L4: 25,
+    L5: 26,
   },
 } as const
 
@@ -101,112 +137,69 @@ export const GENERATORS = {
     id: "base",
     overrideExisting: false,
     symbolWeights: SYM_WEIGHTS.base,
-    limitSymbolsToReels: {
-
-    },
-    // Guarantees at least a couple of scatter stops on every reel so the
-    // forced trigger draws (drawBoard's forceFreespins branch, which always
-    // uses this "base" reel set for the trigger spin) never run out of
-    // eligible reels for either scatter type, regardless of random weighted luck.
+    // Guarantees every reel holds at least one S and one SS so the forced
+    // bonus-trigger draws never run out of eligible reels.
     symbolQuotas: {
       S: 1,
       SS: 1,
     },
-    // Self-spacing keeps 2 of the same scatter off one reel strip; cross
-    // spacing keeps S/SS off each other's reel, and both off WR's reel.
-    spaceBetweenSameSymbols: {
-      S: 4,
-      SS: 4,
-    },
-    spaceBetweenSymbols: {
-      S: { WR: 5, SS: 5 },
-      SS: { WR: 5 },
-    },
+    spaceBetweenSameSymbols: SCATTER_SPACING,
+    spaceBetweenSymbols: WILD_SPACING,
   }),
-  // freespin: normal-tier bonus reel, only S can land (see forceScatterCombo).
   freespin: new GeneratedReelSet({
     id: "freespin",
     overrideExisting: false,
     symbolWeights: SYM_WEIGHTS.freespin,
-    limitSymbolsToReels: {
-
-    },
-    spaceBetweenSameSymbols: {
-      S: 4,
-    },
-    spaceBetweenSymbols: {
-      S: { WR: 5 },
-    },
+    spaceBetweenSameSymbols: SCATTER_SPACING,
+    spaceBetweenSymbols: WILD_SPACING,
   }),
-  // superfreespin: super-tier bonus reel, only SS can land.
   superfreespin: new GeneratedReelSet({
     id: "superfreespin",
     overrideExisting: false,
     symbolWeights: SYM_WEIGHTS.superfreespin,
-    limitSymbolsToReels: {
-
+    // WR quota guarantees every reel has a WR stop for the guaranteed
+    // wild reel on the first free spin of the super bonus.
+    symbolQuotas: {
+      WR: 1,
     },
-    spaceBetweenSameSymbols: {
-      SS: 4,
-    },
-    spaceBetweenSymbols: {
-      SS: { WR: 5 },
-    },
+    spaceBetweenSameSymbols: SCATTER_SPACING,
+    spaceBetweenSymbols: WILD_SPACING,
   }),
-  // hiddenfreespin: both S and SS can land (see SYM_WEIGHTS.hiddenfreespin).
   hiddenfreespin: new GeneratedReelSet({
     id: "hiddenfreespin",
     overrideExisting: false,
     symbolWeights: SYM_WEIGHTS.hiddenfreespin,
-    limitSymbolsToReels: {
-
+    symbolQuotas: {
+      WR: 1,
     },
-    spaceBetweenSameSymbols: {
-      S: 4,
-      SS: 4,
-    },
-    spaceBetweenSymbols: {
-      S: { WR: 5, SS: 5 },
-      SS: { WR: 5 },
-    },
+    spaceBetweenSameSymbols: SCATTER_SPACING,
+    spaceBetweenSymbols: WILD_SPACING,
   }),
-  maxwin: new GeneratedReelSet({
-    id: "maxwin",
-    overrideExisting: false,
-    symbolWeights: SYM_WEIGHTS.maxwin,
-    limitSymbolsToReels: {
-
-    },
-    spaceBetweenSameSymbols: {
-      S: 4,
-    },
-    spaceBetweenSymbols: {
-      S: { WR: 5 },
-    },
-  }),
-  // featureSpin: guarantees at least one WR (and one of each scatter, for the
-  // forced bonus trigger draws that also use this reel set) on every
-  // physical reel so the guaranteed-wild-reel forcing logic in
-  // onHandleGameFlow never runs out of eligible reels to pick from.
   featureSpin: new GeneratedReelSet({
     id: "featureSpin",
     overrideExisting: false,
     symbolWeights: SYM_WEIGHTS.featureSpin,
-    limitSymbolsToReels: {
-
-    },
+    // Quotas guarantee every reel has WR and every wild tier available so
+    // the guaranteed >=1 WR / >=3 mushroom forcing always has stops to pick.
     symbolQuotas: {
-      S: 1,
-      SS: 1,
       WR: 1,
+      W1: 1,
+      W2: 1,
+      W3: 1,
     },
-    spaceBetweenSameSymbols: {
-      S: 4,
-      SS: 4,
-    },
-    spaceBetweenSymbols: {
-      S: { WR: 5, SS: 5 },
-      SS: { WR: 5 },
+    spaceBetweenSymbols: WILD_SPACING,
+  }),
+  // No WR<->wild spacing restriction here - the forced maxwin draw needs
+  // both to coexist freely across the board to build a large multiplier.
+  featureSpinMaxwin: new GeneratedReelSet({
+    id: "featureSpinMaxwin",
+    overrideExisting: false,
+    symbolWeights: SYM_WEIGHTS.featureSpinMaxwin,
+    symbolQuotas: {
+      WR: 1,
+      W1: 1,
+      W2: 1,
+      W3: 1,
     },
   }),
 } as const

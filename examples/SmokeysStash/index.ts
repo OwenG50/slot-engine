@@ -2,9 +2,6 @@ import {
   GameMode,
   GameSymbol,
   InferGameType,
-  OptimizationConditions,
-  OptimizationParameters,
-  OptimizationScaling,
   ResultSet,
   createSlotGame,
   defineGameModes,
@@ -12,18 +9,18 @@ import {
   defineUserState,
   SPIN_TYPE,
 } from "@slot-engine/core"
-import { maxwinReelsEvaluation } from "./src/evaluations"
 import { GENERATORS } from "./src/reels"
 import { onHandleGameFlow } from "./src/onHandleGameFlow"
 
 export const userState = defineUserState({
-  // Sticky wild-reel multipliers, keyed by "reel-row" position.
-  persistentWildReels: new Map<string, number>(),
+  // Sticky wild-reel multipliers during free spins, keyed by "reel-row".
+  // Plain object (not Map) so engine state cloning/serialization stays safe.
+  stickyWildReels: {} as Record<string, number>,
   totalFreeSpinsWin: 0,
-  isSuperFreeSpins: false,
-  isFirstSuperFreeSpin: false,
-  isHiddenFreeSpins: false,
-  isFirstHiddenFreeSpin: false,
+  // Locked bonus tier for the active feature: "normal" | "super" | "hidden" | "".
+  bonusTier: "",
+  // True only for the first free spin of a super/hidden bonus (guaranteed WR).
+  isFirstBonusSpin: false,
 })
 
 export type UserStateType = typeof userState
@@ -35,21 +32,44 @@ export const symbols = defineSymbols({
       isScatter: true,
     },
   }),
-  // Super scatter: triggers the super bonus on its own (3x), or combines
-  // with S for the hidden bonus (2 of one + 3 of the other, see getBonusTier).
+  // Super scatter: 3x SS triggers the super bonus; a mixed 3+2 split of
+  // S/SS triggers the hidden bonus (see getBonusTier in onHandleGameFlow.ts).
   SS: new GameSymbol({
     id: "SS",
     properties: {
       isScatter: true,
     },
   }),
-  // Expanding wild reel: fills the entire reel with wilds and carries a
-  // rolled-in multiplier (see resolveWildReelMultipliers in onHandleGameFlow.ts).
+  // Wild reel: makes its entire reel wild for win evaluation, carries a
+  // rolled multiplier, and is sticky (per position) during free spins.
   WR: new GameSymbol({
     id: "WR",
     properties: {
-      isWildReel: true,
       isWild: true,
+      isWildReel: true,
+    },
+  }),
+  // Tier 1/2/3 wilds: single-cell substitute wilds carrying a rolled
+  // multiplier from their tier pool. Never sticky - they last one spin.
+  W1: new GameSymbol({
+    id: "W1",
+    properties: {
+      isWild: true,
+      wildTier: 1,
+    },
+  }),
+  W2: new GameSymbol({
+    id: "W2",
+    properties: {
+      isWild: true,
+      wildTier: 2,
+    },
+  }),
+  W3: new GameSymbol({
+    id: "W3",
+    properties: {
+      isWild: true,
+      wildTier: 3,
     },
   }),
   H1: new GameSymbol({
@@ -82,6 +102,14 @@ export const symbols = defineSymbols({
       3: 3,
       4: 5,
       5: 10,
+    },
+  }),
+  H5: new GameSymbol({
+    id: "H5",
+    pays: {
+      3: 2,
+      4: 3,
+      5: 5,
     },
   }),
   L1: new GameSymbol({
@@ -128,6 +156,75 @@ export const symbols = defineSymbols({
 
 export type SymbolsType = typeof symbols
 
+// Shared by base and extraChance - identical simulation result sets; the two
+// modes only differ in cost and optimizer targets (5x tier hit rates).
+// Quotas must sum to exactly 1. The multiplier ranges enforce each bonus
+// tier's minimum win at simulation level (sims retry below floor).
+function baseStyleResultSets() {
+  return [
+    new ResultSet({
+      criteria: "0",
+      quota: 0.15,
+      multiplier: 0,
+      reelWeights: {
+        [SPIN_TYPE.BASE_GAME]: { base: 1 },
+        [SPIN_TYPE.FREE_SPINS]: { freespin: 1 },
+      },
+    }),
+    new ResultSet({
+      criteria: "basegame",
+      quota: 0.38,
+      multiplier: [0.1, 25000],
+      reelWeights: {
+        [SPIN_TYPE.BASE_GAME]: { base: 1 },
+        [SPIN_TYPE.FREE_SPINS]: { freespin: 1 },
+      },
+    }),
+    new ResultSet({
+      criteria: "freespins",
+      quota: 0.22,
+      forceFreespins: true,
+      multiplier: [15, 25000],
+      reelWeights: {
+        [SPIN_TYPE.BASE_GAME]: { base: 1 },
+        [SPIN_TYPE.FREE_SPINS]: { freespin: 1 },
+      },
+    }),
+    new ResultSet({
+      criteria: "superfreespins",
+      quota: 0.14,
+      forceFreespins: true,
+      multiplier: [85, 25000],
+      reelWeights: {
+        [SPIN_TYPE.BASE_GAME]: { base: 1 },
+        [SPIN_TYPE.FREE_SPINS]: { superfreespin: 1 },
+      },
+    }),
+    new ResultSet({
+      criteria: "hiddenfreespins",
+      quota: 0.09,
+      forceFreespins: true,
+      multiplier: [1000, 25000],
+      reelWeights: {
+        [SPIN_TYPE.BASE_GAME]: { base: 1 },
+        [SPIN_TYPE.FREE_SPINS]: { hiddenfreespin: 1 },
+      },
+    }),
+    // Max wins are simulated through the super tier (guaranteed WR on the
+    // first free spin makes 25000x reachable). See drawBoard's criteria map.
+    new ResultSet({
+      criteria: "maxwin",
+      quota: 0.02,
+      forceMaxWin: true,
+      forceFreespins: true,
+      reelWeights: {
+        [SPIN_TYPE.BASE_GAME]: { base: 1 },
+        [SPIN_TYPE.FREE_SPINS]: { superfreespin: 1 },
+      },
+    }),
+  ]
+}
+
 export const gameModes = defineGameModes({
   base: new GameMode({
     name: "base",
@@ -137,196 +234,23 @@ export const gameModes = defineGameModes({
     symbolsPerReel: [4, 4, 4, 4, 4],
     isBonusBuy: false,
     reelSets: [...Object.values(GENERATORS)],
-    resultSets: [
-      new ResultSet({
-        criteria: "0",
-        quota: 0.10,
-        multiplier: 0,
-        reelWeights: {
-          [SPIN_TYPE.BASE_GAME]: { base: 1 },
-          [SPIN_TYPE.FREE_SPINS]: { freespin: 1 },
-        },
-      }),
-      new ResultSet({
-        criteria: "basegame",
-        quota: 0.30,
-        reelWeights: {
-          [SPIN_TYPE.BASE_GAME]: { base: 1 },
-          [SPIN_TYPE.FREE_SPINS]: { freespin: 1 },
-        },
-      }),
-      new ResultSet({
-        criteria: "freespins",
-        quota: 0.20,
-        forceFreespins: true,
-        reelWeights: {
-          [SPIN_TYPE.BASE_GAME]: { base: 1 },
-          [SPIN_TYPE.FREE_SPINS]: { freespin: 1 },
-        },
-      }),
-      new ResultSet({
-        criteria: "superfreespins",
-        quota: 0.2,
-        forceFreespins: true,
-        reelWeights: {
-          [SPIN_TYPE.BASE_GAME]: { base: 1 },
-          [SPIN_TYPE.FREE_SPINS]: { superfreespin: 1 },
-        },
-      }),
-      new ResultSet({
-        criteria: "hiddenfreespins",
-        quota: 0.2,
-        forceFreespins: true,
-        reelWeights: {
-          [SPIN_TYPE.BASE_GAME]: { base: 1 },
-          [SPIN_TYPE.FREE_SPINS]: { hiddenfreespin: 1 },
-        },
-      }),
-      new ResultSet({
-        criteria: "maxwin",
-        quota: 0.001,
-        forceMaxWin: true,
-        forceFreespins: true,
-        reelWeights: {
-          [SPIN_TYPE.BASE_GAME]: { base: 1 },
-          [SPIN_TYPE.FREE_SPINS]: { maxwin: 1 },
-          evaluate: maxwinReelsEvaluation,
-        },
-      }),
-    ],
+    resultSets: baseStyleResultSets(),
   }),
-  bonusHunt: new GameMode({
-    name: "bonusHunt",
+  // Same gameplay as base at 3x cost; the 5x tier hit-rate boost lives
+  // entirely in this mode's optimization targets.
+  extraChance: new GameMode({
+    name: "extraChance",
     cost: 3,
     rtp: 0.96,
     reelsAmount: 5,
     symbolsPerReel: [4, 4, 4, 4, 4],
     isBonusBuy: false,
     reelSets: [...Object.values(GENERATORS)],
-    resultSets: [
-      new ResultSet({
-        criteria: "0",
-        quota: 0.20,
-        multiplier: 0,
-        reelWeights: {
-          [SPIN_TYPE.BASE_GAME]: { base: 1 },
-          [SPIN_TYPE.FREE_SPINS]: { freespin: 1 },
-        },
-      }),
-      new ResultSet({
-        criteria: "basegame",
-        quota: 0.25,
-        reelWeights: {
-          [SPIN_TYPE.BASE_GAME]: { base: 1 },
-          [SPIN_TYPE.FREE_SPINS]: { freespin: 1, superfreespin: 1, hiddenfreespin: 1 },
-        },
-      }),
-      new ResultSet({
-        criteria: "freespins",
-        quota: 0.30,
-        forceFreespins: true,
-        reelWeights: {
-          [SPIN_TYPE.BASE_GAME]: { base: 1 },
-          [SPIN_TYPE.FREE_SPINS]: { freespin: 1 },
-        },
-      }),
-      new ResultSet({
-        criteria: "superfreespins",
-        quota: 0.20,
-        forceFreespins: true,
-        reelWeights: {
-          [SPIN_TYPE.BASE_GAME]: { base: 1 },
-          [SPIN_TYPE.FREE_SPINS]: { superfreespin: 1 },
-        },
-      }),
-      new ResultSet({
-        criteria: "hiddenfreespins",
-        quota: 0.05,
-        forceFreespins: true,
-        reelWeights: {
-          [SPIN_TYPE.BASE_GAME]: { base: 1 },
-          [SPIN_TYPE.FREE_SPINS]: { hiddenfreespin: 1 },
-        },
-      }),
-      new ResultSet({
-        criteria: "maxwin",
-        quota: 0.001,
-        forceMaxWin: true,
-        forceFreespins: true,
-        reelWeights: {
-          [SPIN_TYPE.BASE_GAME]: { base: 1 },
-          [SPIN_TYPE.FREE_SPINS]: { maxwin: 1 },
-          evaluate: maxwinReelsEvaluation,
-        },
-      }),
-    ],
+    resultSets: baseStyleResultSets(),
   }),
-  bonusHuntPlus: new GameMode({
-    name: "bonusHuntPlus",
-    cost: 10,
-    rtp: 0.96,
-    reelsAmount: 5,
-    symbolsPerReel: [4, 4, 4, 4, 4],
-    isBonusBuy: false,
-    reelSets: [...Object.values(GENERATORS)],
-    resultSets: [
-      new ResultSet({
-        criteria: "0",
-        quota: 0.20,
-        multiplier: 0,
-        reelWeights: {
-          [SPIN_TYPE.BASE_GAME]: { base: 1 },
-          [SPIN_TYPE.FREE_SPINS]: { freespin: 1 },
-        },
-      }),
-      new ResultSet({
-        criteria: "basegame",
-        quota: 0.25,
-        reelWeights: {
-          [SPIN_TYPE.BASE_GAME]: { base: 1 },
-          [SPIN_TYPE.FREE_SPINS]: { freespin: 1, superfreespin: 1, hiddenfreespin: 1 },
-        },
-      }),
-      new ResultSet({
-        criteria: "freespins",
-        quota: 0.30,
-        forceFreespins: true,
-        reelWeights: {
-          [SPIN_TYPE.BASE_GAME]: { base: 1 },
-          [SPIN_TYPE.FREE_SPINS]: { freespin: 1 },
-        },
-      }),
-      new ResultSet({
-        criteria: "superfreespins",
-        quota: 0.20,
-        forceFreespins: true,
-        reelWeights: {
-          [SPIN_TYPE.BASE_GAME]: { base: 1 },
-          [SPIN_TYPE.FREE_SPINS]: { superfreespin: 1 },
-        },
-      }),
-      new ResultSet({
-        criteria: "hiddenfreespins",
-        quota: 0.05,
-        forceFreespins: true,
-        reelWeights: {
-          [SPIN_TYPE.BASE_GAME]: { base: 1 },
-          [SPIN_TYPE.FREE_SPINS]: { hiddenfreespin: 1 },
-        },
-      }),
-      new ResultSet({
-        criteria: "maxwin",
-        quota: 0.001,
-        forceMaxWin: true,
-        forceFreespins: true,
-        reelWeights: {
-          [SPIN_TYPE.BASE_GAME]: { base: 1 },
-          [SPIN_TYPE.FREE_SPINS]: { maxwin: 1 },
-          evaluate: maxwinReelsEvaluation,
-        },
-      }),
-    ],
-  }),
+  // Direct buy of the normal bonus. Its maxwin books trigger as NORMAL tier
+  // (see drawBoard's criteria map) but draw FS boards from the superfreespin
+  // reels, whose WR quota makes a forced 25000x reachable in reasonable time.
   bonusFeature: new GameMode({
     name: "bonusFeature",
     cost: 100,
@@ -338,15 +262,41 @@ export const gameModes = defineGameModes({
     resultSets: [
       new ResultSet({
         criteria: "freespins",
-        quota: 1,
+        quota: 0.985,
         forceFreespins: true,
+        multiplier: [15, 25000],
         reelWeights: {
           [SPIN_TYPE.BASE_GAME]: { base: 1 },
           [SPIN_TYPE.FREE_SPINS]: { freespin: 1 },
         },
       }),
+      // Guarantees raw candidate books across 2K-20K for the pinned tail
+      // targets. Capped at 19999.9 because 20K-24.9K books would fall into
+      // the gap between the pinned ladder and the exact-25000 maxwin pin,
+      // and bigwin has no criteria target to fall back to.
+      new ResultSet({
+        criteria: "bigwin",
+        quota: 0.01,
+        forceFreespins: true,
+        multiplier: [2000, 19999.9],
+        reelWeights: {
+          [SPIN_TYPE.BASE_GAME]: { base: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { superfreespin: 1 },
+        },
+      }),
+      new ResultSet({
+        criteria: "maxwin",
+        quota: 0.005,
+        forceMaxWin: true,
+        forceFreespins: true,
+        reelWeights: {
+          [SPIN_TYPE.BASE_GAME]: { base: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { superfreespin: 1 },
+        },
+      }),
     ],
   }),
+  // Direct buy of the super bonus.
   superBonusFeature: new GameMode({
     name: "superBonusFeature",
     cost: 300,
@@ -358,8 +308,21 @@ export const gameModes = defineGameModes({
     resultSets: [
       new ResultSet({
         criteria: "superfreespins",
-        quota: 1,
+        quota: 0.985,
         forceFreespins: true,
+        multiplier: [85, 25000],
+        reelWeights: {
+          [SPIN_TYPE.BASE_GAME]: { base: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { superfreespin: 1 },
+        },
+      }),
+      // "super" in the criteria keeps this a super-tier trigger. Capped at
+      // 19999.9 - same unmatched-gap reasoning as bonusFeature's bigwin.
+      new ResultSet({
+        criteria: "superbigwin",
+        quota: 0.01,
+        forceFreespins: true,
+        multiplier: [2000, 19999.9],
         reelWeights: {
           [SPIN_TYPE.BASE_GAME]: { base: 1 },
           [SPIN_TYPE.FREE_SPINS]: { superfreespin: 1 },
@@ -367,17 +330,19 @@ export const gameModes = defineGameModes({
       }),
       new ResultSet({
         criteria: "maxwin",
-        quota: 0.001,
+        quota: 0.005,
         forceMaxWin: true,
         forceFreespins: true,
         reelWeights: {
           [SPIN_TYPE.BASE_GAME]: { base: 1 },
-          [SPIN_TYPE.FREE_SPINS]: { maxwin: 1 },
-          evaluate: maxwinReelsEvaluation,
+          [SPIN_TYPE.FREE_SPINS]: { superfreespin: 1 },
         },
       }),
     ],
   }),
+  // Mystery bonus buy: random tier per buy, no dedicated trigger visuals -
+  // criteria "0"/superfreespins/hiddenfreespins reuse the exact same tier
+  // reel sets and min-win floors as base for a consistent feel.
   mysteryBonusFeature: new GameMode({
     name: "mysteryBonusFeature",
     cost: 500,
@@ -398,8 +363,9 @@ export const gameModes = defineGameModes({
       }),
       new ResultSet({
         criteria: "superfreespins",
-        quota: 0.4,
+        quota: 0.39,
         forceFreespins: true,
+        multiplier: [85, 25000],
         reelWeights: {
           [SPIN_TYPE.BASE_GAME]: { base: 1 },
           [SPIN_TYPE.FREE_SPINS]: { superfreespin: 1 },
@@ -409,6 +375,7 @@ export const gameModes = defineGameModes({
         criteria: "hiddenfreespins",
         quota: 0.1,
         forceFreespins: true,
+        multiplier: [1000, 25000],
         reelWeights: {
           [SPIN_TYPE.BASE_GAME]: { base: 1 },
           [SPIN_TYPE.FREE_SPINS]: { hiddenfreespin: 1 },
@@ -416,13 +383,52 @@ export const gameModes = defineGameModes({
       }),
       new ResultSet({
         criteria: "maxwin",
-        quota: 0.001,
+        quota: 0.01,
         forceMaxWin: true,
         forceFreespins: true,
         reelWeights: {
           [SPIN_TYPE.BASE_GAME]: { base: 1 },
-          [SPIN_TYPE.FREE_SPINS]: { maxwin: 1 },
-          evaluate: maxwinReelsEvaluation,
+          [SPIN_TYPE.FREE_SPINS]: { superfreespin: 1 },
+        },
+      }),
+    ],
+  }),
+  // Single-spin buy: guaranteed >=1 WR + >=3 mushrooms (W1/W2/W3) every
+  // spin (see drawBoard's featureSpin branch), no scatters/no free spins.
+  featureSpin: new GameMode({
+    name: "featureSpin",
+    cost: 300,
+    rtp: 0.96,
+    reelsAmount: 5,
+    symbolsPerReel: [4, 4, 4, 4, 4],
+    isBonusBuy: true,
+    reelSets: [...Object.values(GENERATORS)],
+    resultSets: [
+      new ResultSet({
+        criteria: "0",
+        quota: 0.15,
+        multiplier: 0,
+        reelWeights: {
+          [SPIN_TYPE.BASE_GAME]: { featureSpin: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { featureSpin: 1 },
+        },
+      }),
+      new ResultSet({
+        criteria: "win",
+        quota: 0.84,
+        multiplier: [0.1, 25000],
+        reelWeights: {
+          [SPIN_TYPE.BASE_GAME]: { featureSpin: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { featureSpin: 1 },
+        },
+      }),
+      new ResultSet({
+        criteria: "maxwin",
+        quota: 0.01,
+        forceMaxWin: true,
+        reelWeights: {
+          [SPIN_TYPE.BASE_GAME]: { featureSpinMaxwin: 1 },
+          [SPIN_TYPE.FREE_SPINS]: { featureSpinMaxwin: 1 },
         },
       }),
     ],
@@ -441,9 +447,8 @@ export const game = createSlotGame<GameType>({
   symbols,
   padSymbols: 1,
   scatterToFreespins: {
-    // Required by the engine config type; the actual trigger/retrigger logic
-    // now lives entirely in onHandleGameFlow.ts (getBonusTier + per-scatter
-    // retriggers), these values are not read anywhere.
+    // Required by the engine config type; actual trigger/retrigger logic
+    // lives in onHandleGameFlow.ts (getBonusTier + per-scatter retriggers).
     [SPIN_TYPE.BASE_GAME]: {
       3: 10,
       4: 10,
@@ -460,411 +465,241 @@ export const game = createSlotGame<GameType>({
   },
 })
 
-// ─── NEUTRAL OPTIMIZATION SCALING ──────────────────────────────────────────
-// Basic structure only: every win-range bin is left at scaleFactor 1 and
-// probability 1 so distributions are unshaped and ready to be reconfigured.
-const NEUTRAL_BINS: Array<[number, number]> = [
-  [0.01, 1],
-  [1, 2],
-  [2, 5],
-  [5, 10],
-  [10, 20],
-  [20, 50],
-  [50, 100],
-  [100, 200],
-  [200, 500],
-  [500, 1000],
-  [1000, 2000],
-  [2000, 5000],
-  [5000, 10000],
-  [10000, 25000],
-  [25000, 25000],
-]
-
-function neutralScaling(...criterias: string[]) {
-  return criterias.flatMap((criteria) =>
-    NEUTRAL_BINS.map(([lo, hi]) => ({
-      criteria,
-      scaleFactor: 1,
-      winRange: [lo, hi] as [number, number],
-      probability: 1,
-    })),
-  )
-}
-
-// Shape a single criteria into a chosen curve. `factors` maps 1:1 onto
-// `bins` (defaults to NEUTRAL_BINS).
-function customScaling(
-  criteria: string,
-  factors: number[],
-  bins: Array<[number, number]> = NEUTRAL_BINS,
-) {
-  return bins.map(([lo, hi], i) => ({
-    criteria,
-    scaleFactor: factors[i],
-    winRange: [lo, hi] as [number, number],
-    probability: 1,
-  }))
-}
-
-// Basegame shaping bins: splits the dust bin into 0.01-0.5x/0.5-1x so each
-// can be scaled independently.
-const BASEGAME_BINS: Array<[number, number]> = [
-  [0.01, 0.5],
-  [0.5, 1],
-  [1, 2],
-  [2, 5],
-  [5, 10],
-  [10, 20],
-  [20, 50],
-  [50, 100],
-  [100, 200],
-  [200, 500],
-  [500, 1000],
-  [1000, 2000],
-  [2000, 5000],
-  [5000, 10000],
-  [10000, 25000],
-  [25000, 25000],
-]
-
-// Free-spin shaping bins aligned to the analyzer's win-range buckets so the
-// bell curves can be tuned bucket-by-bucket with precise control.
-const FS_BINS: Array<[number, number]> = [
-  [0.01, 1],
-  [1, 2],
-  [2, 5],
-  [5, 10],
-  [10, 20],
-  [20, 50],
-  [50, 100],
-  [100, 200],
-  [200, 500],
-  [500, 1000],
-  [1000, 2000],
-  [2000, 5000],
-  [5000, 10000],
-  [10000, 25000],
-  [25000, 25000],
-]
-
-// Add or remove from this to choose what gets simulated or not.
 game.configureSimulation({
   simRunsAmount: {
-    base: 10000,
-    bonusHunt: 10000,
-    bonusHuntPlus: 10000,
-    bonusFeature: 10000,
-    mysteryBonusFeature: 10000,
-    superBonusFeature: 10000,
+    base: 1000000,
+    extraChance: 1000000,
+    bonusFeature: 250000,
+    superBonusFeature: 250000,
+    mysteryBonusFeature: 250000,
+    featureSpin: 250000,
   },
   concurrency: 24,
 })
 
+// Optimization targets (new @slot-engine/optimizer API):
+// - Match-based winRange targets are defined first and claim their books
+//   before the criteria targets do (first matching target wins).
+// - "maxwin" pins exact-25000x books; big2k5k/big5k10k/big10k20k pin the
+//   2K-20K tail buckets to a smooth monotonic decay toward the max win.
+//   10K-20K deliberately ends at 19999.9 so non-exact 20K+ books stay
+//   near-zero weighted and 20K+ remains the hardest bucket (1 in 10M).
+// - "basegame" leaves rtp open, absorbing the remaining RTP budget.
+// - "0" has no hitRate, absorbing the remaining probability.
 game.configureOptimization({
-  gameModes: {
-    base: {
-      conditions: {
-        "0": new OptimizationConditions({
-          rtp: 0,
-          avgWin: 0,
-          searchConditions: 0,
-          priority: 10,
-        }),
-        maxwin: new OptimizationConditions({
-          rtp: 0.005,
-          avgWin: 25000,
-          searchConditions: 25000,
-          priority: 5,
-        }),
-        basegame: new OptimizationConditions({
-          rtp: 0.12,
-          hitRate: 6,
-          priority: 1,
-        }),
-        freespins: new OptimizationConditions({
-          rtp: 0.345,
-          hitRate: 150,
-          searchConditions: {
-            criteria: "freespins",
-          },
-          priority: 2,
-        }),
-        superfreespins: new OptimizationConditions({
-          rtp: 0.2,
-          hitRate: 500,
-          searchConditions: {
-            criteria: "superfreespins",
-          },
-          priority: 3,
-        }),
-        hiddenfreespins: new OptimizationConditions({
-          rtp: 0.29,
-          hitRate: 1000,
-          searchConditions: {
-            criteria: "hiddenfreespins",
-          },
-          priority: 4,
-        }),
+  base: {
+    targets: {
+      maxwin: {
+        match: { winRange: [25000, 25000] },
+        hitRate: 10_000_000,
       },
-      scaling: new OptimizationScaling([
-        // Basegame: crush 0.01-0.5x further, lift 0.5x-20x harder (skewed
-        // toward the cheaper 1-2x/2-5x end since basegame's fixed 0.68x mean
-        // caps how much probability the pricier 10-20x end can absorb).
-        // 1-2x pushed further, 2-5x eased back, per explicit request.
-        ...customScaling(
-          "basegame",
-          [
-            0.05, 10, 100, 15, 10, 6, 0.05, 0.05, 0.05, 0.05, 1, 1, 1, 1, 1, 1,
-          ],
-          BASEGAME_BINS,
-        ),
-        // Normal FS: single-peaked bell centred on ~50-100x. Bins aligned to
-        // the analyzer buckets; the dominant natural 10-25x spike is crushed.
-        // Reshaped bell: crush the 100-200x secondary hump, ease the 20-50x
-        // spike, and build up 5-10x/10-20x so weight skews to the low end.
-        ...customScaling(
-          "freespins",
-          [
-            0.7, 1.1, 1.1, 1.2, 0.8, 1.5, 3.2, 1.2, 6.0, 9.0, 0.1, 0.1,
-            0.04, 0.02, 1,
-          ],
-          FS_BINS,
-        ),
-        // Super FS: single-peaked bell weighted toward the high end. The
-        // natural 5-50x hump is crushed broadly and 50-200x boosted so the
-        // rise into the 200-500x peak is smooth and not bimodal; 200x+ is
-        // boosted further so it spreads a bit more into the upper ranges.
-        ...customScaling(
-          "superfreespins",
-          [
-            0.2, 0.35, 0.5, 0.3, 0.2, 0.05, 15, 8, 40, 35, 12, 6,
-            0.08, 0.03, 1,
-          ],
-          FS_BINS,
-        ),
-        // Hidden FS: bell weighted toward the high end. Sub-100x is nearly
-        // moot since endFreeSpins now tops up any round under 100x to the
-        // guaranteed floor; 100-200x (which absorbed the floor top-ups plus
-        // the freed 200-500x weight) is crushed hard so the set spreads
-        // out across 200x-25000x instead of bunching at one bucket.
-        ...customScaling(
-          "hiddenfreespins",
-          [
-            0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.15, 3, 50, 20, 10,
-            5, 2.5, 1,
-          ],
-          FS_BINS,
-        ),
-      ]),
-      parameters: new OptimizationParameters({
-        minMeanToMedian: 0.5,
-        maxMeanToMedian: 20,
-      }),
+      big10k20k: {
+        match: { winRange: [10000, 19999.9] },
+        hitRate: 2_000_000,
+        avgWin: 13000,
+      },
+      big5k10k: {
+        match: { winRange: [5000, 9999.9] },
+        hitRate: 400_000,
+        avgWin: 6500,
+      },
+      big2k5k: {
+        match: { winRange: [2000, 4999.9] },
+        hitRate: 90_000,
+        avgWin: 3000,
+      },
+      freespins: {
+        hitRate: 300,
+        avgWin: 80,
+      },
+      superfreespins: {
+        hitRate: 3000,
+        avgWin: 270,
+      },
+      hiddenfreespins: {
+        hitRate: 25000,
+        avgWin: 1500,
+      },
+      basegame: {
+        hitRate: 4,
+      },
+      "0": {},
     },
-    bonusHunt: {
-      conditions: {
-        "0": new OptimizationConditions({
-          rtp: 0,
-          avgWin: 0,
-          searchConditions: 0,
-          priority: 10,
-        }),
-        maxwin: new OptimizationConditions({
-          rtp: 0.0025,
-          avgWin: 25000,
-          searchConditions: 25000,
-          priority: 5,
-        }),
-        basegame: new OptimizationConditions({
-          rtp: 0.0225,
-          hitRate: 8,
-          priority: 1,
-        }),
-        freespins: new OptimizationConditions({
-          rtp: 0.4222,
-          hitRate: 30,
-          searchConditions: {
-            criteria: "freespins",
-          },
-          priority: 2,
-        }),
-        superfreespins: new OptimizationConditions({
-          rtp: 0.2504,
-          hitRate: 100,
-          searchConditions: {
-            criteria: "superfreespins",
-          },
-          priority: 3,
-        }),
-        hiddenfreespins: new OptimizationConditions({
-          rtp: 0.2624,
-          hitRate: 200,
-          searchConditions: {
-            criteria: "hiddenfreespins",
-          },
-          priority: 4,
-        }),
+  },
+  // extraChance: identical shape to base, but every FS tier is exactly 5x
+  // more likely (hitRate / 5). Same avgWin per tier - RTP per tier rises
+  // 5/3x (5x frequency at 3x cost), funded by a smaller basegame share.
+  // Tail/maxwin pins scale with cost (base hitRate / 3) so their relative
+  // RTP shares stay identical to base.
+  extraChance: {
+    targets: {
+      maxwin: {
+        match: { winRange: [25000, 25000] },
+        hitRate: 3_333_333,
       },
-      scaling: new OptimizationScaling(
-        neutralScaling("basegame", "freespins", "superfreespins", "hiddenfreespins"),
-      ),
-      parameters: new OptimizationParameters({
-        minMeanToMedian: 2,
-        maxMeanToMedian: 20,
-      }),
+      big10k20k: {
+        match: { winRange: [10000, 19999.9] },
+        hitRate: 700_000,
+        avgWin: 13000,
+      },
+      big5k10k: {
+        match: { winRange: [5000, 9999.9] },
+        hitRate: 135_000,
+        avgWin: 6500,
+      },
+      big2k5k: {
+        match: { winRange: [2000, 4999.9] },
+        hitRate: 30_000,
+        avgWin: 3000,
+      },
+      freespins: {
+        hitRate: 60,
+        avgWin: 80,
+      },
+      superfreespins: {
+        hitRate: 600,
+        avgWin: 270,
+      },
+      hiddenfreespins: {
+        hitRate: 5000,
+        avgWin: 1500,
+      },
+      basegame: {
+        hitRate: 4,
+      },
+      "0": {},
     },
-    bonusHuntPlus: {
-      conditions: {
-        "0": new OptimizationConditions({
-          rtp: 0,
-          avgWin: 0,
-          searchConditions: 0,
-          priority: 10,
-        }),
-        maxwin: new OptimizationConditions({
-          rtp: 0.0025,
-          avgWin: 25000,
-          searchConditions: 25000,
-          priority: 5,
-        }),
-        // Literal 20x hit-rate boost eats almost all spin-outcome probability
-        // (freespins 66.7% + super 20% + hidden 10% = 96.7%), so basegame's
-        // own hit frequency had to shrink drastically (8 -> 40) to leave the
-        // "0" (no-win) fence a valid positive share — otherwise the combined
-        // probability exceeds 100% and the Rust optimizer panics with
-        // "Invalid weights". avg win kept near the achievable ~1x floor.
-        basegame: new OptimizationConditions({
-          rtp: 0.0025,
-          hitRate: 40,
-          priority: 1,
-        }),
-        // Exactly 20x more likely to trigger than bonusHunt (hitRate / 20).
-        // rtp raised from bonusHunt's own values (funded by basegame's much
-        // smaller share above) to keep some avg win per trigger, but it's
-        // still well below bonusHunt's own — an accepted, explicit tradeoff
-        // for hitting the literal 20x frequency target within a 0.96 rtp cap.
-        freespins: new OptimizationConditions({
-          rtp: 0.4312,
-          hitRate: 1.5,
-          searchConditions: {
-            criteria: "freespins",
-          },
-          priority: 2,
-        }),
-        superfreespins: new OptimizationConditions({
-          rtp: 0.2558,
-          hitRate: 5,
-          searchConditions: {
-            criteria: "superfreespins",
-          },
-          priority: 3,
-        }),
-        hiddenfreespins: new OptimizationConditions({
-          rtp: 0.268,
-          hitRate: 10,
-          searchConditions: {
-            criteria: "hiddenfreespins",
-          },
-          priority: 4,
-        }),
+  },
+  // Buy modes: the main bonus target absorbs all remaining probability and
+  // RTP after the pinned tail ladder (~0.95 * cost avg win per buy). The
+  // scale rules bell-shape the payout distribution around that average - the
+  // optimizer still holds the mode RTP and every pin exactly, scaling only
+  // reshapes the curve.
+  bonusFeature: {
+    targets: {
+      // Pinned tail ladder (1-in-5K -> 25K -> 100K -> 400K) keeps every
+      // bucket past 2K strictly rarer than the one below it, with the exact
+      // 25000x maxwin the hardest hit of all.
+      maxwin: {
+        match: { winRange: [25000, 25000] },
+        hitRate: 400_000,
       },
-      scaling: new OptimizationScaling(
-        neutralScaling("basegame", "freespins", "superfreespins", "hiddenfreespins"),
-      ),
-      // Widened from the default 2/20 — the literal-20x hit-rate reshaping
-      // above produces mean/median ratios the old window couldn't satisfy,
-      // which caused an unbounded "Mean to Median X min max" stuck loop
-      // (this bound check has no retry cap in the Rust optimizer).
-      parameters: new OptimizationParameters({
-        minMeanToMedian: 0.1,
-        maxMeanToMedian: 50,
-      }),
+      big10k20k: {
+        match: { winRange: [10000, 19999.9] },
+        hitRate: 100_000,
+        avgWin: 13000,
+      },
+      big5k10k: {
+        match: { winRange: [5000, 9999.9] },
+        hitRate: 25_000,
+        avgWin: 6500,
+      },
+      big2k5k: {
+        match: { winRange: [2000, 4999.9] },
+        hitRate: 5_000,
+        avgWin: 3000,
+      },
+      freespins: {
+        // Bell around the ~95x average, with the 100-250x (above-cost) zone
+        // boosted for more break-even-or-better buys. [1000,1999.9] is
+        // boosted heavily since match targets claim ALL 2000+ books
+        // regardless of criteria - nothing can bridge into this bin from
+        // above, so it needs a large factor of its own to avoid a valley
+        // right before the pinned 2K+ ladder starts.
+        scale: [
+          { winRange: [15, 29.9], factor: 0.35 },
+          { winRange: [30, 49.9], factor: 0.7 },
+          { winRange: [50, 99.9], factor: 1.4 },
+          { winRange: [100, 149.9], factor: 2.6 },
+          { winRange: [150, 249.9], factor: 1.8 },
+          { winRange: [250, 499.9], factor: 0.6 },
+          { winRange: [500, 999.9], factor: 0.35 },
+          { winRange: [1000, 1999.9], factor: 15 },
+        ],
+      },
     },
-    bonusFeature: {
-      conditions: {
-        maxwin: new OptimizationConditions({
-          rtp: 0.003,
-          avgWin: 25000,
-          searchConditions: 25000,
-          priority: 5,
-        }),
-        freespins: new OptimizationConditions({
-          rtp: 0.957,
-          hitRate: 1,
-          searchConditions: {
-            criteria: "freespins",
-          },
-          priority: 1,
-        }),
+  },
+  superBonusFeature: {
+    targets: {
+      // Pinned tail ladder (1-in-1.5K -> 7K -> 25K -> 100K), maxwin hardest.
+      maxwin: {
+        match: { winRange: [25000, 25000] },
+        hitRate: 100_000,
       },
-      scaling: new OptimizationScaling(neutralScaling("freespins")),
-      parameters: new OptimizationParameters({
-        minMeanToMedian: 2,
-        maxMeanToMedian: 20,
-      }),
+      big10k20k: {
+        match: { winRange: [10000, 19999.9] },
+        hitRate: 25_000,
+        avgWin: 13000,
+      },
+      big5k10k: {
+        match: { winRange: [5000, 9999.9] },
+        hitRate: 7_000,
+        avgWin: 6500,
+      },
+      big2k5k: {
+        match: { winRange: [2000, 4999.9] },
+        hitRate: 1_500,
+        avgWin: 3000,
+      },
+      superfreespins: {
+        // Bell around the ~285x average with the 300-800x (above-cost) zone
+        // boosted for more break-even-or-better buys. 800-2000 boosted for
+        // the same reason as bonusFeature's [1000,1999.9] - the pinned 2K+
+        // ladder steals every book past 2000 regardless of criteria, so this
+        // range has to carry its own weight rather than blending into it.
+        scale: [
+          { winRange: [85, 119.9], factor: 0.5 },
+          { winRange: [120, 199.9], factor: 0.8 },
+          { winRange: [200, 299.9], factor: 1.5 },
+          { winRange: [300, 499.9], factor: 2.4 },
+          { winRange: [500, 799.9], factor: 1.4 },
+          { winRange: [800, 1499.9], factor: 2.0 },
+          { winRange: [1500, 1999.9], factor: 3.0 },
+        ],
+      },
     },
-    superBonusFeature: {
-      conditions: {
-        maxwin: new OptimizationConditions({
-          rtp: 0.006,
-          avgWin: 25000,
-          searchConditions: 25000,
-          priority: 5,
-        }),
-        superfreespins: new OptimizationConditions({
-          rtp: 0.954,
-          hitRate: 1,
-          searchConditions: {
-            criteria: "superfreespins",
-          },
-          priority: 1,
-        }),
+  },
+  // Mystery bonus: literal 50/40/10 split via explicit hitRates (no pinned
+  // 2K+ tail ladder here - a match-based ladder would siphon probability
+  // out of the super/hidden shares and break the literal percentages asked
+  // for; the tradeoff is 2K-25K isn't guaranteed monotonic yet, revisit if
+  // real data shows a problem there). maxwin's tiny share is carved out of
+  // superfreespins (matches the "maxwin runs as super tier" convention).
+  // superfreespins fixes avgWin~300; hiddenfreespins leaves avgWin OPEN to
+  // absorb whatever RTP remains after super/maxwin - at cost 500x with only
+  // a 50% win probability, the math forces hidden's avg win to land far
+  // above 1500x (see chat) to still hit 96% RTP. Flagged to user - not a
+  // bug, a real conflict between the literal 40/10/50 split, ~1500x-ish
+  // hidden avg, and 96% RTP at this cost; needs a decision before tuning.
+  mysteryBonusFeature: {
+    targets: {
+      maxwin: {
+        match: { winRange: [25000, 25000] },
+        hitRate: 20_000,
       },
-      scaling: new OptimizationScaling(neutralScaling("superfreespins")),
-      parameters: new OptimizationParameters({
-        minMeanToMedian: 2,
-        maxMeanToMedian: 20,
-      }),
+      superfreespins: {
+        hitRate: 2.5,
+        avgWin: 300,
+      },
+      hiddenfreespins: {
+        hitRate: 10,
+      },
+      "0": {},
     },
-    mysteryBonusFeature: {
-      conditions: {
-        "0": new OptimizationConditions({
-          rtp: 0,
-          avgWin: 0,
-          searchConditions: 0,
-          priority: 10,
-        }),
-        maxwin: new OptimizationConditions({
-          rtp: 0.0125,
-          avgWin: 25000,
-          searchConditions: 25000,
-          priority: 8,
-        }),
-        superfreespins: new OptimizationConditions({
-          rtp: 0.38325,
-          hitRate: 2.5,
-          searchConditions: {
-            criteria: "superfreespins",
-          },
-          priority: 4,
-        }),
-        hiddenfreespins: new OptimizationConditions({
-          rtp: 0.56425,
-          hitRate: 10,
-          searchConditions: {
-            criteria: "hiddenfreespins",
-          },
-          priority: 5,
-        }),
+  },
+  // Single-spin buy: "win" has no hitRate/rtp of its own for the 0/win
+  // split - "maxwin" hitRate is set so "win" (absorbing the rest) lands at
+  // ~90% non-zero hit rate.
+  featureSpin: {
+    targets: {
+      maxwin: {
+        match: { winRange: [25000, 25000] },
+        hitRate: 50_000,
       },
-      scaling: new OptimizationScaling(
-        neutralScaling("superfreespins", "hiddenfreespins"),
-      ),
-      parameters: new OptimizationParameters({
-        minMeanToMedian: 2,
-        maxMeanToMedian: 20,
-      }),
+      win: {
+        hitRate: 1.111,
+      },
+      "0": {},
     },
   },
 })
@@ -873,10 +708,13 @@ game.runTasks({
   doSimulation: true,
   doOptimization: true,
   optimizationOpts: {
-    gameModes: ["base", "bonusHunt", "bonusHuntPlus", "bonusFeature", "superBonusFeature", "mysteryBonusFeature"],
-  },
-  doAnalysis: false,
-  analysisOpts: {
-    gameModes: ["base"],
+    gameModes: [
+      "base",
+      "extraChance",
+      "bonusFeature",
+      "superBonusFeature",
+      "mysteryBonusFeature",
+      "featureSpin",
+    ],
   },
 })

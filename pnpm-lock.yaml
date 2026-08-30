@@ -100,8 +100,11 @@ importers:
   examples/SmokeysStash:
     dependencies:
       '@slot-engine/core':
-        specifier: 0.1.11
-        version: 0.1.11
+        specifier: 0.3.2
+        version: 0.3.2
+      '@slot-engine/optimizer':
+        specifier: 0.1.0
+        version: 0.1.0
     devDependencies:
       '@types/node':
         specifier: ^24.7.2
@@ -1925,6 +1928,12 @@ packages:
 
   '@slot-engine/core@0.1.11':
     resolution: {integrity: sha512-NnO3CWIkBa8uVySXGVRUYUD06UoFfBOxAdO7Qhf8Us6c8ovqnjNp1eh5qE+k05UNAFeP+Rpl4YxxOL0owpOd/A==}
+
+  '@slot-engine/core@0.3.2':
+    resolution: {integrity: sha512-in1c1+wkhZAChMbdSR1gaKGJwzDd3vlLTbM2O2crXD1uZWux3TF72e6yukGo7nR5+OxWOYKHv2wWLl0r3RvW8A==}
+
+  '@slot-engine/optimizer@0.1.0':
+    resolution: {integrity: sha512-VYTj9a1jcLV6Pum84NLh09U0BXFsrR/HfitffBDPgUxQHWtk0RzTX0H8dYASS5GcINS2rNsPk+gJW1YNUreK4g==}
 
   '@socket.io/component-emitter@3.1.2':
     resolution: {integrity: sha512-9BCxFwvbGg/RsZK9tjXd8s4UcwR0MWeFQ1XEKIQVVvAGJyINdrqKMcTRyLoK8Rse1GjzLV9cwjWV1olXRWEXVA==}
@@ -6149,6 +6158,22 @@ snapshots:
   '@slot-engine/core@0.1.11':
     dependencies:
       esbuild: 0.25.9
+
+  '@slot-engine/core@0.3.2':
+    dependencies:
+      '@slot-engine/optimizer': 0.1.0
+      chalk: 5.6.2
+      esbuild: 0.28.0
+      socket.io-client: 4.8.3
+      yargs: 18.0.0
+    transitivePeerDependencies:
+      - bufferutil
+      - supports-color
+      - utf-8-validate
+
+  '@slot-engine/optimizer@0.1.0':
+    dependencies:
+      chalk: 5.6.2
 
   '@socket.io/component-emitter@3.1.2': {}
 
