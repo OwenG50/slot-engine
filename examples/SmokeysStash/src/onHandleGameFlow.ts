@@ -10,11 +10,37 @@ const RETRIGGER_SPINS_PER_SS = 2
 
 // ─── WILD MULTIPLIER POOLS ─────────────────────────────────────────────────
 
-// Tiered wilds roll uniformly from their tier's pool.
-const WILD_TIER_POOLS: Record<number, number[]> = {
-  1: [2, 3, 4, 5, 6, 7, 8, 9, 10],
-  2: [12, 15, 20, 25, 30, 35, 40, 45, 50],
-  3: [55, 75, 100, 125, 150, 175, 200, 225, 250],
+// W (single-cell substitute wild) rolls from the combined pool that used to
+// be split across the W1/W2/W3 tiers, with decaying weights so it can land
+// any value but low values stay far more common than high ones.
+const WILD_MULTIPLIER_WEIGHTS: Record<string, number> = {
+  2: 100,
+  3: 88,
+  4: 77,
+  5: 68,
+  6: 60,
+  7: 53,
+  8: 46,
+  9: 41,
+  10: 36,
+  12: 31,
+  15: 27,
+  20: 24,
+  25: 21,
+  30: 18,
+  35: 16,
+  40: 14,
+  45: 12,
+  50: 11,
+  55: 9,
+  75: 8,
+  100: 7,
+  125: 6,
+  150: 5,
+  175: 4,
+  200: 3,
+  225: 2,
+  250: 1,
 }
 
 // Wild reels roll from the full 2x-250x pool with decaying weights
@@ -94,8 +120,8 @@ function getBonusTier(sCount: number, ssCount: number): "normal" | "super" | "hi
   return null
 }
 
-// A WR must never share a reel with a tiered wild (W1/W2/W3) or a scatter
-// (S/SS) - an expanding WR would otherwise cover/eat the scatter.
+// A WR must never share a reel with a wild (W) or a scatter (S/SS) - an
+// expanding WR would otherwise cover/eat the scatter.
 // `extraWildReels` covers sticky WR positions restored after the draw.
 function hasWildReelConflict(ctx: Context, extraWildReels: Set<number>): boolean {
   const boardReels = ctx.services.board.getBoardReels()
@@ -103,7 +129,10 @@ function hasWildReelConflict(ctx: Context, extraWildReels: Set<number>): boolean
     const hasWR = extraWildReels.has(reelIndex) || reel.some((s) => s.properties.get("isWildReel"))
     if (!hasWR) return false
     return reel.some(
-      (s) => s.properties.get("wildTier") !== undefined || s.id === "S" || s.id === "SS",
+      (s) =>
+        (s.properties.get("isWild") && !s.properties.get("isWildReel")) ||
+        s.id === "S" ||
+        s.id === "SS",
     )
   })
 }
@@ -114,13 +143,13 @@ function boardHasWildReel(ctx: Context): boolean {
     .some((reel) => reel.some((symbol) => symbol.properties.get("isWildReel")))
 }
 
-// Counts tiered wild cells (W1+W2+W3 combined) currently on the board.
-function countWildTierCells(ctx: Context): number {
+// Counts wild (W) cells currently on the board.
+function countWildCells(ctx: Context): number {
   return ctx.services.board
     .getBoardReels()
     .reduce(
       (count, reel) =>
-        count + reel.filter((symbol) => symbol.properties.get("wildTier") !== undefined).length,
+        count + reel.filter((symbol) => symbol.id === "W").length,
       0,
     )
 }
@@ -273,7 +302,7 @@ function drawBoard(ctx: Context) {
     }
   } else if (ctx.state.currentGameMode === "featureSpin") {
     // Single-spin buy mode, no scatters/no free spins. Every spin guarantees
-    // >=1 WR and >=3 tiered wilds (mushrooms). forceMaxWin rounds use a
+    // >=1 WR and >=3 wilds (mushrooms). forceMaxWin rounds use a
     // heavier reel + force more of each to make 25000x reachable in one
     // spin, and skip the normal WR-vs-wild same-reel separation rule.
     const isMaxwin = !!ctx.state.currentResultSet.forceMaxWin
@@ -293,18 +322,14 @@ function drawBoard(ctx: Context) {
 
       const usedReels = new Set(Object.keys(wrForced).map(Number))
       const mushroomStops = ctx.services.board
-        .combineReelStops(
-          ctx.services.board.getReelStopsForSymbol(reels, ctx.config.symbols.get("W1")!),
-          ctx.services.board.getReelStopsForSymbol(reels, ctx.config.symbols.get("W2")!),
-          ctx.services.board.getReelStopsForSymbol(reels, ctx.config.symbols.get("W3")!),
-        )
+        .getReelStopsForSymbol(reels, ctx.config.symbols.get("W")!)
         .map((stops, reelIndex) => (usedReels.has(reelIndex) ? [] : stops))
       const mushroomForced = ctx.services.board.getRandomReelStops(reels, mushroomStops, mushroomTarget)
 
       ctx.services.board.drawBoardWithForcedStops({ reels, forcedStops: { ...wrForced, ...mushroomForced } })
 
       if (!boardHasWildReel(ctx)) continue
-      if (countWildTierCells(ctx) < 3) continue
+      if (countWildCells(ctx) < 3) continue
       if (!isMaxwin && hasWildReelConflict(ctx, new Set())) continue
 
       break
@@ -372,7 +397,7 @@ function drawBoard(ctx: Context) {
 // Rolls multipliers for every wild on the board.
 // - WR cells roll from the WR pool; during free spins they become sticky
 //   (fixed value, restored at the same position every remaining spin).
-// - W1/W2/W3 cells roll from their tier pool and last this spin only.
+// - W cells roll from the combined wild pool and last this spin only.
 function resolveWildMultipliers(
   ctx: Context,
   isFreeSpin: boolean,
@@ -400,9 +425,8 @@ function resolveWildMultipliers(
         return
       }
 
-      const tier = symbol.properties.get("wildTier")
-      if (tier !== undefined) {
-        wildByPos[key] = ctx.services.rng.randomItem(WILD_TIER_POOLS[tier]!)
+      if (symbol.properties.get("isWild")) {
+        wildByPos[key] = Number(ctx.services.rng.weightedRandom(WILD_MULTIPLIER_WEIGHTS))
       }
     })
   })
@@ -537,9 +561,7 @@ function addRevealEvent(
       const mult = row !== null ? wrByPos[posKey(reelIndex, row)] : undefined
       if (mult !== undefined) symbolData["multiplier"] = mult
     }
-    const tier = symbol.properties.get("wildTier")
-    if (tier !== undefined) {
-      symbolData["wildTier"] = tier
+    if (symbol.properties.get("isWild") && !symbol.properties.get("isWildReel")) {
       const mult = row !== null ? wildByPos[posKey(reelIndex, row)] : undefined
       if (mult !== undefined) symbolData["multiplier"] = mult
     }

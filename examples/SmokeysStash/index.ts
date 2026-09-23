@@ -49,27 +49,13 @@ export const symbols = defineSymbols({
       isWildReel: true,
     },
   }),
-  // Tier 1/2/3 wilds: single-cell substitute wilds carrying a rolled
-  // multiplier from their tier pool. Never sticky - they last one spin.
-  W1: new GameSymbol({
-    id: "W1",
+  // Single-cell substitute wild carrying a rolled multiplier from the
+  // combined wild pool (any value formerly split across W1/W2/W3 tiers).
+  // Never sticky - lasts one spin only.
+  W: new GameSymbol({
+    id: "W",
     properties: {
       isWild: true,
-      wildTier: 1,
-    },
-  }),
-  W2: new GameSymbol({
-    id: "W2",
-    properties: {
-      isWild: true,
-      wildTier: 2,
-    },
-  }),
-  W3: new GameSymbol({
-    id: "W3",
-    properties: {
-      isWild: true,
-      wildTier: 3,
     },
   }),
   H1: new GameSymbol({
@@ -393,7 +379,7 @@ export const gameModes = defineGameModes({
       }),
     ],
   }),
-  // Single-spin buy: guaranteed >=1 WR + >=3 mushrooms (W1/W2/W3) every
+  // Single-spin buy: guaranteed >=1 WR + >=3 mushrooms (W) every
   // spin (see drawBoard's featureSpin branch), no scatters/no free spins.
   featureSpin: new GameMode({
     name: "featureSpin",
