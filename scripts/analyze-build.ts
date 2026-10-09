@@ -10,12 +10,10 @@
  *   • publish_files/lookUpTable_<mode>_0.csv  (id, weight, win)
  *   • books_<mode>.jsonl                       (book events)
  *
- * and prints a comprehensive report covering:
- *   – Overall RTP
- *   – Per-result-set RTP contribution, hit rate, and average win
- *   – Bonus entry odds (each FS tier, any bonus)
- *   – Win distribution across logarithmic buckets
- *   – Free-spin tier breakdown (win avg, hit rate per tier)
+ * Reports whole-mode payout distributions, non-bonus base-play payouts,
+ * and per-tier bonus-play totals (including trigger wins), individual-spin, and
+ * spin-count distributions. All probabilities use published LUT weights.
+ * Payouts are base-bet multipliers; RTP is normalized by mode cost.
  */
 
 import * as fs from "fs"
@@ -40,13 +38,27 @@ const C = {
 
 const OUTPUT_DIR = path.resolve(path.dirname(__filename), "..", "Math Mode Analysis")
 
-function bold(s: string) { return C.bold + s + C.reset }
-function cyan(s: string) { return C.cyan + s + C.reset }
-function yellow(s: string) { return C.yellow + s + C.reset }
-function green(s: string) { return C.green + s + C.reset }
-function dim(s: string) { return C.dim + s + C.reset }
-function magenta(s: string) { return C.magenta + s + C.reset }
-function red(s: string) { return C.red + s + C.reset }
+function bold(s: string) {
+  return C.bold + s + C.reset
+}
+function cyan(s: string) {
+  return C.cyan + s + C.reset
+}
+function yellow(s: string) {
+  return C.yellow + s + C.reset
+}
+function green(s: string) {
+  return C.green + s + C.reset
+}
+function dim(s: string) {
+  return C.dim + s + C.reset
+}
+function magenta(s: string) {
+  return C.magenta + s + C.reset
+}
+function red(s: string) {
+  return C.red + s + C.reset
+}
 
 function stripAnsi(value: string): string {
   return value.replace(/\x1b\[[0-9;]*m/g, "")
@@ -83,7 +95,12 @@ function formatTimestamp(date = new Date()): string {
 let reportStream: fs.WriteStream | null = null
 let reportFilePath = ""
 
-function createReportWriter(filePath: string, gameName: string, buildDir: string, timestamp: string) {
+function createReportWriter(
+  filePath: string,
+  gameName: string,
+  buildDir: string,
+  timestamp: string,
+) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true })
   reportFilePath = filePath
   reportStream = fs.createWriteStream(filePath, { flags: "w" })
@@ -127,97 +144,6 @@ function createReportWriter(filePath: string, gameName: string, buildDir: string
   }
 }
 
-// ─── Win-distribution buckets ────────────────────────────────────────────────
-
-const WIN_BUCKETS: Array<{ label: string; min: number; max: number }> = [
-  { label: "0 (null)",      min: 0,      max: 0 },
-  { label: "0.01 – 1x",    min: 0.001,  max: 1 },
-  { label: "1x – 2x",      min: 1,      max: 2 },
-  { label: "2x – 5x",      min: 2,      max: 5 },
-  { label: "5x – 10x",     min: 5,      max: 10 },
-  { label: "10x – 20x",    min: 10,     max: 20 },
-  { label: "20x – 50x",    min: 20,     max: 50 },
-  { label: "50x – 100x",   min: 50,     max: 100 },
-  { label: "100x – 200x",  min: 100,    max: 200 },
-  { label: "200x – 500x",  min: 200,    max: 500 },
-  { label: "500x – 1000x", min: 500,    max: 1000 },
-  { label: "1000x – 2000x",min: 1000,   max: 2000 },
-  { label: "2000x – 5000x",min: 2000,   max: 5000 },
-  { label: "5000x – 10000x",min:5000,   max: 10000 },
-  { label: "10000x – maxwin",min:10000,  max: 24999.99 },
-  { label: "Max Win (exact)",min:24999.99,max: Infinity },
-]
-
-const SPIN_BUCKETS: Array<{ label: string; min: number; max: number }> = [
-  { label: "0 spins",    min: 0, max: 0 },
-  { label: "1–3 spins", min: 1, max: 3 },
-  { label: "4–6 spins", min: 4, max: 6 },
-  { label: "7–10 spins",min: 7, max: 10 },
-  { label: "11–15 spins",min: 11, max: 15 },
-  { label: "16–20 spins",min: 16, max: 20 },
-  { label: "21–30 spins",min: 21, max: 30 },
-  { label: "31+ spins", min: 31, max: Infinity },
-]
-
-function getBucket(win: number): number {
-  if (win === 0) return 0
-  for (let i = WIN_BUCKETS.length - 1; i >= 0; i--) {
-    if (win > WIN_BUCKETS[i].min) return i
-  }
-  return 0
-}
-
-function getSpinBucket(spins: number): number {
-  if (spins <= 0) return 0
-  for (let i = SPIN_BUCKETS.length - 1; i >= 0; i--) {
-    if (spins >= SPIN_BUCKETS[i].min) return i
-  }
-  return SPIN_BUCKETS.length - 1
-}
-
-// ─── Types ───────────────────────────────────────────────────────────────────
-
-interface CriteriaStats {
-  weightSum: number         // total weight for this criteria
-  weightedWin: number       // sum(weight * payoutMultiplier)
-  count: number             // raw book count
-  maxWin: number
-  buckets: BucketStats[]    // win spread by logarithmic bucket
-  winWeights: Map<number, number> // weighted distribution of result wins
-}
-
-interface TierStats {
-  weightSum: number
-  weightedFsWin: number     // sum(weight * freeSpinEnd.amount)
-  weightedFsSpins: number   // sum(weight * actual "updateFreeSpin" event count, i.e. initial award + retriggers)
-  count: number
-  fsWinWeights: Map<number, number> // weighted distribution of FS-end wins
-  spinWeights: Map<number, number>  // weighted distribution of actual spin counts
-  fsWinBuckets: BucketStats[]       // FS win spread by logarithmic bucket
-  fsSpinBuckets: BucketStats[]      // actual spin-count spread by bucket
-  maxFsSpins: number        // max actual FS spins played (initial award + retriggers) seen in any single round
-  retriggerWeightSum: number // weight of rounds that had at least one "addAdditionalFreeSpins" (retrigger) event
-}
-
-interface BucketStats {
-  weightSum: number
-  weightedWin: number
-}
-
-interface ModeAnalysis {
-  name: string
-  cost: number
-  targetRtp: number
-  totalWeight: number
-  weightedWinSum: number
-  criteria: Record<string, CriteriaStats>
-  tiers: Record<string, TierStats>       // "normal" | "super" | "hidden"
-  buckets: BucketStats[]
-  maxWin: number
-}
-
-// ─── Math-config + publish index ─────────────────────────────────────────────
-
 interface MathConfig {
   bet_modes?: Array<{ bet_mode: string; cost: number; rtp: number; max_win?: number }>
 }
@@ -226,8 +152,10 @@ interface PublishIndex {
   modes?: Array<{ name: string; cost: number; events: string; weights: string }>
 }
 
-function loadMathConfig(buildDir: string): Map<string, { cost: number; rtp: number }> {
-  const out = new Map<string, { cost: number; rtp: number }>()
+function loadMathConfig(
+  buildDir: string,
+): Map<string, { cost: number; rtp: number | null }> {
+  const out = new Map<string, { cost: number; rtp: number | null }>()
 
   // core 0.3.x: costs are published in publish_files/index.json.
   const indexPath = path.join(buildDir, "publish_files", "index.json")
@@ -235,9 +163,11 @@ function loadMathConfig(buildDir: string): Map<string, { cost: number; rtp: numb
     try {
       const idx: PublishIndex = JSON.parse(fs.readFileSync(indexPath, "utf8"))
       for (const m of idx.modes ?? []) {
-        out.set(m.name, { cost: m.cost, rtp: 0.96 })
+        out.set(m.name, { cost: m.cost, rtp: null })
       }
-    } catch { /* ignore parse errors */ }
+    } catch (error) {
+      throw new Error(`Invalid build metadata: ${String(error)}`)
+    }
   }
 
   // core 0.1.x: math_config.json (also carries per-mode rtp).
@@ -248,19 +178,47 @@ function loadMathConfig(buildDir: string): Map<string, { cost: number; rtp: numb
       for (const m of cfg.bet_modes ?? []) {
         out.set(m.bet_mode, { cost: m.cost, rtp: m.rtp })
       }
-    } catch { /* ignore parse errors */ }
+    } catch (error) {
+      throw new Error(`Invalid build metadata: ${String(error)}`)
+    }
   }
 
   return out
 }
 
-// ─── LUT loading ─────────────────────────────────────────────────────────────
-
-/**
- * Loads id→{weight,win} from a CSV with format: id,weight,win (no header).
- * win is in "centi-bet" units (payoutMultiplier × 100).
- */
-async function loadLut(csvPath: string): Promise<Map<number, { weight: number; win: number }>> {
+interface Distribution {
+  weight: number
+  sum: number
+  count: number
+  values: Map<number, number>
+}
+interface TierStats {
+  rounds: Distribution
+  spins: Distribution
+  lengths: Distribution
+  retriggerWeight: number
+}
+interface ModeAnalysis {
+  name: string
+  cost: number
+  targetRtp: number | null
+  total: Distribution
+  base: Distribution
+  tiers: Record<string, TierStats>
+}
+type BookEvent = { type: string; data?: Record<string, unknown> }
+function distribution(): Distribution {
+  return { weight: 0, sum: 0, count: 0, values: new Map() }
+}
+function add(d: Distribution, value: number, weight: number) {
+  // Events use base-bet units; normalize floating-point addition to cents.
+  value = Math.round(value * 100) / 100
+  d.weight += weight
+  d.sum += value * weight
+  d.count++
+  d.values.set(value, (d.values.get(value) ?? 0) + weight)
+}
+async function loadLut(csvPath: string) {
   const lut = new Map<number, { weight: number; win: number }>()
   const rl = readline.createInterface({
     input: fs.createReadStream(csvPath),
@@ -268,523 +226,360 @@ async function loadLut(csvPath: string): Promise<Map<number, { weight: number; w
   })
   for await (const line of rl) {
     if (!line.trim()) continue
-    const parts = line.split(",")
-    if (parts.length < 3) continue
-    const id = parseInt(parts[0], 10)
-    const weight = parseFloat(parts[1])
-    const win = parseFloat(parts[2])
-    lut.set(id, { weight, win })
+    const fields = line.split(",").map(Number)
+    const [id, weight, win] = fields
+    if (
+      fields.length !== 3 ||
+      !Number.isSafeInteger(id) ||
+      !Number.isSafeInteger(weight) ||
+      weight < 0 ||
+      !Number.isSafeInteger(win) ||
+      win < 0 ||
+      lut.has(id)
+    ) {
+      throw new Error(`Invalid or duplicate LUT row in ${csvPath}: ${line}`)
+    }
+    lut.set(id, { weight, win: win / 100 })
   }
+  if (!lut.size) throw new Error(`Empty LUT: ${csvPath}`)
   return lut
 }
-
-/**
- * Finds the minimum book `id` across one or more books files via a cheap
- * regex scan (avoids a full JSON.parse of every line just to read one field).
- */
-async function findMinBookId(booksPaths: string[]): Promise<number | null> {
-  let minId: number | null = null
-  const idPattern = /"id":(\d+)/
-  for await (const line of readBooksLines(booksPaths)) {
-    if (!line.trim()) continue
-    const m = idPattern.exec(line)
-    if (!m) continue
-    const id = Number(m[1])
-    if (minId === null || id < minId) minId = id
-  }
-  return minId
-}
-
-// ─── Book streaming + stat accumulation ──────────────────────────────────────
-
-/**
- * Yields text lines across one or more books files. Since core 0.3.x, book
- * chunks are Zstandard-compressed (`.jsonl.zst`). Each chunk is decompressed
- * fully in memory (chunks are small, ~10MB) rather than streamed, since the
- * merged publish_files books file concatenates many independent zstd frames
- * that Node's streaming zstd decompressor cannot follow past the first frame.
- * Plain uncompressed `.jsonl` files (older core versions) are read as-is.
- */
 async function* readBooksLines(booksPaths: string[]): AsyncGenerator<string> {
   for (const booksPath of booksPaths) {
     if (booksPath.endsWith(".zst")) {
+      if (!zlib.zstdDecompressSync)
+        throw new Error("Zstandard books require Node >= 23.8 or plain .jsonl books.")
       const decompressed = zlib.zstdDecompressSync(fs.readFileSync(booksPath))
-      for (const line of decompressed.toString("utf8").split("\n")) {
-        yield line
-      }
-      continue
+      yield* decompressed.toString("utf8").split("\n")
+    } else {
+      const rl = readline.createInterface({
+        input: fs.createReadStream(booksPath),
+        crlfDelay: Infinity,
+      })
+      for await (const line of rl) yield line
     }
-
-    const rl = readline.createInterface({
-      input: fs.createReadStream(booksPath),
-      crlfDelay: Infinity,
-    })
-    for await (const line of rl) yield line
   }
 }
-
-async function analyseMode(
+export async function analyseMode(
   name: string,
   cost: number,
-  targetRtp: number,
+  targetRtp: number | null,
   booksPaths: string[],
   lutPath: string,
 ): Promise<ModeAnalysis> {
+  if (!Number.isFinite(cost) || cost <= 0) throw new Error(`Invalid cost for ${name}`)
   const lut = await loadLut(lutPath)
-
-  // The published LUT's own numbering (0-based vs 1-based) isn't a stable
-  // convention across runs (depends on whether normalize-lookup-ids.ts ran)
-  // - derive the real offset by comparing actual observed minimums instead
-  // of assuming one.
-  let lutMinId = Infinity
-  for (const id of lut.keys()) if (id < lutMinId) lutMinId = id
-  const booksMinId = await findMinBookId(booksPaths)
-  const bookIdOffset = booksMinId === null || !Number.isFinite(lutMinId) ? 0 : lutMinId - booksMinId
-  if (bookIdOffset !== 0) {
-    console.warn(`Mode "${name}": book ids are offset by ${bookIdOffset} relative to the LUT - correcting.`)
-  }
-
-  const analysis: ModeAnalysis = {
+  const a: ModeAnalysis = {
     name,
     cost,
     targetRtp,
-    totalWeight: 0,
-    weightedWinSum: 0,
-    criteria: {},
+    total: distribution(),
+    base: distribution(),
     tiers: {},
-    buckets: WIN_BUCKETS.map(() => ({ weightSum: 0, weightedWin: 0 })),
-    maxWin: 0,
   }
-
+  let minBook = Infinity
   for await (const line of readBooksLines(booksPaths)) {
     if (!line.trim()) continue
-
-    let book: { id: number; payoutMultiplier: number; events: Array<{ type: string; data: Record<string, unknown> }> }
-    try {
-      book = JSON.parse(line)
-    } catch {
-      continue
-    }
-
-    // Look up published weight for this book
-    const lutEntry = lut.get(book.id + bookIdOffset)
-    const weight = lutEntry?.weight ?? 0
-    if (weight === 0) continue
-
-    // Books store payoutMultiplier as centi-bets (×100), e.g. 60 = 0.6× bet.
-    // Divide by 100 to get the actual bet multiplier used everywhere below.
-    const payout = (book.payoutMultiplier ?? 0) / 100
-
-    // Track max win
-    if (payout > analysis.maxWin) analysis.maxWin = payout
-
-    analysis.totalWeight += weight
-    analysis.weightedWinSum += weight * payout
-
-    // ── Extract criteria from first reveal event ──────────────────────────
-    const firstReveal = book.events.find((e) => e.type === "reveal")
-    const criteria = (firstReveal?.data?.gameType as string | undefined) ?? "unknown"
-
-    // ── Accumulate criteria stats ─────────────────────────────────────────
-    if (!analysis.criteria[criteria]) {
-      analysis.criteria[criteria] = {
-        weightSum: 0,
-        weightedWin: 0,
-        count: 0,
-        maxWin: 0,
-        buckets: WIN_BUCKETS.map(() => ({ weightSum: 0, weightedWin: 0 })),
-        winWeights: new Map<number, number>(),
-      }
-    }
-    const cs = analysis.criteria[criteria]
-    cs.weightSum += weight
-    cs.weightedWin += weight * payout
-    cs.count++
-    if (payout > cs.maxWin) cs.maxWin = payout
-    const critBucketIndex = getBucket(payout)
-    cs.buckets[critBucketIndex].weightSum += weight
-    cs.buckets[critBucketIndex].weightedWin += weight * payout
-    cs.winWeights.set(payout, (cs.winWeights.get(payout) ?? 0) + weight)
-
-    // ── FS tier stats ─────────────────────────────────────────────────────
-    const triggerEvt = book.events.find((e) => e.type === "freeSpinTrigger")
-    // Keep tier-average reporting aligned with the FS criteria fences by
-    // excluding forced maxwin books (they can contain a hidden trigger event
-    // but do not represent the hiddenfreespins fence distribution).
-    if (triggerEvt && criteria !== "maxwin") {
-      const tier = (triggerEvt.data?.tier as string | undefined) ?? "normal"
-      if (!analysis.tiers[tier]) {
-        analysis.tiers[tier] = {
-          weightSum: 0,
-          weightedFsWin: 0,
-          weightedFsSpins: 0,
-          count: 0,
-          fsWinWeights: new Map<number, number>(),
-          spinWeights: new Map<number, number>(),
-          fsWinBuckets: WIN_BUCKETS.map(() => ({ weightSum: 0, weightedWin: 0 })),
-          fsSpinBuckets: SPIN_BUCKETS.map(() => ({ weightSum: 0, weightedWin: 0 })),
-          maxFsSpins: 0,
-          retriggerWeightSum: 0,
-        }
-      }
-      const ts = analysis.tiers[tier]
-      ts.weightSum += weight
-      ts.count++
-      const fsEndEvt = book.events.find((e) => e.type === "freeSpinEnd")
-      if (fsEndEvt) {
-        const fsEndAmount = (fsEndEvt.data?.amount as number) ?? 0
-        ts.weightedFsWin += weight * fsEndAmount
-        // Count actual "updateFreeSpin" events rather than reading the
-        // trigger event's `totalFs` field — that field only reflects the
-        // INITIAL award (e.g. 12), not any additional spins granted by
-        // scatter retriggers during the feature. One "updateFreeSpin" event
-        // is emitted per free spin actually played, so counting them gives
-        // the true total (initial + all retriggers).
-        const actualFsSpins = book.events.filter((e) => e.type === "updateFreeSpin").length
-        ts.weightedFsSpins += weight * actualFsSpins
-        ts.fsWinWeights.set(fsEndAmount, (ts.fsWinWeights.get(fsEndAmount) ?? 0) + weight)
-        ts.spinWeights.set(actualFsSpins, (ts.spinWeights.get(actualFsSpins) ?? 0) + weight)
-        const fsWinBucketIndex = getBucket(fsEndAmount)
-        ts.fsWinBuckets[fsWinBucketIndex].weightSum += weight
-        ts.fsWinBuckets[fsWinBucketIndex].weightedWin += weight * fsEndAmount
-        const spinBucketIndex = getSpinBucket(actualFsSpins)
-        ts.fsSpinBuckets[spinBucketIndex].weightSum += weight
-        ts.fsSpinBuckets[spinBucketIndex].weightedWin += weight * actualFsSpins
-        if (actualFsSpins > ts.maxFsSpins) ts.maxFsSpins = actualFsSpins
-
-        // A round retriggered at least once if it emitted any
-        // "addAdditionalFreeSpins" event (added in checkFreespins whenever
-        // scatters land during an active free-spin round).
-        const hadRetrigger = book.events.some((e) => e.type === "addAdditionalFreeSpins")
-        if (hadRetrigger) ts.retriggerWeightSum += weight
-      }
-    }
-
-    // ── Win bucket ───────────────────────────────────────────────────────
-    const bi = getBucket(payout)
-    analysis.buckets[bi].weightSum += weight
-    analysis.buckets[bi].weightedWin += weight * payout
+    const book = JSON.parse(line)
+    if (!Number.isSafeInteger(book.id)) throw new Error(`Invalid book ID in ${name}`)
+    minBook = Math.min(minBook, book.id)
   }
-
-  return analysis
+  let minLut = Infinity
+  for (const id of lut.keys()) minLut = Math.min(minLut, id)
+  const offset = minLut - minBook
+  if (offset) console.warn(`Mode "${name}": correcting book/LUT ID offset ${offset}.`)
+  const seen = new Set<number>()
+  for await (const line of readBooksLines(booksPaths)) {
+    if (!line.trim()) continue
+    const book: { id: number; payoutMultiplier: number; events: BookEvent[] } =
+      JSON.parse(line)
+    const id = book.id + offset
+    const entry = lut.get(id)
+    if (!entry || seen.has(id))
+      throw new Error(`Missing LUT entry or duplicate book ${book.id} in ${name}`)
+    seen.add(id)
+    if (Math.abs(book.payoutMultiplier / 100 - entry.win) > 0.00001)
+      throw new Error(`Book/LUT payout mismatch for ${name} book ${book.id}`)
+    if (entry.weight === 0) continue
+    const { weight, win } = entry
+    add(a.total, win, weight)
+    const trigger = book.events.find((e) => e.type === "freeSpinTrigger")
+    const fsWins: number[] = []
+    let baseWin = 0
+    let spinWin = 0
+    let inFs = false
+    let hasBase = false
+    let hasSetWin = false
+    let fallbackWin = 0
+    // A spin may have several reveals/cascades. updateFreeSpin marks actual
+    // free spins; setWin amounts are individual payouts, not cumulative totals.
+    const flushSpin = () => {
+      const value = hasSetWin ? spinWin : fallbackWin
+      if (inFs) fsWins.push(value)
+      else baseWin += value
+      spinWin = 0
+      fallbackWin = 0
+      hasSetWin = false
+    }
+    for (const event of book.events) {
+      if (event.type === "updateFreeSpin") {
+        flushSpin()
+        inFs = true
+      } else if (event.type === "reveal" && !inFs) {
+        hasBase = true
+      } else if (event.type === "setWin" || event.type === "winInfo") {
+        const amount = Number(
+          event.data?.[event.type === "setWin" ? "amount" : "totalWin"],
+        )
+        if (!Number.isFinite(amount) || amount < 0)
+          throw new Error(`Invalid win event in ${name} book ${book.id}`)
+        if (event.type === "setWin") {
+          spinWin += amount
+          hasSetWin = true
+        } else fallbackWin += amount
+      }
+    }
+    flushSpin()
+    const fsWin = fsWins.reduce((sum, value) => sum + value, 0)
+    if (Math.abs(baseWin + fsWin - win) > 0.011)
+      throw new Error(
+        `Event payouts do not reconcile with LUT in ${name} book ${book.id}: ${baseWin} + ${fsWin} != ${win}`,
+      )
+    if (hasBase && !trigger) add(a.base, win, weight)
+    if (trigger) {
+      const tier = String(trigger.data?.tier ?? "normal")
+      const t = (a.tiers[tier] ??= {
+        rounds: distribution(),
+        spins: distribution(),
+        lengths: distribution(),
+        retriggerWeight: 0,
+      })
+      // A bonus play includes the triggering spin and all free spins.
+      add(t.rounds, win, weight)
+      add(t.lengths, fsWins.length, weight)
+      for (const value of fsWins) add(t.spins, value, weight)
+      if (book.events.some((e) => e.type === "addAdditionalFreeSpins"))
+        t.retriggerWeight += weight
+    } else if (fsWins.length)
+      throw new Error(`Free spins without a trigger in ${name} book ${book.id}`)
+  }
+  for (const [id, entry] of lut) {
+    if (entry.weight > 0 && !seen.has(id))
+      throw new Error(`Positive-weight LUT outcome ${id} has no book in ${name}`)
+  }
+  if (!a.total.weight) throw new Error(`No positive-weight outcomes in ${name}`)
+  return a
 }
-
-// ─── Formatting helpers ───────────────────────────────────────────────────────
-
-function pct(value: number, total: number, decimals = 3): string {
-  if (total === 0) return "N/A"
-  return ((value / total) * 100).toFixed(decimals) + "%"
+function pct(value: number, total: number, decimals = 4): string {
+  if (!total) return "N/A"
+  const p = (value / total) * 100
+  if (p > 0 && p < 10 ** -decimals) return p.toExponential(3) + "%"
+  return p.toFixed(decimals) + "%"
 }
-
 function hitRate(prob: number): string {
   if (prob <= 0) return "never"
-  const hr = 1 / prob
-  if (hr >= 1_000_000) return "1 in " + (hr / 1_000_000).toFixed(2) + "M"
-  if (hr >= 100_000) return "1 in " + Math.round(hr / 1000) + "k"
-  if (hr >= 10_000) return "1 in " + (hr / 1000).toFixed(1) + "k"
-  if (hr >= 1000) return "1 in " + Math.round(hr)
-  if (hr >= 10) return "1 in " + hr.toFixed(1)
-  return "1 in " + hr.toFixed(2)
+  const odds = 1 / prob
+  return "1 in " + (odds >= 1e6 ? (odds / 1e6).toFixed(3) + "M" : odds.toFixed(2))
 }
-
-function pad(s: string, len: number, right = false): string {
-  const plain = s.replace(/\x1b\[[0-9;]*m/g, "")
-  const padding = Math.max(0, len - plain.length)
-  return right
-    ? " ".repeat(padding) + s
-    : s + " ".repeat(padding)
-}
-
-function rpad(s: string, len: number): string { return pad(s, len, true) }
-function lpad(s: string, len: number): string { return pad(s, len, false) }
-
-function bar(fraction: number, width = 20): string {
-  const filled = Math.round(fraction * width)
-  return "█".repeat(filled) + "░".repeat(width - filled)
-}
-
-function weightedQuantile(weightsByValue: Map<number, number>, q: number): number {
-  if (weightsByValue.size === 0) return 0
-
-  const points = [...weightsByValue.entries()]
-    .filter(([, w]) => w > 0)
-    .sort((a, b) => a[0] - b[0])
-
-  const totalWeight = points.reduce((s, [, w]) => s + w, 0)
-  if (totalWeight <= 0) return 0
-
-  const target = Math.max(0, Math.min(1, q)) * totalWeight
-  let acc = 0
-  for (const [value, weight] of points) {
-    acc += weight
-    if (acc >= target) return value
+function weightedQuantile(d: Distribution, q: number): number {
+  let weight = 0
+  const points = [...d.values].sort((a, b) => a[0] - b[0])
+  for (const [value, w] of points) {
+    weight += w
+    if (weight >= d.weight * q) return value
   }
-
-  return points[points.length - 1]![0]
+  return 0
 }
-
-function printBucketBreakdown(
+function maximum(d: Distribution): number {
+  let max = 0
+  for (const value of d.values.keys()) max = Math.max(max, value)
+  return max
+}
+function printDistribution(
   title: string,
-  buckets: BucketStats[],
-  bucketDefs: Array<{ label: string; min: number; max: number }>,
-  totalWeight: number,
-  totalValue: number,
-  valueLabel: string,
+  d: Distribution,
+  a: ModeAnalysis,
+  spinCounts = false,
 ) {
-  console.log("")
-  console.log("  " + bold(title))
-  console.log("  " + dim(`   bucket${" ".repeat(16)}| % of set | % of ${valueLabel} | visual`))
-  console.log("  " + dim("─".repeat(76)))
-
-  for (let i = 0; i < buckets.length; i++) {
-    const b = buckets[i]
-    if (b.weightSum === 0) continue
-    const setPct = totalWeight > 0 ? (b.weightSum / totalWeight) * 100 : 0
-    const valuePct = totalValue > 0 ? (b.weightedWin / totalValue) * 100 : 0
-    const row = [
-      lpad(bucketDefs[i].label, 22),
-      rpad(setPct.toFixed(3) + "%", 10),
-      rpad(valuePct.toFixed(3) + "%", 14),
-      dim(bar(Math.min(setPct / 20, 1), 18)),
-    ].join("  ")
-    console.log("  " + row)
+  console.log(`\n  ${title}`)
+  if (!d.weight) {
+    console.log("  No observed outcomes.")
+    return
   }
-}
-
-// ─── Report printer ────────────────────────────────────────────────────────
-
-function printMode(a: ModeAnalysis) {
-  const tw = a.totalWeight
-  const rtp = tw > 0 ? a.weightedWinSum / tw / a.cost : 0
-
-  const LINE = "═".repeat(72)
-  const line = "─".repeat(72)
-
-  console.log("\n" + bold(cyan(LINE)))
-  console.log(bold(cyan(`  MODE: ${a.name}`)) + dim(`  (cost=${a.cost}x, target RTP=${(a.targetRtp * 100).toFixed(1)}%)`))
-  console.log(bold(cyan(LINE)))
-
-  // ── Overview ─────────────────────────────────────────────────────────────
-  const nullCrit = a.criteria["0"]
-  const nullProb = nullCrit ? nullCrit.weightSum / tw : 0
-  const nonZeroProb = 1 - nullProb
-  const maxwinCrit = a.criteria["maxwin"]
-  const maxwinProb = maxwinCrit ? maxwinCrit.weightSum / tw : 0
-
-  const rtpColor = Math.abs(rtp - a.targetRtp) < 0.001 ? green : yellow
-
-  console.log("")
-  console.log(`  ${bold("Overall RTP:")}        ${rtpColor(bold((rtp * 100).toFixed(4) + "%"))}  ` +
-    dim(`(target ${(a.targetRtp * 100).toFixed(1)}%)`) )
-  console.log(`  ${bold("Max Win Seen:")}       ${(a.maxWin).toFixed(1)}x bet`)
-  console.log(`  ${bold("Non-Zero Hit Rate:")}  ${(nonZeroProb * 100).toFixed(3)}%  (${hitRate(nonZeroProb)} spins)`)
-  console.log(`  ${bold("Null Hit Rate:")}      ${(nullProb * 100).toFixed(3)}%  (${hitRate(nullProb)} spins)`)
-  if (maxwinProb > 0) {
-    console.log(`  ${bold("Max Win Hit Rate:")}   ${hitRate(maxwinProb)}  (${(maxwinProb * 100).toFixed(6)}%)`)
-  }
-
-  // ── Bonus entry odds ─────────────────────────────────────────────────────
-  const bonusCriteria = Object.entries(a.criteria).filter(
-    ([k]) => k !== "0" && k !== "basegame" && k !== "unknown",
+  const nullWeight = d.values.get(0) ?? 0
+  console.log(
+    `  Weighted mean: ${(d.sum / d.weight).toFixed(4)}${spinCounts ? " spins" : "x base bet"} | Median: ${weightedQuantile(d, 0.5).toFixed(2)} | P90: ${weightedQuantile(d, 0.9).toFixed(2)} | P95: ${weightedQuantile(d, 0.95).toFixed(2)} | Max: ${maximum(d).toFixed(2)}`,
   )
-  const bonusWeight = bonusCriteria.reduce((s, [, cs]) => s + cs.weightSum, 0)
-  const bonusProb = bonusWeight / tw
-
-  const fsNormal = a.criteria["freespins"]
-  const fsSuper  = a.criteria["superfreespins"]
-  const fsHidden = a.criteria["hiddenfreespins"]
-
-  if (bonusProb > 0) {
-    console.log("")
-    console.log("  " + bold(yellow("── Bonus Entry Odds " + "─".repeat(51))))
-    if (bonusWeight > 0) {
-      console.log(`  ${lpad(bold("Any Bonus:"), 28)} ${hitRate(bonusProb)}`)
-    }
-    if (fsNormal) {
-      const p = fsNormal.weightSum / tw
-      console.log(`  ${lpad("Normal FS (3 scatters):", 28)} ${hitRate(p)}`)
-    }
-    if (fsSuper) {
-      const p = fsSuper.weightSum / tw
-      console.log(`  ${lpad("Super FS  (4 scatters):", 28)} ${hitRate(p)}`)
-    }
-    if (fsHidden) {
-      const p = fsHidden.weightSum / tw
-      console.log(`  ${lpad("Hidden FS (5 scatters):", 28)} ${hitRate(p)}`)
-    }
-  }
-
-  // ── Result-set distribution table ────────────────────────────────────────
-  console.log("")
-  console.log("  " + bold(yellow("── Result Set Distribution " + "─".repeat(44))))
-  console.log("")
-
-  const hdr = [
-    lpad(bold("Criteria"),         22),
-    rpad(bold("Probability"),      14),
-    rpad(bold("Hit Rate"),         16),
-    rpad(bold("RTP Contrib"),      13),
-    rpad(bold("Avg Win"),          11),
-    rpad(bold("Max Win"),          10),
-  ].join("  ")
-  console.log("  " + hdr)
-  console.log("  " + dim("─".repeat(90)))
-
-  // Sort criteria: "0" first, then "basegame", then freespins variants, then maxwin
-  const ORDER = ["0", "basegame", "freespins", "superfreespins", "hiddenfreespins", "maxwin"]
-  const sortedCriteria = Object.keys(a.criteria).sort((a, b) => {
-    const ai = ORDER.indexOf(a); const bi = ORDER.indexOf(b)
-    if (ai >= 0 && bi >= 0) return ai - bi
-    if (ai >= 0) return -1
-    if (bi >= 0) return 1
-    return a.localeCompare(b)
-  })
-
-  for (const crit of sortedCriteria) {
-    const cs = a.criteria[crit]
-    const prob    = cs.weightSum / tw
-    const rtpC    = cs.weightedWin / tw / a.cost
-    const avgWin  = cs.weightSum > 0 ? cs.weightedWin / cs.weightSum : 0
-    const medianWin = weightedQuantile(cs.winWeights, 0.5)
-    const p90Win = weightedQuantile(cs.winWeights, 0.9)
-    const p95Win = weightedQuantile(cs.winWeights, 0.95)
-    const isBonus = crit !== "0" && crit !== "basegame" && crit !== "unknown"
-    const critLabel = isBonus ? magenta(crit) : (crit === "0" ? dim(crit) : crit)
-    const row = [
-      lpad(critLabel,                    22),
-      rpad((prob * 100).toFixed(4) + "%", 14),
-      rpad(hitRate(prob),                 16),
-      rpad((rtpC * 100).toFixed(4) + "%", 13),
-      rpad(avgWin.toFixed(2) + "x",       11),
-      rpad(cs.maxWin.toFixed(1) + "x",    10),
-    ].join("  ")
-    console.log("  " + row)
-
-    console.log("  " + dim(`    spread: median=${medianWin.toFixed(2)}x  p90=${p90Win.toFixed(2)}x  p95=${p95Win.toFixed(2)}x`))
-    printBucketBreakdown(
-      `  ${critLabel} win spread`,
-      cs.buckets,
-      WIN_BUCKETS,
-      cs.weightSum,
-      cs.weightedWin,
-      "win",
+  if (!spinCounts) {
+    console.log(
+      `  Non-zero: ${pct(d.weight - nullWeight, d.weight)} (${hitRate((d.weight - nullWeight) / d.weight)}) | Null (0 payouts): ${pct(nullWeight, d.weight)} (${hitRate(nullWeight / d.weight)})`,
+    )
+    console.log(
+      `  RTP contribution: ${pct(d.sum, a.total.weight * a.cost)} of mode spend`,
     )
   }
-
-  // ── FS tier breakdown ─────────────────────────────────────────────────────
-  if (Object.keys(a.tiers).length > 0) {
-    console.log("")
-    console.log("  " + bold(yellow("── Free Spin Tier Breakdown " + "─".repeat(43))))
-    console.log("  " + dim("Avg FS Win is weighted mean in base-bet multipliers (not divided by mode cost)."))
-    console.log("  " + dim("Median FS Win is weighted P50 from the same FS-end distribution."))
-    console.log("  " + dim("Max Spins is the largest total FS spins (initial award + retriggers) seen in any single round."))
-    console.log("  " + dim("Retrigger Freq is the weighted % of rounds in this tier that landed at least one retrigger."))
-    console.log("")
-
-    const tierHdr = [
-      lpad(bold("Tier"),      12),
-      rpad(bold("Hit Rate"),  16),
-      rpad(bold("% of Bonus"),14),
-      rpad(bold("Avg FS Win (mean)"),18),
-      rpad(bold("Median FS Win"),15),
-      rpad(bold("Avg Spins"), 11),
-      rpad(bold("Max Spins"), 11),
-      rpad(bold("Retrigger Freq"), 15),
-    ].join("  ")
-    console.log("  " + tierHdr)
-    console.log("  " + dim("─".repeat(120)))
-
-    const tierOrder = ["normal", "super", "hidden"]
-    const sortedTiers = Object.keys(a.tiers).sort((a, b) => {
-      const ai = tierOrder.indexOf(a); const bi = tierOrder.indexOf(b)
-      return (ai >= 0 ? ai : 99) - (bi >= 0 ? bi : 99)
-    })
-
-    for (const tier of sortedTiers) {
-      const ts = a.tiers[tier]
-      const prob      = ts.weightSum / tw
-      const bonusPct  = bonusProb > 0 ? (ts.weightSum / bonusWeight) * 100 : 0
-      const avgFsWin  = ts.weightSum > 0 ? ts.weightedFsWin / ts.weightSum : 0
-      const medianFsWin = weightedQuantile(ts.fsWinWeights, 0.5)
-      const p90FsWin = weightedQuantile(ts.fsWinWeights, 0.9)
-      const p95FsWin = weightedQuantile(ts.fsWinWeights, 0.95)
-      const avgSpins  = ts.weightSum > 0 ? ts.weightedFsSpins / ts.weightSum : 0
-      const medianSpins = weightedQuantile(ts.spinWeights, 0.5)
-      const p90Spins = weightedQuantile(ts.spinWeights, 0.9)
-      const retriggerPct = ts.weightSum > 0 ? (ts.retriggerWeightSum / ts.weightSum) * 100 : 0
-      const tierLabel = tier === "hidden" ? red(tier) : tier === "super" ? yellow(tier) : green(tier)
-      const row = [
-        lpad(tierLabel,               12),
-        rpad(hitRate(prob),           16),
-        rpad(bonusPct.toFixed(2)+"%", 14),
-        rpad(avgFsWin.toFixed(2)+"x", 18),
-        rpad(medianFsWin.toFixed(2)+"x", 15),
-        rpad(avgSpins.toFixed(1)+" spins", 11),
-        rpad(ts.maxFsSpins.toFixed(0)+" spins", 11),
-        rpad(retriggerPct.toFixed(2)+"%", 15),
-      ].join("  ")
-      console.log("  " + row)
-      console.log("  " + dim(`    spread: fs median=${medianFsWin.toFixed(2)}x  p90=${p90FsWin.toFixed(2)}x  p95=${p95FsWin.toFixed(2)}x  spins median=${medianSpins.toFixed(1)}  p90=${p90Spins.toFixed(1)}`))
-      printBucketBreakdown(
-        `  ${tierLabel} FS win spread`,
-        ts.fsWinBuckets,
-        WIN_BUCKETS,
-        ts.weightSum,
-        ts.weightedFsWin,
-        "FS win",
-      )
-      printBucketBreakdown(
-        `  ${tierLabel} spin-count spread`,
-        ts.fsSpinBuckets,
-        SPIN_BUCKETS,
-        ts.weightSum,
-        ts.weightedFsSpins,
-        "spins",
-      )
+  console.log(
+    "  " +
+      "Range".padEnd(23) +
+      "Probability".padStart(15) +
+      "Frequency".padStart(20) +
+      (spinCounts ? "Share of spins" : "Share of payout").padStart(19) +
+      (spinCounts ? "" : "RTP points".padStart(16)),
+  )
+  const edges = spinCounts
+    ? [1, 4, 7, 11, 16, 21, 31, Infinity]
+    : [
+        0,
+        0.25,
+        0.5,
+        1,
+        2,
+        5,
+        10,
+        25,
+        50,
+        100,
+        250,
+        500,
+        1000,
+        3000,
+        5000,
+        10000,
+        Infinity,
+      ]
+  const buckets = edges
+    .slice(0, -1)
+    .map((min, i) => ({ min, max: edges[i + 1], weight: 0, sum: 0 }))
+  let zeroWeight = 0
+  for (const [value, w] of d.values) {
+    if (!value) {
+      zeroWeight += w
+      continue
     }
+    const b = buckets.find((b) => value >= b.min && value < b.max)!
+    b.weight += w
+    b.sum += value * w
   }
-
-  // ── Win distribution ─────────────────────────────────────────────────────
-  console.log("")
-  console.log("  " + bold(yellow("── Win Distribution " + "─".repeat(51))))
-  console.log("")
-
-  const bucketHdr = [
-    lpad(bold("Win Range"),  22),
-    rpad(bold("% of Spins"), 12),
-    rpad(bold("% of RTP"),   12),
-    rpad(bold("Visual"),     22),
-  ].join("  ")
-  console.log("  " + bucketHdr)
-  console.log("  " + dim("─".repeat(72)))
-
-  for (let i = 0; i < WIN_BUCKETS.length; i++) {
-    const b = a.buckets[i]
-    if (b.weightSum === 0) continue
-    const spinPct = b.weightSum / tw
-    const rtpPct  = a.weightedWinSum > 0 ? b.weightedWin / a.weightedWinSum : 0
-    const isNull  = i === 0
-    const rangeLabel = isNull ? dim(WIN_BUCKETS[i].label) : WIN_BUCKETS[i].label
-    const row = [
-      lpad(rangeLabel,                    22),
-      rpad((spinPct * 100).toFixed(3)+"%", 12),
-      rpad((rtpPct  * 100).toFixed(3)+"%", 12),
-      dim(bar(Math.min(spinPct / 0.35, 1), 22)),
-    ].join("  ")
-    console.log("  " + row)
-  }
-
-  console.log("")
+  const rangeValue = (value: number) =>
+    value >= 1000 ? `${value / 1000}k` : String(value)
+  const rows = [
+    { label: spinCounts ? "0 spins" : "0x", weight: zeroWeight, sum: 0 },
+    ...buckets.map((b) => ({
+      label: spinCounts
+        ? b.max === Infinity
+          ? `${b.min}+ spins`
+          : `${Math.max(1, b.min)}-${b.max - 1} spins`
+        : b.min === 0
+          ? ">0x - <0.25x"
+          : b.max === Infinity
+            ? `${rangeValue(b.min)}x+`
+            : `${rangeValue(b.min)}x - <${rangeValue(b.max)}x`,
+      weight: b.weight,
+      sum: b.sum,
+    })),
+  ]
+  // Show empty buckets too, making gaps in the distribution visible.
+  for (const row of rows)
+    console.log(
+      "  " +
+        row.label.padEnd(23) +
+        pct(row.weight, d.weight).padStart(15) +
+        hitRate(row.weight / d.weight).padStart(20) +
+        pct(row.sum, d.sum).padStart(19) +
+        (spinCounts ? "" : pct(row.sum, a.total.weight * a.cost).padStart(16)),
+    )
 }
-
-// ─── Mode discovery ───────────────────────────────────────────────────────────
+export function printMode(a: ModeAnalysis) {
+  const tw = a.total.weight
+  const nullWeight = a.total.values.get(0) ?? 0
+  const bonusWeight = Object.values(a.tiers).reduce((sum, t) => sum + t.rounds.weight, 0)
+  console.log("\n" + "=".repeat(100))
+  console.log(`  MODE: ${a.name} (cost=${a.cost}x base bet)`)
+  console.log(
+    `  Overall RTP: ${pct(a.total.sum, tw * a.cost)}${a.targetRtp === null ? " | Target RTP: unavailable in build metadata" : ` | Target RTP: ${pct(a.targetRtp, 1)}`}`,
+  )
+  console.log(
+    `  Non-Zero Hit Rate: ${pct(tw - nullWeight, tw)} (${hitRate((tw - nullWeight) / tw)} mode plays)`,
+  )
+  console.log(
+    `  Null Hit Rate: ${pct(nullWeight, tw)} (${hitRate(nullWeight / tw)} mode plays)`,
+  )
+  const max = maximum(a.total)
+  console.log(
+    `  Highest Published Payout: ${max.toFixed(2)}x base bet | Frequency: ${hitRate((a.total.values.get(max) ?? 0) / tw)}`,
+  )
+  console.log(
+    `  Any Bonus Entry: ${pct(bonusWeight, tw)} (${hitRate(bonusWeight / tw)} mode plays)`,
+  )
+  console.log(
+    "  All probabilities use published LUT weights. A mode play includes its triggering spin and all free spins.",
+  )
+  console.log(
+    "  Win ranges are in base-bet multiples; RTP divides by mode cost. Frequency is conditional on the population in each section.",
+  )
+  printDistribution(
+    "Entire Mode - Total Payout Distribution (all mode plays)",
+    a.total,
+    a,
+  )
+  printDistribution(
+    "Base Game - Payout Distribution (non-bonus plays only; includes single feature spins)",
+    a.base,
+    a,
+  )
+  for (const tier of [
+    ...new Set(["normal", "super", "hidden", ...Object.keys(a.tiers)]),
+  ]) {
+    const label =
+      (
+        { normal: "Bonus", super: "Super Bonus", hidden: "Hidden Bonus" } as Record<
+          string,
+          string
+        >
+      )[tier] ?? tier
+    const t = a.tiers[tier]
+    console.log(`\n  ${label} Free Spins`)
+    if (!t) {
+      console.log("  Entry: 0% (never) | No observed free-spin rounds in this mode.")
+      continue
+    }
+    console.log(
+      `  Entry: ${pct(t.rounds.weight, tw)} (${hitRate(t.rounds.weight / tw)} mode plays) | Share of bonus entries: ${pct(t.rounds.weight, bonusWeight)}`,
+    )
+    console.log(`  Retriggered rounds: ${pct(t.retriggerWeight, t.rounds.weight)}`)
+    console.log(
+      "  Bonus-play totals include the triggering spin and all free spins. Individual free-spin payouts exclude the triggering spin. All positive-weight outcomes are included.",
+    )
+    printDistribution(
+      `${label} - Total Bonus Play Payout Distribution (includes triggering spin; conditional on this tier)`,
+      t.rounds,
+      a,
+    )
+    printDistribution(
+      `${label} - Individual Free-Spin Payout Distribution (weighted across actual spins played)`,
+      t.spins,
+      a,
+    )
+    printDistribution(
+      `${label} - Spins Played per Round (includes retriggers; may stop at win cap)`,
+      t.lengths,
+      a,
+      true,
+    )
+  }
+  const componentSum =
+    a.base.sum + Object.values(a.tiers).reduce((sum, t) => sum + t.rounds.sum, 0)
+  console.log(
+    `\n  Reconciliation: non-bonus base-play payouts + total bonus-play payouts = ${pct(componentSum, tw * a.cost)} RTP (mode total ${pct(a.total.sum, tw * a.cost)}).`,
+  )
+}
 
 interface ModeDescriptor {
   name: string
   booksPaths: string[]
   lutPath: string
   cost: number
-  rtp: number
+  rtp: number | null
 }
 
 function discoverModes(buildDir: string): ModeDescriptor[] {
@@ -808,9 +603,20 @@ function discoverModes(buildDir: string): ModeDescriptor[] {
       return
     }
 
-    const cfg = mathConfig.get(name) ?? { cost: 1, rtp: 0.96 }
+    const cfg = mathConfig.get(name)
+    if (!cfg)
+      throw new Error(
+        `No mode cost metadata for "${name}"; cannot calculate RTP reliably.`,
+      )
     modes.push({ name, booksPaths, lutPath, cost: cfg.cost, rtp: cfg.rtp })
     seen.add(name)
+  }
+
+  // core 0.1.x/0.2.x: plain uncompressed books live at the __build__ root.
+  for (const entry of fs.readdirSync(buildDir)) {
+    const m = entry.match(/^books_(.+)\.jsonl$/)
+    if (!m) continue
+    addMode(m[1], [path.join(buildDir, entry)])
   }
 
   // core 0.3.x: per-worker, per-chunk Zstandard-compressed books live in
@@ -829,24 +635,16 @@ function discoverModes(buildDir: string): ModeDescriptor[] {
     for (const [name, paths] of chunksByMode) addMode(name, paths)
   }
 
-  // core 0.1.x/0.2.x: plain uncompressed books live at the __build__ root.
-  for (const entry of fs.readdirSync(buildDir)) {
-    const m = entry.match(/^books_(.+)\.jsonl$/)
-    if (!m) continue
-    addMode(m[1], [path.join(buildDir, entry)])
-  }
-
   // Sort to give a consistent order matching math_config ordering
   const cfgOrder = [...mathConfig.keys()]
   modes.sort((a, b) => {
-    const ai = cfgOrder.indexOf(a.name); const bi = cfgOrder.indexOf(b.name)
+    const ai = cfgOrder.indexOf(a.name)
+    const bi = cfgOrder.indexOf(b.name)
     return (ai >= 0 ? ai : 999) - (bi >= 0 ? bi : 999)
   })
 
   return modes
 }
-
-// ─── CLI argument parsing ─────────────────────────────────────────────────────
 
 function parseArgs(): { buildDir: string; modes?: string[] } {
   const args = process.argv.slice(2)
@@ -880,7 +678,10 @@ async function main() {
 
   const gameName = deriveGameName(buildDir)
   const timestamp = formatTimestamp()
-  const outputFile = path.join(OUTPUT_DIR, `${sanitizeFileName(gameName)} - ${timestamp}.txt`)
+  const outputFile = path.join(
+    OUTPUT_DIR,
+    `${sanitizeFileName(gameName)} - ${timestamp}.txt`,
+  )
   const restoreConsole = createReportWriter(outputFile, gameName, buildDir, timestamp)
 
   console.log(bold("\n  Slot Engine Build Analyser"))
@@ -896,17 +697,32 @@ async function main() {
     process.exit(1)
   }
 
-  console.log(dim(`\n  Found ${modesForAnalysis.length} mode(s): ` + modesForAnalysis.map((m) => m.name).join(", ")))
+  console.log(
+    dim(
+      `\n  Found ${modesForAnalysis.length} mode(s): ` +
+        modesForAnalysis.map((m) => m.name).join(", "),
+    ),
+  )
   console.log(dim("  Analysing (this may take a moment for large files)...\n"))
 
   for (const md of modesForAnalysis) {
     const isPublished = md.lutPath.includes("publish_files")
     if (!isPublished) {
-      console.warn(yellow(`  [warn] Mode "${md.name}" using uniform LUT — run optimization first for accurate weights.`))
+      console.warn(
+        yellow(
+          `  [warn] Mode "${md.name}" using uniform LUT — run optimization first for accurate weights.`,
+        ),
+      )
     }
 
     process.stdout.write(dim(`  Loading ${md.name}...`))
-    const analysis = await analyseMode(md.name, md.cost, md.rtp, md.booksPaths, md.lutPath)
+    const analysis = await analyseMode(
+      md.name,
+      md.cost,
+      md.rtp,
+      md.booksPaths,
+      md.lutPath,
+    )
     process.stdout.write("\r" + " ".repeat(40) + "\r")
 
     printMode(analysis)
@@ -917,7 +733,8 @@ async function main() {
   process.stdout.write(`\nReport saved to ${outputFile}\n`)
 }
 
-main().catch((err) => {
-  console.error(red("Fatal: ") + String(err))
-  process.exit(1)
-})
+if (require.main === module)
+  main().catch((err) => {
+    console.error(red("Fatal: ") + String(err))
+    process.exit(1)
+  })

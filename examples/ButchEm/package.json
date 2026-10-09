@@ -1,0 +1,23 @@
+{
+  "name": "butch-em",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "build": "tsx ./index.ts --slot-engine-run",
+    "simulate": "tsx ./index.ts --slot-engine-run --simulate-only",
+    "optimize": "tsx ./index.ts --slot-engine-run --optimize-only",
+    "analyze": "tsx ./index.ts --slot-engine-run --analyze-only",
+    "panel": "tsx watch ./panel.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "benchmark": "tsx ./scripts/benchmark.ts",
+    "audit": "tsx ./scripts/audit.ts",
+    "payouts": "tsx ./scripts/payoutRanges.ts",
+    "targets": "tsx ./scripts/targets.ts"
+  },
+  "dependencies": {
+    "@slot-engine/core": "0.3.2",
+    "@slot-engine/optimizer": "0.1.0",
+    "@slot-engine/panel": "0.2.2"
+  }
+}
