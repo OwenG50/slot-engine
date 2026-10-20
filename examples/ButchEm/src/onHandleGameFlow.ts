@@ -169,7 +169,22 @@ export function onHandleGameFlow(ctx: Context) {
 
     // Collect only when another feature spin can use the resulting upgrades.
     // The current spin was already consumed; scatters can extend the last one.
-    // Keep retrigger emission after movement/upgrades as before.
+    // Emit retriggers first so the added spin is announced before collection.
+    if (
+      inFeature &&
+      !isFeatureSpin &&
+      scatters.length > 0 &&
+      !ctx.state.triggeredMaxWin
+    ) {
+      ctx.services.game.awardFreespins(scatters.length)
+      emit(EVENT.addAdditionalFreeSpins, {
+        additionalFs: scatters.length,
+        remainingFs: ctx.state.currentFreespinAmount,
+        totalFs: ctx.state.totalFreespinAmount,
+        positions: scatters,
+      })
+    }
+
     if (
       inFeature &&
       !isFeatureSpin &&
@@ -205,22 +220,6 @@ export function onHandleGameFlow(ctx: Context) {
           roamingWildPositions: feature!.anchors,
         })
       }
-    }
-
-    // Scatter retriggers: +1 free spin per scatter landed during the bonus.
-    if (
-      inFeature &&
-      !isFeatureSpin &&
-      scatters.length > 0 &&
-      !ctx.state.triggeredMaxWin
-    ) {
-      ctx.services.game.awardFreespins(scatters.length)
-      emit(EVENT.addAdditionalFreeSpins, {
-        additionalFs: scatters.length,
-        remainingFs: ctx.state.currentFreespinAmount,
-        totalFs: ctx.state.totalFreespinAmount,
-        positions: scatters,
-      })
     }
     return spinPayout
   }

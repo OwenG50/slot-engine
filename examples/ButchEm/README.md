@@ -6,7 +6,7 @@ at the top-left visible cell; the board is column-major `board[x][y]`.
 
 **Current model:** 96% RTP in every mode, additive participating wild
 multipliers, and base bonus triggers at 1/300 regular, 1/3000 super, and
-1/75000 hidden. Explicit below-cost targets match the panel's **Payout < Bet Hit
+1/50000 hidden. Explicit below-cost targets match the panel's **Payout < Bet Hit
 Rate** field; cost recovery is the complementary probability.
 [CALIBRATION.md](CALIBRATION.md) records the last audited weighted-book results.
 
@@ -291,97 +291,147 @@ apply it; existing reel CSVs can be kept.
 
 ## Math targets
 
-| Mode               |  Cost | Nonzero hit rate | Mean payout at 96% RTP |
-| ------------------ | ----: | ---------------: | ---------------------: |
-| base               |    1x |              20% |                  0.96x |
-| extraChance        |  1.5x |              25% |                  1.44x |
-| extraChance2       |    3x |              25% |                  2.88x |
-| featureSpin        |   50x |              80% |                    48x |
-| bonusFeature       |  100x |             100% |                    96x |
-| superBonusFeature  |  300x |             100% |                   288x |
-| hiddenBonusFeature | 1000x |             100% |                   960x |
+All seven modes target **96% RTP**. Simulation quotas generate candidate books;
+published lookup weights determine player probabilities. The gameplay rules,
+events, reel strips, and 10,000x round cap are unchanged by this calibration.
 
-Hit rates count every round paying anything, including bonus-triggering
-rounds. The panel's **Payout < Bet Hit Rate** counts rounds returning less than
-cost, including zero pays. The audit's `breakEvenRate` means payout at least
-cost, so it equals one minus the panel metric. Equality counts as cost recovery.
+| Mode | Cost | Nonzero hit rate | Mean payout | Below cost | Cost recovery |
+| ---- | ---: | ---------------: | ----------: | ---------: | ------------: |
+| base | 1x | 20% | 0.96x | 89% | 11% |
+| extraChance | 1.5x | 25% | 1.44x | 90% | 10% |
+| extraChance2 | 3x | 25% | 2.88x | 90% | 10% |
+| featureSpin | 50x | 80% | 48x | 80% | 20% |
+| bonusFeature | 100x | 100% | 96x | 75% | 25% |
+| superBonusFeature | 300x | 100% | 288x | 80% | 20% |
+| hiddenBonusFeature | 1000x | 100% | 960x | 80% | 20% |
 
-| Mode               | Below-cost target | Cost recovery |
-| ------------------ | ----------------: | ------------: |
-| base               |     Unconstrained |      Measured |
-| extraChance        |               90% |           10% |
-| extraChance2       |               90% |           10% |
-| featureSpin        |               80% |           20% |
-| bonusFeature       |               75% |           25% |
-| superBonusFeature  |               80% |           20% |
-| hiddenBonusFeature |             83.5% |         16.5% |
+Nonzero hits include triggering rounds. The panel's **Payout < Bet Hit Rate**
+includes zero pays and partial returns; cost recovery means payout at least the
+mode cost. Neither these hit rates nor bonus-entry frequencies needed to change
+to fund the final bonus alignment.
 
-`BELOW_COST_TARGETS` and `optimizationBuckets` in `src/math.ts` split existing
-candidate criteria at each mode's cost. The optimizer pins each group's
-probability and mean payout. The above-cost mean balances the remaining RTP
-budget after partial returns and rare tails. Bonus buys combine their old
-low/center/high candidate groups before this split. Feature Spin retains the
-70/15/10/5 upgrade-count mix and each count's expected payout; Extra Chance
-modes retain their zero-pay and triggered-bonus budgets. Rare tail and max-win
-probabilities are pinned explicitly. Base keeps its existing optimizer distribution.
+### Entry frequencies
 
-Feature Spin's four-upgrade 50-100x target now averages **75x**, replacing the
-infeasible 54.8886x mean when sampled results start at 57.5x. Its neighboring
-100-250x target averages **111.53x** to offset this increase. Both bands keep
-their probabilities (0.505% and 2.5%), so the combined payout budget, overall
-96% RTP, hit and below-cost rates, upgrade-count mix, and rare tails are preserved.
-This changes optimizer weights only; game mechanics and event contracts are unchanged.
-Existing books can be re-optimized without rerunning simulations for this fix.
+| Mode | Normal entry | Super entry | Hidden entry |
+| ---- | -----------: | ----------: | -----------: |
+| base | 1 / 300 | 1 / 3,000 | 1 / 50,000 |
+| extraChance | 1 / 150 | 1 / 1,500 | 1 / 25,000 |
+| extraChance2 | 1 / 60 | 1 / 600 | 1 / 10,000 |
 
-Higher below-cost rates mean fewer cost-recovering rounds and larger average
-awards on those remaining rounds at the same 96% RTP. Simulation criteria
-remain broad for candidate coverage; final odds come from optimization.
-Run `pnpm --filter butch-em optimize` to apply these targets to existing books,
-then `pnpm --filter butch-em run audit` to verify the weighted results.
+Extra Chance keeps exactly 2x the base entry probabilities, and Extra Chance 2
+keeps 5x. Rare tail and max-win outcomes are included within each tier's entry
+probability. A buy guarantees entry into its purchased tier.
 
-| Mode         | Regular trigger | Super trigger | Hidden trigger |
-| ------------ | --------------: | ------------: | -------------: |
-| base         |         1 / 300 |     1 / 3,000 |     1 / 75,000 |
-| extraChance  |         1 / 150 |     1 / 1,500 |     1 / 37,500 |
-| extraChance2 |          1 / 60 |       1 / 600 |     1 / 15,000 |
+### Shared conditional bonus distributions
 
-Extra modes retain exactly 2x/5x the base bonus probabilities. Every tail
-bucket is included in its tier's frequency, so 5000x/10000x awards do not add
-extra bonus triggers.
+All payouts here are **base-bet multiples**. A bonus total includes its triggering
+spin and every free spin, matching `freeSpinEnd`. The guaranteed minimum also
+uses that complete round total; the native segmented LUT's free-spin-only
+column excludes the triggering win and must not be used as the guarantee.
 
-Purchased modes allocate the same 0.2% of mode RTP to the exact 10,000x max
-win, making the hit probability proportional to mode cost:
+Base means deliberately match the corresponding buy cost multiplied by 96% RTP.
+Extra Chance means remain slightly lower, as requested, with the same payout-band
+probabilities. Their lower means come from smaller averages inside those bands.
 
-| Mode               | Exact max probability | Exact max odds |
-| ------------------ | --------------------: | -------------: |
-| featureSpin        |                0.001% |    1 / 100,000 |
-| bonusFeature       |                0.002% |     1 / 50,000 |
-| superBonusFeature  |                0.006% |     1 / 16,667 |
-| hiddenBonusFeature |                 0.02% |      1 / 5,000 |
+| Entry route | Normal mean | Super mean | Hidden mean |
+| ----------- | ----------: | ---------: | ----------: |
+| base / corresponding buy | 96x | 288x | 960x |
+| extraChance | 92x | 280x | 940x |
+| extraChance2 | 90x | 276x | 930x |
 
-Triggered base and Extra Chance modes retain their existing tier-frequency
-scaling.
+| Entry route | Normal median | Super median | Hidden median |
+| ----------- | ------------: | -----------: | ------------: |
+| corresponding buy | 74.80x | 256.50x | 900.00x |
+| base | 74.90x | 256.60x | 900.40x |
+| extraChance | 72.60x | 254.10x | 885.20x |
+| extraChance2 | 70.70x | 253.40x | 875.10x |
 
-Triggered bonus means target 80/280/1500x in base, 60/220/1100x in extraChance,
-and 45/170/1100x in extraChance2. The reduced extra-mode means are retained
-from the prior tuning, as allowed by the brief. Minimum bonus-only awards are
-16/87/800x in base and buys, and 12/65/800x in extra modes.
+These medians are measured on the current 25,000-book pools. Integer lookup
+rounding and gaps between sampled payouts can put the reported median slightly
+above its configured cut.
 
-The trigger-round budget includes the small triggering-spin award, so the
-measured bonus-only mean is slightly lower than its budget target. No payout
-is topped up. Base bonuses consume 38% RTP at the specified target means,
-leaving 58% RTP for ordinary wins.
+Minimum round awards remain **16/87/800x** for base and buys, and **12/65/800x**
+for Extra Chance modes. No award is topped up or modified.
 
-Payout bands concentrate bonus outcomes near their mean, with small explicit
-allocations for 2000-4999x, 5000-9999x, and exact 10000x. Most returned value
-comes from awards below 3000x; measured shares appear in the report.
-featureSpin uses payout bands that rise with its starting upgrade count. The
-four-upgrade band supports outcomes below the 10,000x cap without forcing an
-impractically rare exact-max candidate; the complete mode remains budgeted to
-48x average and 80% hit rate.
+Every reporting-band probability is now shared across all four entry routes
+for its tier. These are **conditional odds after entering that bonus**:
 
-Volatility is measured as payout standard deviation divided by the mode cost.
-"Medium" has no universal numerical threshold and is not a certification.
+| Tier / payout band | Probability | One in bonus entries |
+| ------------------ | ----------: | -------------------: |
+| Normal: 200–<250x | 0.8000% | 125 |
+| Normal: 250–<500x | 2.0000% | 50 |
+| Normal: 500–<1000x | 0.2300% | 434.78 |
+| Normal: 1000–<2000x | 0.0200% | 5,000 |
+| Normal: 2000–<3000x | 0.0328% | 3,048.78 |
+| Normal: 3000–<5000x | 0.0022% | 45,454.55 |
+| Super: 500–<1000x | 4.3000% | 23.26 |
+| Super: 1000–<2000x | 0.6500% | 153.85 |
+| Super: 1000x+ | 0.7740% | 129.20 |
+| Hidden: 1000x+ | 20.0000% | 5 |
+| Hidden: 2000–<3000x | 0.6000% | 166.67 |
+| Hidden: 3000–<5000x | 0.5200% | 192.31 |
+
+Normal 250–500x awards previously occurred around 1/401 in base, 1/549 in
+Extra Chance, 1/1017 in Extra Chance 2, and 1/52 in the buy. All are now 1/50.
+For example, that means one such base outcome per approximately **15,000 base
+plays** at a 1/300 bonus-entry rate, versus one per **50 buys**. Comparing
+unconditional mode-play odds would conflate entry frequency with bonus quality.
+
+`shapeTierBuckets` in `src/math.ts` groups every tier's existing criteria into
+one shared profile, with explicit splits at reporting boundaries including
+250x and 3000x. Matching only a median or a broad 200–500x budget left large
+within-band differences in earlier calibrations. The new targets pin each
+reporting band's probability and mean and preserve median cuts.
+
+Exact 10,000x odds now also match the corresponding buy **per bonus entry**:
+
+| Tier | Exact-max probability | Conditional one in |
+| ---- | --------------------: | -----------------: |
+| Normal | 0.002% | 50,000 |
+| Super | 0.006% | 16,666.67 |
+| Hidden | 0.020% | 5,000 |
+
+Normal triggered exact-max odds were previously 1/20,000; super triggered odds
+were also 1/20,000. These changed to match the buys. Feature Spin retains its
+separate 1/100,000 exact-max probability and 70/15/10/5 upgrade-count mix.
+
+### Funding, volatility, and validation
+
+Stronger bonuses are funded by transferring some ordinary upper-band wins into
+the small 2–5x / 3–5x recovery bands. All probability and EV budgets are checked.
+Conditional ordinary winning-round averages change from **2.959 to 2.673x** in
+base, **3.032 to 2.483x** in Extra Chance, and **5.040 to 3.571x** in Extra Chance 2.
+
+Compared with the preceding calibration, SD / mode cost changes from
+**12.573 to 12.781** in base (+1.7%), **10.601 to 10.982** in Extra Chance (+3.6%),
+and **8.249 to 8.517** in Extra Chance 2 (+3.3%). Normal/super buy volatility
+decreases slightly; hidden buys and Feature Spin are unchanged. The medium
+volatility design intent remains; there is no universal numerical threshold
+that certifies that label.
+
+Feature Spin retains its four-upgrade 50–100x band average of 75x and the
+offsetting 100–250x average of 111.53x. Its weights and all gameplay events are
+unchanged.
+
+Validation includes 126 game tests, TypeScript checking, 2,220 fresh accepted
+simulations across all 74 bonus-bearing result sets (37,167 candidate attempts),
+and an independent audit of all 175,000 compressed books. The installed runtime
+is Node 22.21.0; the repository's normal Node >=23.8 requirement is unchanged.
+
+Reproduce the complete checks:
+
+```powershell
+pnpm --filter butch-em optimize
+pnpm --filter butch-em compare-bonuses --check
+pnpm --filter butch-em run audit
+pnpm analyze --build-dir examples/ButchEm/__build__
+```
+
+The comparison command verifies target means, minimums, entry rates, and every
+conditional reporting-band probability against the corresponding buy. It writes
+`__build__/bonus-comparison.json` and
+[`ButchEm - bonus comparison.txt`](../../Math%20Mode%20Analysis/ButchEm%20-%20bonus%20comparison.txt).
+[CALIBRATION.md](CALIBRATION.md) records the current audited results.
 
 ## Events
 
@@ -470,7 +520,7 @@ Exactly one `moveRoamingWild` event is emitted after each feature spin that has
 a following feature spin. Terminal spins emit neither `moveRoamingWild` nor
 collection-triggered `upgradeUnlocked`; their reveal still includes the normal
 non-collecting roaming path. A last scheduled spin that retriggers emits
-movement and upgrades before `addAdditionalFreeSpins`, as before. Frontend
+`addAdditionalFreeSpins` before movement and upgrades. Frontend
 contracts must allow a final reveal/win sequence to proceed directly to
 `freeSpinEnd`/`finalWin` (or round completion for a zero payout featureSpin)
 without waiting for a collection event. The movement payload is unchanged:

@@ -490,7 +490,7 @@ describe("native ButchEm game flow", () => {
     expect(spins).toHaveLength(11)
     expect(events.filter((event) => event.type === "moveRoamingWild")).toHaveLength(10)
     const retrigger = events.findIndex((event) => event.type === "addAdditionalFreeSpins")
-    expect(events[retrigger - 1].type).toBe("moveRoamingWild")
+    expect(events[retrigger + 1].type).toBe("moveRoamingWild")
     const nextSpin = events.findIndex(
       (event, index) => index > retrigger && event.type === "updateFreeSpin",
     )

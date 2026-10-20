@@ -65,7 +65,7 @@ Panel 0.2.2 displays the engine's numeric units directly:
 | Average/Minimum/Maximum Win | Multiples of the base stake, before dividing by mode cost |
 
 The below-cost targets are 90% for both Extra Chance modes, 80% for Feature
-Spin, 75% for Bonus, 80% for Super Bonus, and 83.5% for Hidden Bonus. Base is
+Spin, 75% for Bonus, 80% for Super Bonus, and 80% for Hidden Bonus. Base is
 unconstrained. A payout equal to cost counts as cost recovery, not below cost.
 Increasing the below-cost rate reduces how often a round recovers its cost.
 

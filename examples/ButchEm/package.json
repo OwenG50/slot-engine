@@ -12,6 +12,7 @@
     "test": "vitest run",
     "benchmark": "tsx ./scripts/benchmark.ts",
     "audit": "tsx ./scripts/audit.ts",
+    "compare-bonuses": "tsx ./scripts/compareBonuses.ts",
     "payouts": "tsx ./scripts/payoutRanges.ts",
     "targets": "tsx ./scripts/targets.ts"
   },

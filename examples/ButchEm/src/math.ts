@@ -29,8 +29,8 @@ export const HIT_TARGETS: Record<ModeName, number> = {
 }
 
 export function bonusAverage(mode: ModeName, tier: BonusTier) {
-  if (mode === "extraChance") return { normal: 60, super: 220, hidden: 1100 }[tier]
-  if (mode === "extraChance2") return { normal: 45, super: 170, hidden: 1100 }[tier]
+  if (mode === "extraChance") return { normal: 92, super: 280, hidden: 940 }[tier]
+  if (mode === "extraChance2") return { normal: 90, super: 276, hidden: 930 }[tier]
   return BONUS_TARGETS[tier].average
 }
 
@@ -41,8 +41,7 @@ export function bonusMinimum(mode: ModeName, tier: BonusTier) {
 }
 
 // Purchased modes spend the same 0.2% RTP share on the exact 10,000x max win.
-// This makes its hit rate proportional to mode cost while triggered bonuses keep
-// their established per-trigger tail shapes.
+// Triggered tiers use the corresponding buy's conditional max probability.
 const PURCHASED_MODE_MAX_RTP_SHARE = 0.002
 function purchasedModeMaxProbability(mode: ModeName) {
   return (PURCHASED_MODE_MAX_RTP_SHARE * MODES[mode].cost) / MAX_WIN
@@ -57,43 +56,35 @@ function tierBuckets(
   const minimum = bonusMinimum(mode, tier)
   // Candidate coverage around the bonus mean; optimizationBuckets sets final
   // below-cost probabilities for buys without changing these simulation quotas.
-  // The hidden buy needs a wider central band: its 800x floor sits close to
-  // the 960x mean, so the generic tier shape would bunch most results near 910x.
-  const hiddenBuy = MODES[mode].boughtTier === "hidden"
-  const lowP = hiddenBuy ? 0.3 : 0.2
-  const centerP = hiddenBuy ? 0.5 : 0.65
-  const split = hiddenBuy
-    ? minimum + 80
-    : tier === "hidden"
-      ? Math.max(minimum + 100, average * 0.7)
-      : average * 0.6
-  const upperCenter = hiddenBuy
-    ? average + 140
-    : tier === "hidden"
-      ? average * 1.2
-      : average * 1.4
-  const lowMean = hiddenBuy
-    ? minimum + 35
-    : tier === "hidden"
-      ? (minimum + split) / 2
-      : Math.max(minimum + 1, average * 0.4)
-  const centerMean = hiddenBuy
-    ? average - 15
-    : tier === "hidden"
-      ? average < 1500
-        ? average * 0.95
-        : (split + upperCenter) / 2
-      : average * 0.95
-  const maxProbability = MODES[mode].boughtTier
-    ? purchasedModeMaxProbability(mode)
-    : tier === "hidden"
-      ? 0.0002
-      : 0.00005
+  // Every hidden needs a wider central band: its 800x floor sits close to
+  // its 930-960x mean, so it needs more coverage of the lower payouts.
+  const hidden = tier === "hidden"
+  const lowP = hidden ? 0.3 : 0.2
+  const centerP = hidden ? 0.5 : 0.65
+  const split = hidden ? minimum + 80 : average * 0.6
+  const upperCenter = hidden ? average + 140 : average * 1.4
+  const lowMean = hidden ? minimum + 35 : Math.max(minimum + 1, average * 0.4)
+  const centerMean = hidden ? average - 15 : average * 0.95
+  const maxProbability = purchasedModeMaxProbability(
+    { normal: "bonusFeature", super: "superBonusFeature", hidden: "hiddenBonusFeature" }[
+      tier
+    ] as ModeName,
+  )
   const tails =
     tier === "normal"
       ? [
-          { name: "tail", probability: 0.0003, average: 2500, range: [2000, 4999.99] },
-          { name: "large", probability: 0.00015, average: 6000, range: [5000, 9999.99] },
+          {
+            name: "tail",
+            probability: 0.00035,
+            average: 2500,
+            range: [2000, 4999.99],
+          },
+          {
+            name: "large",
+            probability: 0.00017,
+            average: 6000,
+            range: [5000, 9999.99],
+          },
           {
             name: "max",
             probability: maxProbability,
@@ -103,10 +94,15 @@ function tierBuckets(
         ]
       : tier === "super"
         ? [
-            { name: "tail", probability: 0.0008, average: 2500, range: [2000, 4999.99] },
+            {
+              name: "tail",
+              probability: 0.001,
+              average: 2500,
+              range: [2000, 4999.99],
+            },
             {
               name: "large",
-              probability: 0.00015,
+              probability: 0.00018,
               average: 6000,
               range: [5000, 9999.99],
             },
@@ -118,7 +114,7 @@ function tierBuckets(
             },
           ]
         : [
-            { name: "large", probability: 0.0008, average: 6000, range: [5000, 9999.99] },
+            { name: "large", probability: 0.0009, average: 6000, range: [5000, 9999.99] },
             {
               name: "max",
               probability: maxProbability,
@@ -266,7 +262,7 @@ export const BELOW_COST_TARGETS: Partial<Record<ModeName, number>> = {
   featureSpin: 0.8,
   bonusFeature: 0.75,
   superBonusFeature: 0.8,
-  hiddenBonusFeature: 0.835,
+  hiddenBonusFeature: 0.8,
 }
 
 export interface OptimizationBucket extends MathBucket {
@@ -277,6 +273,229 @@ type OptimizationBand = Pick<
   OptimizationBucket,
   "name" | "probability" | "average" | "range"
 >
+
+// Half the conditional probability lies at or below these round-payout cuts.
+// Base and buys share median cuts; Extra Chance cuts remain slightly lower.
+export const BONUS_MEDIAN_TARGETS = { normal: 74.8, super: 256.5, hidden: 900 } as const
+export const EXTRA_CHANCE_MEDIAN_TARGETS = {
+  extraChance: { normal: 72.5, super: 254, hidden: 885 },
+  extraChance2: { normal: 70, super: 252, hidden: 875 },
+} as const
+
+/** Allocate the remaining probability and EV to a populated balancing band. */
+function remainingBand(
+  name: string,
+  range: [number, number],
+  probability: number,
+  expectedPayout: number,
+  fixed: OptimizationBand[],
+): OptimizationBand {
+  const remaining = probability - fixed.reduce((sum, b) => sum + b.probability, 0)
+  return {
+    name,
+    range,
+    probability: remaining,
+    average:
+      (expectedPayout - fixed.reduce((sum, b) => sum + b.probability * b.average, 0)) /
+      remaining,
+  }
+}
+
+/** A shared conditional distribution for each tier, regardless of entry route.
+ * Explicit reporting-band splits prevent candidate pools from drifting apart.
+ * Extra Chance funds slightly lower means inside those same probability bands. */
+function shapeTierBuckets(
+  mode: ModeName,
+  buckets: OptimizationBucket[],
+  tier: BonusTier,
+): OptimizationBucket[] {
+  const candidates = buckets.filter((b) => b.tier === tier)
+  if (!candidates.length) return buckets
+  const tierProbability = candidates.reduce((sum, b) => sum + b.probability, 0)
+  const expectedPayout =
+    candidates.reduce((sum, b) => sum + b.probability * b.average, 0) / tierProbability
+  const extra = mode === "extraChance" || mode === "extraChance2"
+  const extraIndex = mode === "extraChance" ? 1 : mode === "extraChance2" ? 2 : 0
+  const median = extra
+    ? EXTRA_CHANCE_MEDIAN_TARGETS[mode][tier]
+    : BONUS_MEDIAN_TARGETS[tier]
+  const fixed: OptimizationBand[] =
+    tier === "normal"
+      ? [
+          {
+            name: "under_25",
+            probability: 0.0065,
+            average: 21,
+            range: [bonusMinimum(mode, tier), 24.99],
+          },
+          {
+            name: "25_50",
+            probability: 0.0585,
+            average: (0.065 * 32 - 0.0065 * 21) / 0.0585,
+            range: [25, 49.99],
+          },
+          {
+            name: "50_median",
+            probability: 0.435,
+            average: 65 - 2 * extraIndex,
+            range: [50, median],
+          },
+          {
+            name: "median_100",
+            probability: 0.25,
+            average: 84 - extraIndex,
+            range: [median + 0.01, 99.99],
+          },
+          { name: "200_250", probability: 0.008, average: 225, range: [200, 249.99] },
+          { name: "250_500", probability: 0.02, average: 302, range: [250, 499.99] },
+          { name: "500_1K", probability: 0.0023, average: 650, range: [500, 999.99] },
+          { name: "1K_2K", probability: 0.0002, average: 1200, range: [1000, 1999.99] },
+          { name: "2K_3K", probability: 0.000328, average: 2425, range: [2000, 2999.99] },
+          { name: "3K_5K", probability: 0.000022, average: 3600, range: [3000, 4999.99] },
+          { name: "large", probability: 0.00017, average: 6000, range: [5000, 9999.99] },
+          {
+            name: "max",
+            probability: 0.00002,
+            average: MAX_WIN,
+            range: [MAX_WIN, MAX_WIN],
+          },
+        ]
+      : tier === "super"
+        ? [
+            {
+              name: "under_100",
+              probability: 0.0013,
+              average: 93,
+              range: [bonusMinimum(mode, tier), 99.99],
+            },
+            {
+              name: "100_200",
+              probability: 0.0987,
+              average: (16 - 0.0013 * 93) / 0.0987,
+              range: [100, 199.99],
+            },
+            {
+              name: "200_250",
+              probability: 0.315,
+              average: 230 - 2 * extraIndex,
+              range: [200, 249.99],
+            },
+            {
+              name: "250_median",
+              probability: 0.085,
+              average: 253 - extraIndex,
+              range: [250, median],
+            },
+            {
+              name: "median_300",
+              probability: 0.3,
+              average: 270 - 2 * extraIndex,
+              range: [median + 0.01, 299.99],
+            },
+            { name: "500_1K", probability: 0.043, average: 600, range: [500, 999.99] },
+            { name: "1K_2K", probability: 0.0065, average: 1250, range: [1000, 1999.99] },
+            {
+              name: "2K_3K",
+              probability: 0.000938,
+              average: 2425,
+              range: [2000, 2999.99],
+            },
+            {
+              name: "3K_5K",
+              probability: 0.000062,
+              average: 3600,
+              range: [3000, 4999.99],
+            },
+            {
+              name: "large",
+              probability: 0.00018,
+              average: 6000,
+              range: [5000, 9999.99],
+            },
+            {
+              name: "max",
+              probability: 0.00006,
+              average: MAX_WIN,
+              range: [MAX_WIN, MAX_WIN],
+            },
+          ]
+        : [
+            {
+              name: "below_median",
+              probability: 0.5,
+              average: extra ? (mode === "extraChance" ? 840 : 830) : 855,
+              range: [bonusMinimum(mode, tier), median],
+            },
+            {
+              name: "median_1K",
+              probability: 0.3,
+              average: extra ? (mode === "extraChance" ? 930 : 920) : 945,
+              range: [median + 0.01, 999.99],
+            },
+            { name: "1500_2K", probability: 0.01, average: 1700, range: [1500, 1999.99] },
+            { name: "2K_3K", probability: 0.006, average: 2300, range: [2000, 2999.99] },
+            { name: "3K_5K", probability: 0.0052, average: 3400, range: [3000, 4999.99] },
+            { name: "large", probability: 0.0009, average: 6000, range: [5000, 9999.99] },
+            {
+              name: "max",
+              probability: 0.0002,
+              average: MAX_WIN,
+              range: [MAX_WIN, MAX_WIN],
+            },
+          ]
+  const [name, range] =
+    tier === "normal"
+      ? ["100_200", [100, 199.99] as [number, number]]
+      : tier === "super"
+        ? ["300_500", [300, 499.99] as [number, number]]
+        : ["1K_1500", [1000, 1499.99] as [number, number]]
+  const bands = [...fixed, remainingBand(name, range, 1, expectedPayout, fixed)]
+  const criteria = candidates.flatMap((b) => b.criteria)
+  return [
+    ...buckets.filter((b) => !candidates.includes(b)),
+    ...bands.map((b) => ({
+      ...b,
+      name: tier + "_" + b.name,
+      tier,
+      criteria,
+      probability: b.probability * tierProbability,
+    })),
+  ]
+}
+
+function shapeBonusBuckets(mode: ModeName, buckets: OptimizationBucket[]) {
+  return (["normal", "super", "hidden"] as const).reduce(
+    (result, tier) => shapeTierBuckets(mode, result, tier),
+    buckets,
+  )
+}
+
+/** Transfer ordinary upper-band probability into a small cost-recovering band,
+ * preserving nonzero hits, below-cost odds and the available ordinary-win EV. */
+function balanceOrdinaryWins(
+  baseWin: OptimizationBucket,
+  shape: OptimizationBand[],
+  recoveryName: string,
+): OptimizationBucket[] {
+  const recovery = shape.find((b) => b.name === recoveryName)!
+  const lower = shape.filter((b) => b.range[1] < recovery.range[0])
+  const upper = shape.filter((b) => b.range[0] > recovery.range[1])
+  const remainingP =
+    baseWin.probability - lower.reduce((sum, b) => sum + b.probability, 0)
+  const remainingEV =
+    baseWin.probability * baseWin.average -
+    lower.reduce((sum, b) => sum + b.probability * b.average, 0)
+  const upperP = upper.reduce((sum, b) => sum + b.probability, 0)
+  const upperEV = upper.reduce((sum, b) => sum + b.probability * b.average, 0)
+  const scale =
+    (remainingEV - remainingP * recovery.average) / (upperEV - upperP * recovery.average)
+  if (!(scale > 0 && scale < 1)) throw new Error("Infeasible ordinary-win transfer")
+  return [
+    ...lower,
+    { ...recovery, probability: remainingP - scale * upperP },
+    ...upper.map((b) => ({ ...b, probability: b.probability * scale })),
+  ].map((b) => ({ ...baseWin, ...b, criteria: baseWin.criteria }))
+}
 
 /** Split existing candidate criteria at the paid cost. Preserve their combined
  * probability and expected payout; the upper group balances the payout budget. */
@@ -310,10 +529,13 @@ function splitAtCost(
 /** Simulation buckets provide coverage; these groups set final player odds.
  * Range matchers let existing books and future simulations use the same targets. */
 export function optimizationBuckets(mode: ModeName): OptimizationBucket[] {
-  const buckets = mathBuckets(mode).map((bucket) => ({
-    ...bucket,
-    criteria: [bucket.name],
-  }))
+  const buckets = shapeBonusBuckets(
+    mode,
+    mathBuckets(mode).map((bucket) => ({
+      ...bucket,
+      criteria: [bucket.name],
+    })),
+  )
   if (mode === "base") {
     const baseWin = buckets.find((bucket) => bucket.name === "baseWin")!
     const fixedBands = [
@@ -342,13 +564,8 @@ export function optimizationBuckets(mode: ModeName): OptimizationBucket[] {
       (sum, bucket) => sum + bucket.probability,
       0,
     )
-    const fixedEV = fixedBands.reduce(
-      (sum, bucket) => sum + bucket.probability * bucket.average,
-      0,
-    )
     const oneToTwoProbability = baseWin.probability - fixedProbability
-    const oneToTwoAverage =
-      (baseWin.probability * baseWin.average - fixedEV) / oneToTwoProbability
+    const oneToTwoAverage = 1.35
     const shapedBaseWins: OptimizationBucket[] = [
       ...fixedBands.slice(0, 3).map((bucket) => ({
         ...bucket,
@@ -363,7 +580,10 @@ export function optimizationBuckets(mode: ModeName): OptimizationBucket[] {
       },
       ...fixedBands.slice(3).map((bucket) => ({ ...bucket, criteria: baseWin.criteria })),
     ]
-    const result = [...buckets.filter((bucket) => bucket !== baseWin), ...shapedBaseWins]
+    const result = [
+      ...buckets.filter((bucket) => bucket !== baseWin),
+      ...balanceOrdinaryWins(baseWin, shapedBaseWins, "baseWin_2_5"),
+    ]
     validateBuckets(mode, result)
     return result
   }
@@ -373,7 +593,7 @@ export function optimizationBuckets(mode: ModeName): OptimizationBucket[] {
   let result: OptimizationBucket[]
   if (mode === "extraChance" || mode === "extraChance2") {
     const baseWin = buckets.find((bucket) => bucket.name === "baseWin")!
-    const bands: OptimizationBand[] =
+    const shape: OptimizationBand[] =
       mode === "extraChance"
         ? [
             {
@@ -419,7 +639,7 @@ export function optimizationBuckets(mode: ModeName): OptimizationBucket[] {
             {
               name: "baseWin_100_plus",
               probability: 0.00064,
-              average: 195.3125,
+              average: 175,
               range: [100, 1999.99],
             },
           ]
@@ -467,43 +687,27 @@ export function optimizationBuckets(mode: ModeName): OptimizationBucket[] {
             {
               name: "baseWin_100_plus",
               probability: 0.0026,
-              average: 185.12820512820514,
+              average: 175,
               range: [100, 1999.99],
             },
           ]
+    // Fund stronger bonuses by moving some 5x+ ordinary wins into the 2-5x /
+    // 3-5x recovery band. Below-cost odds and the overall hit rate stay fixed.
+    const balanced = balanceOrdinaryWins(
+      baseWin,
+      shape,
+      mode === "extraChance" ? "baseWin_2_5" : "baseWin_3_5",
+    )
     result = [
       ...buckets.filter((bucket) => bucket !== baseWin),
-      ...bands.map((bucket) => ({ ...baseWin, ...bucket, criteria: baseWin.criteria })),
+      ...balanced.map((bucket) => ({
+        ...baseWin,
+        ...bucket,
+        criteria: baseWin.criteria,
+      })),
     ]
   } else if (boughtTier) {
-    // Keep the rare tail/large/max budgets. Reshape the ordinary bonus awards
-    // across their old low/center/high criteria, which straddle the buy cost.
-    const regular = buckets.filter((bucket) => /_(low|center|high)$/.test(bucket.name))
-    const tails = buckets.filter((bucket) => !regular.includes(bucket))
-    const probability = regular.reduce((sum, bucket) => sum + bucket.probability, 0)
-    const average =
-      regular.reduce((sum, bucket) => sum + bucket.probability * bucket.average, 0) /
-      probability
-    const belowAverage = cost * { normal: 0.7, super: 0.8, hidden: 0.9 }[boughtTier]
-    result = [
-      ...splitAtCost(
-        {
-          name: boughtTier + "_regular",
-          tier: boughtTier,
-          criteria: regular.flatMap((bucket) => bucket.criteria),
-          probability,
-          average,
-          range: [
-            Math.min(...regular.map((bucket) => bucket.range[0])),
-            Math.max(...regular.map((bucket) => bucket.range[1])),
-          ],
-        },
-        cost,
-        belowTarget,
-        belowAverage,
-      ),
-      ...tails,
-    ]
+    result = buckets
   } else if (mode === "featureSpin") {
     // Preserve the 70/15/10/5 upgrade mix and each count's exact payout
     // budget, while making the combined raw-payout curve rise toward its

@@ -11,6 +11,8 @@ import {
 } from "../src/settings"
 import {
   BELOW_COST_TARGETS,
+  BONUS_MEDIAN_TARGETS,
+  EXTRA_CHANCE_MEDIAN_TARGETS,
   HIT_TARGETS,
   mathBuckets,
   optimizationBuckets,
@@ -58,11 +60,11 @@ describe("ButchEm math budgets", () => {
       expect((max.probability * MAX_WIN) / MODES[mode].cost).toBeCloseTo(0.002, 12)
     }
   })
-  it("pins base triggers at 1/300, 1/3000 and 1/75000, including their tails", () => {
+  it("pins base triggers at 1/300, 1/3000 and 1/50000, including their tails", () => {
     for (const [tier, oneIn] of [
       ["normal", 300],
       ["super", 3000],
-      ["hidden", 75000],
+      ["hidden", 50000],
     ] as const) {
       expect(BONUS_TARGETS[tier].oneIn).toBe(oneIn)
       const probability = (mode: ModeName) =>
@@ -122,7 +124,16 @@ describe("ButchEm math budgets", () => {
         })
       const original = mathBuckets(mode)
       for (const tail of original.filter((b) => /_(tail|large|max)$/.test(b.name)))
-        expect(buckets.find((b) => b.name === tail.name)).toMatchObject(tail)
+        expect(
+          buckets
+            .filter(
+              (b) =>
+                b.tier === tail.tier &&
+                b.range[0] >= tail.range[0] &&
+                b.range[1] <= tail.range[1],
+            )
+            .reduce((sum, b) => sum + b.probability, 0),
+        ).toBeCloseTo(tail.probability, 12)
       for (const tier of ["normal", "super", "hidden"] as const) {
         const mass = (values: typeof original) =>
           values.filter((b) => b.tier === tier).reduce((sum, b) => sum + b.probability, 0)
@@ -151,6 +162,121 @@ describe("ButchEm math budgets", () => {
         probability,
         12,
       )
+  })
+  it("keeps hidden floors and similar mean/median targets across entry modes", () => {
+    for (const [mode, mean, median] of [
+      ["base", 960, 900],
+      ["extraChance", 940, 885],
+      ["extraChance2", 930, 875],
+      ["hiddenBonusFeature", 960, 900],
+    ] as const) {
+      const hidden = optimizationBuckets(mode).filter((b) => b.tier === "hidden")
+      const mass = hidden.reduce((sum, b) => sum + b.probability, 0)
+      expect(
+        hidden.reduce((sum, b) => sum + b.probability * b.average, 0) / mass,
+      ).toBeCloseTo(mean, 9)
+      expect(Math.min(...hidden.map((b) => b.range[0]))).toBe(800)
+      expect(
+        hidden
+          .filter((b) => b.range[1] <= median)
+          .reduce((sum, b) => sum + b.probability, 0) / mass,
+      ).toBeCloseTo(0.5, 12)
+      expect(
+        hidden
+          .filter((b) => b.range[0] >= 1000)
+          .reduce((sum, b) => sum + b.probability, 0) / mass,
+      ).toBeCloseTo(0.2, 12)
+    }
+  })
+  it("funds similar Extra Chance bonuses from ordinary wins at the same hit and recovery rates", () => {
+    for (const [mode, normal, superMean, ordinaryEV] of [
+      ["extraChance", 92, 280, 0.6024],
+      ["extraChance2", 90, 276, 0.827],
+    ] as const) {
+      const buckets = optimizationBuckets(mode)
+      for (const [tier, mean] of [
+        ["normal", normal],
+        ["super", superMean],
+      ] as const) {
+        const bonus = buckets.filter((b) => b.tier === tier)
+        const mass = bonus.reduce((sum, b) => sum + b.probability, 0)
+        expect(
+          bonus.reduce((sum, b) => sum + b.probability * b.average, 0) / mass,
+        ).toBeCloseTo(mean, 10)
+        // Regrouping must cover payouts from previous simulation partitions too.
+        expect(bonus.every((b) => b.criteria.length === 6)).toBe(true)
+        expect(
+          bonus
+            .filter((b) => b.range[1] <= EXTRA_CHANCE_MEDIAN_TARGETS[mode][tier])
+            .reduce((sum, b) => sum + b.probability, 0) / mass,
+        ).toBeCloseTo(0.5, 12)
+      }
+      const ordinary = buckets.filter((b) => !b.tier && b.range[0] > 0)
+      expect(ordinary.reduce((sum, b) => sum + b.probability * b.average, 0)).toBeCloseTo(
+        ordinaryEV,
+        10,
+      )
+      const recovery = ordinary.find((b) => b.range[1] === 4.99)!
+      expect(recovery.probability).toBeGreaterThan(mode === "extraChance" ? 0.035 : 0.025)
+      expect(
+        buckets
+          .filter((b) => b.range[0] >= MODES[mode].cost)
+          .reduce((sum, b) => sum + b.probability, 0),
+      ).toBeCloseTo(0.1, 12)
+      expect(
+        buckets.filter((b) => b.range[0] > 0).reduce((sum, b) => sum + b.probability, 0),
+      ).toBeCloseTo(0.25, 12)
+    }
+  })
+  it("pins the buy's populated upper bands and median cuts", () => {
+    const normal = optimizationBuckets("bonusFeature")
+    const superBonus = optimizationBuckets("superBonusFeature")
+    const probability = (buckets: typeof normal, min: number, max = Infinity) =>
+      buckets
+        .filter((b) => b.range[0] >= min && b.range[1] < max)
+        .reduce((sum, b) => sum + b.probability, 0)
+    expect(probability(normal, 200, 500)).toBeCloseTo(0.028, 12)
+    expect(probability(normal, 250, 500)).toBeCloseTo(0.02, 12)
+    expect(probability(normal, 500, 1000)).toBeCloseTo(0.0023, 12)
+    expect(probability(superBonus, 1000)).toBeCloseTo(0.00774, 12)
+    for (const [buckets, tier] of [
+      [normal, "normal"],
+      [superBonus, "super"],
+    ] as const)
+      expect(
+        buckets
+          .filter((b) => b.range[1] <= BONUS_MEDIAN_TARGETS[tier])
+          .reduce((sum, b) => sum + b.probability, 0),
+      ).toBeCloseTo(0.5, 12)
+  })
+  it("aligns all conditional reporting-band probabilities with the corresponding buy", () => {
+    const edges = [0, 25, 50, 100, 200, 250, 500, 1000, 2000, 3000, 5000, 10000, 10000.01]
+    for (const [tier, buy] of [
+      ["normal", "bonusFeature"],
+      ["super", "superBonusFeature"],
+      ["hidden", "hiddenBonusFeature"],
+    ] as const) {
+      const reference = optimizationBuckets(buy)
+      for (const mode of ["base", "extraChance", "extraChance2"] as const) {
+        const bonus = optimizationBuckets(mode).filter((b) => b.tier === tier)
+        const mass = bonus.reduce((sum, b) => sum + b.probability, 0)
+        for (let i = 0; i < edges.length - 1; i++) {
+          const min = edges[i],
+            max = edges[i + 1]
+          const probability = (values: typeof bonus) =>
+            values
+              .filter((b) => b.range[0] >= min && b.range[1] < max)
+              .reduce((sum, b) => sum + b.probability, 0)
+          expect(probability(bonus) / mass).toBeCloseTo(probability(reference), 12)
+          expect(bonus.some((b) => b.range[0] < max && b.range[1] >= max)).toBe(false)
+        }
+        if (mode === "base") {
+          expect(
+            bonus.reduce((sum, b) => sum + b.probability * b.average, 0) / mass,
+          ).toBeCloseTo(DESIGN.rtp * MODES[buy].cost, 10)
+        }
+      }
+    }
   })
   it("preserves feature-spin upgrade-count payout budgets", () => {
     for (const count of [1, 2, 3, 4] as const) {

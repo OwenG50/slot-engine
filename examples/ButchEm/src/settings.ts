@@ -45,13 +45,13 @@ export const NON_TRIGGER_SCATTER_ACCEPTANCE = 0.85
 
 /** Accepted simulation books to generate for each mode. */
 export const SIM_RUNS = {
-  base: 25_000,
-  extraChance: 25_000,
-  extraChance2: 25_000,
-  featureSpin: 25_000,
-  bonusFeature: 25_000,
-  superBonusFeature: 25_000,
-  hiddenBonusFeature: 25_000,
+  base: 600_000,
+  extraChance: 600_000,
+  extraChance2: 600_000,
+  featureSpin: 150_000,
+  bonusFeature: 150_000,
+  superBonusFeature: 150_000,
+  hiddenBonusFeature: 150_000,
 } satisfies Record<ModeName, number>
 
 export interface ModeSettings {
@@ -101,9 +101,9 @@ export const MODES: Record<ModeName, ModeSettings> = {
   },
 }
 export const BONUS_TARGETS = {
-  normal: { oneIn: 300, average: 80, minimum: 16 },
-  super: { oneIn: 3000, average: 280, minimum: 87 },
-  hidden: { oneIn: 75_000, average: 1500, minimum: 800 },
+  normal: { oneIn: 300, average: 96, minimum: 16 },
+  super: { oneIn: 3000, average: 288, minimum: 87 },
+  hidden: { oneIn: 50_000, average: 960, minimum: 800 },
 } satisfies Record<BonusTier, { oneIn: number; average: number; minimum: number }>
 
 export const DESIGN = { rtp: 0.96, wildCombination: "add" } as const
