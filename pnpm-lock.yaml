@@ -109,6 +109,18 @@ importers:
         specifier: 0.2.2
         version: 0.2.2(@babel/runtime@7.28.4)(@types/react@19.2.10)(redux@5.0.1)(typescript@5.9.3)(vite@7.3.2(@types/node@24.10.1)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.6))
 
+  examples/PandaFeasting:
+    dependencies:
+      '@slot-engine/core':
+        specifier: 0.3.2
+        version: 0.3.2
+      '@slot-engine/optimizer':
+        specifier: 0.1.0
+        version: 0.1.0
+      '@slot-engine/panel':
+        specifier: 0.2.2
+        version: 0.2.2(@babel/runtime@7.28.4)(@types/react@19.2.10)(redux@5.0.1)(typescript@5.9.3)(vite@7.3.2(@types/node@24.10.1)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.6))
+
   examples/SmokeysStash:
     dependencies:
       '@slot-engine/core':
