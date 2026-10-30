@@ -1,4 +1,6 @@
 import { availableParallelism } from "node:os"
+import { isMainThread } from "node:worker_threads"
+import { calibrateBonusHitRates } from "./src/calibrateBonusHitRates"
 import {
   GameMode,
   GameSymbol,
@@ -133,7 +135,23 @@ void game
     },
     doSimulation: task === "build" || task === "simulate",
     doOptimization: task === "build" || task === "optimize",
-    doAnalysis: task === "build" || task === "optimize" || task === "analyze",
+    doAnalysis: task === "analyze",
+  })
+  .then(async () => {
+    if (!isMainThread || !process.argv.includes("--slot-engine-run")) return
+    if (task !== "build" && task !== "optimize") return
+    await calibrateBonusHitRates(__dirname)
+    await game.runTasks({
+      doAnalysis: true,
+      analysisOpts: {
+        gameModes: modes,
+        tagStats: [
+          { groupBy: ["symbolId", "kind", "spinType"] },
+          { groupBy: ["criteria"] },
+          { groupBy: ["bonusTier"] },
+        ],
+      },
+    })
   })
   .catch((error) => {
     console.error(error)

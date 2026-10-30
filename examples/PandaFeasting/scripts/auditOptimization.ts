@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"
-import { BELOW_COST_TARGETS, optimizationBuckets } from "../src/math"
+import { BELOW_COST_TARGETS, bonusMinimum, optimizationBuckets } from "../src/math"
 import { DESIGN, FEATURE_RULES, MODES } from "../src/settings"
 import { PAYTABLE } from "../src/paytable"
 import { MAX_WIN, ModeName } from "../src/types"
@@ -24,6 +24,25 @@ for (const mode of Object.keys(MODES) as ModeName[]) {
       return [Number(id), name]
     }),
   )
+  const publishedBytes = readFileSync(
+    path.join(root, "publish_files", `lookUpTable_${mode}_0.csv`),
+  )
+  const lookupOffsets = readFileSync(path.join(root, `lookUpTable_${mode}.index`))
+  const publishedRows = publishedBytes.toString("utf8").trimEnd().split("\n")
+  assert.equal(
+    lookupOffsets.length,
+    publishedRows.length * 8,
+    `${mode}: lookup index row count`,
+  )
+  let expectedOffset = 0
+  publishedRows.forEach((row, index) => {
+    assert.equal(
+      Number(lookupOffsets.readBigUInt64LE(index * 8)),
+      expectedOffset,
+      `${mode}/${index}: stale lookup index`,
+    )
+    expectedOffset += Buffer.byteLength(row + "\n", "utf8")
+  })
   const published = new Map(
     lines(path.join(root, "publish_files", `lookUpTable_${mode}_0.csv`)).map((line) => {
       const [id, weight, payout] = line.split(",").map(Number)
@@ -88,6 +107,20 @@ for (const mode of Object.keys(MODES) as ModeName[]) {
       average,
     }
   })
+  const maxWinProbability = probability((book) => book.payout === MAX_WIN)
+  const expectedMax = buckets
+    .filter((bucket) => bucket.range[0] === MAX_WIN)
+    .reduce((sum, bucket) => sum + bucket.probability, 0)
+  assert.ok(
+    Math.abs(maxWinProbability / expectedMax - 1) < 1e-5,
+    `${mode}: explicit max-win odds`,
+  )
+  const targetByName = new Map(buckets.map((bucket) => [bucket.name, bucket]))
+  for (const book of books) {
+    const tier = targetByName.get(book.target)!.tier
+    if (tier)
+      assert.ok(book.payout >= bonusMinimum(mode, tier), `${mode}/${tier}: bonus floor`)
+  }
   const summary = {
     mode,
     books: books.length,
@@ -95,7 +128,9 @@ for (const mode of Object.keys(MODES) as ModeName[]) {
     rtp: mean / MODES[mode].cost,
     hitRate,
     belowCost,
-    maxWinProbability: probability((book) => book.payout === MAX_WIN),
+    maxWinProbability,
+    maxWinOneIn: 1 / maxWinProbability,
+    maxWinOneInTarget: 1 / expectedMax,
   }
   report[mode] = { ...summary, targets }
   console.log(JSON.stringify(summary))

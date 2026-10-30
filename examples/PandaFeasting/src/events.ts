@@ -1,6 +1,6 @@
 import { Board, LineWin, MAX_WIN, Position, SymbolId } from "./types"
 
-/** Shared event payloads retained verbatim from ButchEm. */
+/** Shared engine presentation events and Panda-specific feature events. */
 export const EVENT = {
   reveal: "reveal",
   winInfo: "winInfo",
@@ -15,6 +15,7 @@ export const EVENT = {
   spawnNewStageWilds: "spawnNewStageWilds",
   collectSymbols: "collectSymbols",
   newStageUnlocked: "newStageUnlocked",
+  featureSpinMeter: "featureSpinMeter",
 } as const
 export type EventName = (typeof EVENT)[keyof typeof EVENT]
 

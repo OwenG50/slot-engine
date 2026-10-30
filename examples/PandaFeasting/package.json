@@ -12,7 +12,12 @@
     "test": "vitest run",
     "audit": "tsx ./scripts/audit.ts",
     "audit-optimization": "tsx ./scripts/auditOptimization.ts",
-    "targets": "tsx ./scripts/targets.ts"
+    "targets": "tsx ./scripts/targets.ts",
+    "audit-bonus-hit-rate": "tsx ./scripts/auditBonusHitRate.ts",
+    "report-bonus-distributions": "tsx ./scripts/reportBonusDistributions.ts",
+    "report-feature-spin-distribution": "tsx ./scripts/reportFeatureSpinDistribution.ts",
+    "report-payout-distributions": "tsx ./scripts/reportPayoutDistributions.ts",
+    "report-wild-launches": "tsx ./scripts/reportWildLaunches.ts"
   },
   "dependencies": {
     "@slot-engine/core": "0.3.2",

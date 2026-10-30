@@ -35,9 +35,10 @@ export function evaluateLines(board: Board, wilds: Wild[] = []): LineWin[] {
     const multiplier = Math.max(
       1,
       positions.reduce(
-        (sum, pos) =>
-          sum +
-          (board[pos[0]][pos[1]] === "W" ? (multipliers.get(positionKey(pos)) ?? 1) : 0),
+        (sum, pos) => {
+          const value = multipliers.get(positionKey(pos)) ?? 1
+          return sum + (board[pos[0]][pos[1]] === "W" && value > 1 ? value : 0)
+        },
         0,
       ),
     )

@@ -15,7 +15,7 @@ export type SymbolId = PayingSymbol | "W" | "S"
 /** Column-major, visible cells only; coordinates are zero-based. */
 export type Board = SymbolId[][]
 export type Position = [reel: number, row: number]
-export type Stage = 1 | 2 | 3 | 4 | 5
+export type Stage = 1 | 2 | 3 | 4 | 5 | 6
 export type BonusTier = "normal" | "super" | "hidden"
 export type ModeName =
   | "base"

@@ -2,6 +2,7 @@ import { RandomNumberGenerator } from "@slot-engine/core"
 import { describe, expect, it } from "vitest"
 import { game } from ".."
 import { evaluateLines } from "../src/evaluations"
+import { collectLowSymbols } from "../src/feature"
 import { bonusLineStops } from "../src/lineSampling"
 import { PAYING_SYMBOLS, Board, Stage } from "../src/types"
 
@@ -20,8 +21,8 @@ describe("balanced line-game reel generation", () => {
   it("uses only the two balanced strips, with no dominant paying symbol on any reel", () => {
     for (const mode of Object.values(config.gameModes)) {
       expect(mode.reelSets.map((set) => set.id)).toEqual([
-        "base_lines_v1",
-        "bonus_lines_v1",
+        "base_lines_v2",
+        "bonus_lines_v2",
       ])
       for (const result of mode.resultSets) {
         expect(result.reelWeights.evaluate).toBeUndefined()
@@ -31,6 +32,10 @@ describe("balanced line-game reel generation", () => {
     for (const set of sets) {
       for (const strip of set.reels) {
         expect(strip.length).toBe(1000)
+        const highFrequency =
+          strip.filter((cell) => cell.id.startsWith("H")).length / strip.length
+        expect(highFrequency).toBeGreaterThan(0.42)
+        expect(highFrequency).toBeLessThan(0.58)
         for (const symbol of PAYING_SYMBOLS) {
           const frequency =
             strip.filter((cell) => cell.id === symbol).length / strip.length
@@ -45,7 +50,7 @@ describe("balanced line-game reel generation", () => {
   })
 
   it("produces payable lines from real contiguous windows across all stages", () => {
-    const reels = sets.find((set) => set.id === "bonus_lines_v1")!.reels
+    const reels = sets.find((set) => set.id === "bonus_lines_v2")!.reels
     const rng = new RandomNumberGenerator()
     rng.setSeed(745)
     const symbols = new Set<string>()
@@ -71,5 +76,22 @@ describe("balanced line-game reel generation", () => {
     }
     expect([...symbols].sort()).toEqual([...PAYING_SYMBOLS].sort())
     expect(lines.size).toBe(11)
+  })
+  it("supports real food-winning stage-six windows without conditioning wilds", () => {
+    const reels = sets.find((set) => set.id === "bonus_lines_v2")!.reels
+    const rng = new RandomNumberGenerator()
+    rng.setSeed(745)
+    for (let sample = 0; sample < 100; sample++) {
+      const stops = bonusLineStops(reels, rng, 6, true, undefined, true)
+      const board = reels.map((strip, reel) =>
+        Array.from(
+          { length: 3 },
+          (_, row) => strip[((stops[reel] ?? 0) + row) % strip.length].id,
+        ),
+      ) as Board
+      const collected = collectLowSymbols(board, evaluateLines(board))
+      expect(collected.length).toBeGreaterThanOrEqual(3)
+      expect(collected.every((cell) => cell.symbol.startsWith("L"))).toBe(true)
+    }
   })
 })

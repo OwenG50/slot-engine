@@ -8,6 +8,7 @@ import { anticipation, RevealSymbol, winInfo } from "../src/events"
 import { collectLowSymbols } from "../src/feature"
 import { optimizationBuckets } from "../src/math"
 import { FEATURE_RULES, FEATURE_SPIN_HIGH_WIN_SAMPLING, MODES } from "../src/settings"
+import { REEL_SET_IDS } from "../src/reels"
 import { PAYTABLE } from "../src/paytable"
 import { BONUS_LINE_SAMPLING } from "../src/lineSampling"
 import { Board, GameEvent, MAX_WIN, ModeName, Wild, cents } from "../src/types"
@@ -57,7 +58,7 @@ function replay(events: GameEvent[], payout: number, mode: ModeName) {
   const trigger = events.findIndex((event) => event.type === "freeSpinTrigger")
   if (trigger !== -1) {
     assert.ok(
-      !events.some((event) => event.type === "triggerExplode"),
+      !events.slice(0, trigger).some((event) => event.type === "triggerExplode"),
       "Explosion animation in a bonus-triggering round",
     )
     assert.ok(
@@ -73,9 +74,14 @@ function replay(events: GameEvent[], payout: number, mode: ModeName) {
   let progress = 0
   let inBonus = false
   let pendingSpawn = false
+  let finalMeterFilled = false
   let spinsPlayed = 0
   let spinsTotal = 0
   let hadWins = false
+  let meterStage = 0
+  let meterProgress = 0
+  let meterAction = ""
+  let featureExplosion = false
   const finish = () => {
     if (board && !hadWins)
       assert.equal(
@@ -85,7 +91,27 @@ function replay(events: GameEvent[], payout: number, mode: ModeName) {
   }
   for (const event of events) {
     const data = event.data
-    if (event.type === "freeSpinTrigger") {
+    if (event.type === "featureSpinMeter") {
+      assert.equal(mode, "featureSpin")
+      assert.equal(featureExplosion, false)
+      const nextStage = Number(data.stage)
+      assert.ok(Number.isInteger(nextStage) && nextStage >= 1 && nextStage <= 6)
+      assert.equal(
+        data.multiplier,
+        FEATURE_RULES.stageMultipliers[nextStage as 1 | 2 | 3 | 4 | 5 | 6],
+      )
+      assert.equal(meterAction, "")
+      assert.equal(data.action, "fill")
+      meterStage = nextStage
+      meterProgress = Number(data.progress)
+      assert.ok(meterProgress >= 0.1 && meterProgress <= 0.9)
+      meterAction = String(data.action)
+    } else if (event.type === "triggerExplode" && mode === "featureSpin") {
+      assert.equal(featureExplosion, false)
+      assert.equal(meterAction, "fill")
+      assert.ok(meterProgress >= 0.1 && meterProgress <= 0.9)
+      featureExplosion = true
+    } else if (event.type === "freeSpinTrigger") {
       inBonus = true
       spinsTotal = 5
       assert.equal(data.totalFs, 5)
@@ -99,7 +125,7 @@ function replay(events: GameEvent[], payout: number, mode: ModeName) {
       assert.ok(revealed.every((reel) => reel.length === 3))
       board = revealed.map((reel) => reel.map((cell) => cell.name))
       const stripId =
-        inBonus || mode === "featureSpin" ? "bonus_lines_v1" : "base_lines_v1"
+        inBonus || mode === "featureSpin" ? REEL_SET_IDS.bonus : REEL_SET_IDS.base
       const strips = simulation.gameConfig.gameModes[mode].reelSets.find(
         (set) => set.id === stripId,
       )!.reels
@@ -128,7 +154,25 @@ function replay(events: GameEvent[], payout: number, mode: ModeName) {
           wilds.every(
             (wild) =>
               wild.multiplier ===
-              FEATURE_RULES.stageMultipliers[stage as 1 | 2 | 3 | 4 | 5],
+              FEATURE_RULES.stageMultipliers[stage as 1 | 2 | 3 | 4 | 5 | 6],
+          ),
+        )
+      }
+      if (mode === "featureSpin") {
+        assert.deepEqual(
+          events.slice(0, 2).map((event) => event.type),
+          ["featureSpinMeter", "triggerExplode"],
+        )
+        assert.equal(
+          events.filter((event) => event.type === "featureSpinMeter").length,
+          1,
+        )
+        assert.ok(featureExplosion)
+        assert.ok(
+          wilds.every(
+            (wild) =>
+              wild.multiplier ===
+              FEATURE_RULES.stageMultipliers[meterStage as 1 | 2 | 3 | 4 | 5 | 6],
           ),
         )
       }
@@ -137,11 +181,12 @@ function replay(events: GameEvent[], payout: number, mode: ModeName) {
     } else if (event.type === "spawnNewStageWilds") {
       assert.ok(board)
       const added = data.wilds as { reel: number; row: number; multiplier: number }[]
-      assert.ok(added.length >= 3 && added.length <= 10)
+      assert.ok(added.length >= (inBonus ? 1 : 3) && added.length <= 15)
       if (inBonus) {
         assert.ok(pendingSpawn)
         pendingSpawn = false
       }
+      hadWins = false
       for (const cell of added) {
         assert.notEqual(board[cell.reel][cell.row], "S")
         assert.notEqual(board[cell.reel][cell.row], "W")
@@ -149,7 +194,12 @@ function replay(events: GameEvent[], payout: number, mode: ModeName) {
         if (inBonus)
           assert.equal(
             cell.multiplier,
-            FEATURE_RULES.stageMultipliers[stage as 1 | 2 | 3 | 4 | 5],
+            FEATURE_RULES.stageMultipliers[stage as 1 | 2 | 3 | 4 | 5 | 6],
+          )
+        if (mode === "featureSpin")
+          assert.equal(
+            cell.multiplier,
+            FEATURE_RULES.stageMultipliers[meterStage as 1 | 2 | 3 | 4 | 5 | 6],
           )
         board[cell.reel][cell.row] = "W"
         wilds.push({ position: [cell.reel, cell.row], multiplier: cell.multiplier })
@@ -169,18 +219,37 @@ function replay(events: GameEvent[], payout: number, mode: ModeName) {
     ) {
       assert.equal(data.amount, total)
     } else if (event.type === "collectSymbols") {
-      assert.ok(board && inBonus && stage < 5)
+      assert.ok(board && inBonus && !finalMeterFilled)
       assert.equal(data.initialProgress, progress)
       const collected = collectLowSymbols(board, evaluateLines(board, wilds))
       assert.deepEqual(data.symbols, collected)
       progress += collected.length
+      if (stage === 6)
+        progress = Math.min(
+          progress,
+          FEATURE_RULES.stageThresholds[
+            events[trigger].data.tier as "normal" | "super" | "hidden"
+          ][6],
+        )
       assert.equal(data.finalProgress, progress)
+    } else if (event.type === "triggerExplode" && inBonus) {
+      assert.equal(finalMeterFilled, false)
+      assert.ok(
+        progress >=
+          FEATURE_RULES.stageThresholds[
+            events[trigger].data.tier as "normal" | "super" | "hidden"
+          ][stage as 1 | 2 | 3 | 4 | 5 | 6],
+      )
+      if (stage === 6) finalMeterFilled = true
+      pendingSpawn = true
     } else if (event.type === "newStageUnlocked") {
+      assert.ok(stage < 6)
       stage++
       assert.deepEqual(data, { stage })
       progress = 0
-      pendingSpawn = true
+      assert.equal(pendingSpawn, false)
     } else if (event.type === "addAdditionalFreeSpins") {
+      assert.equal(finalMeterFilled, false)
       const added = 5 - (spinsTotal - spinsPlayed)
       spinsTotal += added
       assert.deepEqual(data, {
@@ -192,9 +261,24 @@ function replay(events: GameEvent[], payout: number, mode: ModeName) {
     }
   }
   finish()
+  if (mode === "featureSpin") {
+    assert.ok(featureExplosion)
+    assert.equal(events.filter((event) => event.type === "spawnNewStageWilds").length, 1)
+    assert.equal(events.filter((event) => event.type === "reveal").length, 1)
+    assert.ok(
+      !events.some((event) =>
+        [
+          "collectSymbols",
+          "newStageUnlocked",
+          "addAdditionalFreeSpins",
+          "freeSpinTrigger",
+        ].includes(event.type),
+      ),
+    )
+  }
   assert.equal(total, payout)
   assert.ok(total <= MAX_WIN)
-  assert.ok(spinsPlayed <= 25)
+  assert.ok(spinsPlayed <= 30)
 }
 
 let attempts = 0
@@ -280,7 +364,11 @@ try {
         coverage.push(row)
         console.log(JSON.stringify(row))
       } catch (error) {
-        const failure = { mode, band: band.name, error: String(error) }
+        const failure = {
+          mode,
+          band: band.name,
+          error: error instanceof Error ? (error.stack ?? error.message) : String(error),
+        }
         failures.push(failure)
         console.error(JSON.stringify(failure))
       } finally {

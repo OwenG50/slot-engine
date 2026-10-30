@@ -1,17 +1,18 @@
 import { RandomSource, weightedNumber } from "./feature"
 import { PAYLINES } from "./paylines"
-import { PAYING_SYMBOLS, Stage } from "./types"
+import { PAYING_SYMBOLS, PayingSymbol, Stage } from "./types"
 
 // This is candidate generation for the optimizer, not a player hit-rate setting.
 // Only one payline is conditioned; all adjacent cells stay on physical strips.
 export const BONUS_LINE_SAMPLING = {
-  roundProbabilities: [0, 0.35, 0.65, 0.85, 1],
+  roundProbabilities: [0, 0.1, 0.2, 0.35, 0.65, 0.85, 1],
   tailProbability: 1,
-  lowSymbolProbability: 0.9,
+  lowSymbolProbability: 0.3,
   countWeights: { 3: 15, 4: 25, 5: 60 },
   progressWildProbability: 0.05,
   finalStageWildProbability: 0.25,
   maxFinalStageWildProbability: 0.6,
+  maxWinFoodRoundProbability: 0.5,
 }
 
 type Strip = { id: string }[]
@@ -36,17 +37,20 @@ export function bonusLineStops(
   rng: RandomSource,
   stage: Stage,
   maxWin: boolean,
+  preferred?: { symbol: PayingSymbol; count: number },
+  foodOnly = false,
 ): Record<string, number> {
   const rules = BONUS_LINE_SAMPLING
   const line = rng.randomItem(Object.values(PAYLINES))
-  const count = weightedNumber(rules.countWeights, rng)
+  const count = preferred?.count ?? weightedNumber(rules.countWeights, rng)
   const pool =
-    stage < 5 && rng.randomFloat(0, 1) < rules.lowSymbolProbability
+    foodOnly || (stage < 6 && rng.randomFloat(0, 1) < rules.lowSymbolProbability)
       ? PAYING_SYMBOLS.filter((symbol) => symbol.startsWith("L"))
       : [...PAYING_SYMBOLS]
-  const symbol = rng.randomItem(pool)
-  const wildProbability =
-    stage < 5
+  const symbol = preferred?.symbol ?? rng.randomItem(pool)
+  const wildProbability = foodOnly
+    ? 0
+    : stage < 6
       ? rules.progressWildProbability
       : maxWin
         ? rules.maxFinalStageWildProbability

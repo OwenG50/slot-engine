@@ -3,12 +3,7 @@ import { optimize } from "@slot-engine/optimizer"
 import { existsSync, mkdtempSync, rmdirSync, unlinkSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import {
-  BELOW_COST_TARGETS,
-  mathBuckets,
-  optimizationBuckets,
-  optimizationTargets,
-} from "../src/math"
+import { BELOW_COST_TARGETS, optimizationBuckets, optimizationTargets } from "../src/math"
 import { DESIGN, MODES } from "../src/settings"
 import { createResultSets } from "../src/resultSets"
 import { ModeName } from "../src/types"
@@ -19,7 +14,7 @@ function support(mode: ModeName, name: string, range: [number, number]): number[
   if (mode === "extraChance" && name === "baseWin_05_1") return [0.5, 0.7]
   if (mode === "extraChance" && name === "baseWin_15_2") return [1.5, 1.8]
   if (mode === "extraChance2" && name === "super_250_median") return [251.3, 252]
-  if (mode === "featureSpin" && name === "feature_4_3K_5K") return [3293, 4990]
+  if (mode === "featureSpin" && name === "feature_3K_5K") return [3293, 4990]
   return [...new Set(range)]
 }
 
@@ -77,27 +72,6 @@ describe("native optimizer with discrete and sparse payout supports", () => {
             // high-payout groups; keep the tolerance well below one cent.
             expect(result.criteria[bucket.name].avgWin).toBeCloseTo(bucket.average, 3)
           }
-          if (mode === "featureSpin")
-            for (const family of [1, 2, 3, 4]) {
-              const actual = Object.entries(result.criteria).filter(([name]) =>
-                name.startsWith(`feature_${family}_`),
-              )
-              const expected = mathBuckets(mode).filter(
-                (bucket) => bucket.coverageBand === family,
-              )
-              expect(
-                actual.reduce(
-                  (sum, [, group]) => sum + group.probability * group.avgWin,
-                  0,
-                ),
-              ).toBeCloseTo(
-                expected.reduce(
-                  (sum, bucket) => sum + bucket.probability * bucket.average,
-                  0,
-                ),
-                8,
-              )
-            }
         } finally {
           for (const file of [lookupTable, lookupTableSegmented, output])
             if (existsSync(file)) unlinkSync(file)

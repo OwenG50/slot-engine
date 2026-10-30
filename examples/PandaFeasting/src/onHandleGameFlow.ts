@@ -16,18 +16,14 @@ import {
   advanceStage,
   collectLowSymbols,
   FeatureState,
-  featureSpinMultiplier,
+  featureSpinStage,
+  isFeatureComplete,
   spawnPositions,
   spawnWilds,
   startFeature,
   weightedNumber,
 } from "./feature"
-import {
-  FEATURE_RULES,
-  FEATURE_SPIN_HIGH_WIN_SAMPLING,
-  MODES,
-  NON_TRIGGER_SCATTER_ACCEPTANCE,
-} from "./settings"
+import { FEATURE_RULES, FEATURE_SPIN_HIGH_WIN_SAMPLING, MODES } from "./settings"
 import {
   Board,
   BonusTier,
@@ -46,6 +42,7 @@ export function onHandleGameFlow(ctx: Context) {
   const tier = (ctx.state.currentResultSet.userData?.tier ?? settings.boughtTier) as
     | BonusTier
     | undefined
+  const sampleBaseLines = !!ctx.state.currentResultSet.userData?.sampleBaseLines
   const rng = ctx.services.rng
   const isFeatureSpin = mode === "featureSpin"
   const lineProbability = ctx.state.currentResultSet.userData?.sampleBonusLines
@@ -58,8 +55,14 @@ export function onHandleGameFlow(ctx: Context) {
     (ctx.state.currentResultSet.forceMaxWin || ctx.state.currentResultSet.userData?.tail)
       ? FEATURE_SPIN_HIGH_WIN_SAMPLING
       : undefined
-  const randomFeatureSpinMultiplier = () =>
-    featureSpinMultiplier(rng, highWinSampling?.stageWeights)
+  // Broaden legal candidate trajectories; final optimizer weights set player odds.
+  const settleAfterTarget = !!tier && rng.randomFloat(0, 1) < 0.5
+  // Some max candidates collect food instead of capping on natural wilds before
+  // the final stage explosion. Count draws and same-board replay stay unchanged.
+  const sampleFoodRound =
+    !!tier &&
+    !!ctx.state.currentResultSet.forceMaxWin &&
+    rng.randomFloat(0, 1) < BONUS_LINE_SAMPLING.maxWinFoodRoundProbability
   const emit = (type: EventName, data: Record<string, unknown>) =>
     ctx.services.data.addBookEvent({ type, data })
   let feature: FeatureState | undefined
@@ -81,7 +84,15 @@ export function onHandleGameFlow(ctx: Context) {
           forceScatters,
         )
         ctx.services.board.drawBoardWithForcedStops({ reels, forcedStops })
-      } else if (feature && rng.randomFloat(0, 1) < lineProbability) {
+      } else if (
+        feature &&
+        rng.randomFloat(0, 1) <
+          (settleAfterTarget &&
+          ctx.services.wallet.getCurrentWin() >=
+            Number(ctx.state.currentResultSet.userData?.targetMinimumPayout ?? Infinity)
+            ? 0
+            : lineProbability)
+      ) {
         ctx.services.board.drawBoardWithForcedStops({
           reels,
           forcedStops: bonusLineStops(
@@ -89,7 +100,15 @@ export function onHandleGameFlow(ctx: Context) {
             rng,
             feature.stage,
             !!ctx.state.currentResultSet.forceMaxWin,
+            undefined,
+            sampleFoodRound,
           ),
+          randomOffset: false,
+        })
+      } else if (!feature && sampleBaseLines) {
+        ctx.services.board.drawBoardWithForcedStops({
+          reels,
+          forcedStops: bonusLineStops(reels, rng, 1, false, { symbol: "H1", count: 5 }),
           randomOffset: false,
         })
       } else ctx.services.board.drawBoardWithRandomStops(reels)
@@ -101,34 +120,26 @@ export function onHandleGameFlow(ctx: Context) {
       if (perReel.some((value) => value > 1)) continue
       if (forceScatters > 0 ? count !== forceScatters : count > maxScatters) continue
       if (spawnPositions(board).length < spawnCount) continue
-      if (
-        !feature &&
-        !isFeatureSpin &&
-        forceScatters === 0 &&
-        count > 0 &&
-        rng.randomFloat(0, 1) >= NON_TRIGGER_SCATTER_ACCEPTANCE
-      )
-        continue
       return board
     }
     throw new Error("Cannot draw a legal PandaFeasting board; check reel strips")
   }
 
   function spin(forceScatters = 0): number {
-    const stageMultiplier = FEATURE_RULES.stageMultipliers[feature?.stage ?? 1]
+    const selectedStage = isFeatureSpin
+      ? featureSpinStage(rng, highWinSampling?.stageWeights)
+      : (feature?.stage ?? 1)
+    const stageMultiplier = FEATURE_RULES.stageMultipliers[selectedStage]
     const explode =
       !feature &&
       // Triggering boards always draw exactly 3/4/5 forced scatters;
       // ordinary Base/ExtraChance/ExtraChance2 boards draw at most two.
       forceScatters === 0 &&
-      (isFeatureSpin || rng.randomFloat(0, 1) < FEATURE_RULES.baseExplosionProbability)
-    const spawn = explode || !!feature?.pendingSpawn
-    const spawnCount = spawn
-      ? weightedNumber(
-          highWinSampling?.spawnCountWeights ?? FEATURE_RULES.spawnCountWeights,
-          rng,
-        )
-      : 0
+      (isFeatureSpin ||
+        sampleBaseLines ||
+        rng.randomFloat(0, 1) < FEATURE_RULES.baseExplosionProbability)
+    const spawn = explode
+    const spawnCount = spawn ? weightedNumber(FEATURE_RULES.spawnCountWeights, rng) : 0
     const board = draw(forceScatters, feature || isFeatureSpin ? 0 : 2, spawnCount)
     const wilds: Wild[] = board.flatMap((reel, x) =>
       reel.flatMap((symbol, y) =>
@@ -136,9 +147,7 @@ export function onHandleGameFlow(ctx: Context) {
           ? [
               {
                 position: [x, y] as [number, number],
-                multiplier: isFeatureSpin
-                  ? randomFeatureSpinMultiplier()
-                  : stageMultiplier,
+                multiplier: stageMultiplier,
               },
             ]
           : [],
@@ -148,81 +157,114 @@ export function onHandleGameFlow(ctx: Context) {
       wilds.map((wild) => [positionKey(wild.position), wild.multiplier]),
     )
     if (!feature) triggerPositions = scatterPositions(board)
-    if (explode) emit(EVENT.triggerExplode, {})
-    // Empty ButchEm-specific fields preserve the existing reveal contract.
-    emit(EVENT.reveal, {
+    const reveal = {
       board: revealBoard(board, (pos) => naturalMultipliers.get(positionKey(pos)) ?? 1),
       anticipation: anticipation(board),
-      upgrades: {},
-      roamingWilds: [],
       ...(feature ? { bonusTier: feature.tier, freeSpin: freeSpinsPlayed } : {}),
-    })
-    if (spawn) {
-      const added = spawnWilds(
-        board,
-        spawnCount,
-        () => (isFeatureSpin ? randomFeatureSpinMultiplier() : stageMultiplier),
-        rng,
+    }
+    const added = spawn ? spawnWilds(board, spawnCount, () => stageMultiplier, rng) : []
+    wilds.push(...added)
+    if (isFeatureSpin) {
+      // Cosmetic randomness is drawn only after every payout-affecting choice.
+      const partialProgress = rng.randomItem(
+        Array.from({ length: 81 }, (_, i) => (i + 10) / 100),
       )
-      wilds.push(...added)
+      emit(EVENT.featureSpinMeter, {
+        action: "fill",
+        stage: selectedStage,
+        multiplier: stageMultiplier,
+        progress: partialProgress,
+      })
+    }
+    if (explode) emit(EVENT.triggerExplode, {})
+    emit(EVENT.reveal, reveal)
+    if (spawn) {
       emit(EVENT.spawnNewStageWilds, {
         wilds: added.map((wild) => ({
           ...eventPosition(wild.position),
           multiplier: wild.multiplier,
         })),
       })
-      if (feature) feature.pendingSpawn = false
     }
-    // Keep the engine's board in sync with the visible post-spawn board.
-    board.forEach((reel, x) =>
-      reel.forEach((symbol, y) =>
-        ctx.services.board.setSymbol(x, y, ctx.config.symbols.get(symbol)!),
-      ),
-    )
-    const wins = capWins(
-      evaluateLines(board, wilds),
-      MAX_WIN - ctx.services.wallet.getCurrentWin(),
-    )
-    const info = winInfo(wins)
-    if (info.totalWin > 0) {
-      emit(EVENT.winInfo, info)
-      emit(EVENT.setWin, {
-        amount: info.totalWin,
-        winLevel: calculateWinLevel(info.totalWin),
-      })
-      if (feature) bonusPayout = cents(bonusPayout + info.totalWin)
-      emit(EVENT.setTotalWin, { amount: feature ? bonusPayout : info.totalWin })
-    }
-    ctx.services.wallet.addSpinWin(info.totalWin)
-    ctx.services.wallet.confirmSpinWin()
-    ctx.state.triggeredMaxWin = cents(ctx.services.wallet.getCurrentWin()) >= MAX_WIN
-    for (const win of wins.filter((win) => win.payout > 0))
-      ctx.services.data.tagSymbolOccurrence({
-        symbolId: win.symbol,
-        kind: win.count,
-        spinType: ctx.state.currentSpinType,
-      })
-    if (feature && feature.stage < 5 && !ctx.state.triggeredMaxWin) {
-      const collected = collectLowSymbols(board, wins)
-      const initialProgress = feature.progress
-      const finalProgress = initialProgress + collected.length
-      emit(EVENT.collectSymbols, { symbols: collected, initialProgress, finalProgress })
-      const unlocked = advanceStage(feature, collected.length)
-      for (const stage of unlocked) {
-        emit(EVENT.newStageUnlocked, { stage })
-        // Top up to five, rather than add five. Cumulative counters retain
-        // ButchEm semantics, so totalFs - spinsPlayed is exactly five.
-        const additionalFs = FREE_SPINS - ctx.state.currentFreespinAmount
-        ctx.services.game.awardFreespins(additionalFs)
-        emit(EVENT.addAdditionalFreeSpins, {
-          additionalFs,
-          remainingFs: ctx.state.currentFreespinAmount,
-          totalFs: ctx.state.totalFreespinAmount,
-          positions: [],
+    // Each evaluation settles separately, including the complete same-board upgrade replay.
+    function payBoard() {
+      board.forEach((reel, x) =>
+        reel.forEach((symbol, y) =>
+          ctx.services.board.setSymbol(x, y, ctx.config.symbols.get(symbol)!),
+        ),
+      )
+      const wins = capWins(
+        evaluateLines(board, wilds),
+        MAX_WIN - ctx.services.wallet.getCurrentWin(),
+      )
+      const info = winInfo(wins)
+      if (info.totalWin > 0) {
+        emit(EVENT.winInfo, info)
+        emit(EVENT.setWin, {
+          amount: info.totalWin,
+          winLevel: calculateWinLevel(info.totalWin),
         })
+        if (feature) bonusPayout = cents(bonusPayout + info.totalWin)
+        emit(EVENT.setTotalWin, { amount: feature ? bonusPayout : info.totalWin })
+      }
+      ctx.services.wallet.addSpinWin(info.totalWin)
+      ctx.services.wallet.confirmSpinWin()
+      ctx.state.triggeredMaxWin = cents(ctx.services.wallet.getCurrentWin()) >= MAX_WIN
+      for (const win of wins.filter((win) => win.payout > 0))
+        ctx.services.data.tagSymbolOccurrence({
+          symbolId: win.symbol,
+          kind: win.count,
+          spinType: ctx.state.currentSpinType,
+        })
+      return { wins, amount: info.totalWin }
+    }
+
+    const original = payBoard()
+    let spinPayout = original.amount
+    if (feature && !isFeatureComplete(feature) && !ctx.state.triggeredMaxWin) {
+      const collected = collectLowSymbols(board, original.wins)
+      const initialProgress = feature.progress
+      const finalStage = feature.stage === 6
+      const unlocked = advanceStage(feature, collected.length)
+      const finalProgress = finalStage
+        ? feature.progress
+        : initialProgress + collected.length
+      emit(EVENT.collectSymbols, { symbols: collected, initialProgress, finalProgress })
+      const stagesToExplode =
+        finalStage && isFeatureComplete(feature) ? [feature.stage] : unlocked
+      for (const stage of stagesToExplode) {
+        // No new reveal and no spin consumed: replace cells on the food-winning board,
+        // then pay ALL its lines again. Existing natural wilds retain their multiplier.
+        emit(EVENT.triggerExplode, { source: "stage" })
+        const count = Math.min(
+          spawnPositions(board).length,
+          weightedNumber(FEATURE_RULES.spawnCountWeights, rng),
+        )
+        const added = spawnWilds(board, count, () => stageMultiplier, rng)
+        wilds.push(...added)
+        emit(EVENT.spawnNewStageWilds, {
+          wilds: added.map((wild) => ({
+            ...eventPosition(wild.position),
+            multiplier: wild.multiplier,
+          })),
+        })
+        spinPayout = cents(spinPayout + payBoard().amount)
+        // Never collect food or chain another upgrade from the replay evaluation.
+        if (finalStage) continue
+        emit(EVENT.newStageUnlocked, { stage })
+        if (!ctx.state.triggeredMaxWin) {
+          const additionalFs = FREE_SPINS - ctx.state.currentFreespinAmount
+          ctx.services.game.awardFreespins(additionalFs)
+          emit(EVENT.addAdditionalFreeSpins, {
+            additionalFs,
+            remainingFs: ctx.state.currentFreespinAmount,
+            totalFs: ctx.state.totalFreespinAmount,
+            positions: [],
+          })
+        }
       }
     }
-    return info.totalWin
+    return spinPayout
   }
 
   if (isFeatureSpin) spin()

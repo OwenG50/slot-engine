@@ -1,5 +1,15 @@
 import { FEATURE_RULES } from "./settings"
-import { Board, BonusTier, LineWin, Position, Stage, Wild, positionKey } from "./types"
+import {
+  Board,
+  BonusTier,
+  HEIGHT,
+  LineWin,
+  Position,
+  Stage,
+  WIDTH,
+  Wild,
+  positionKey,
+} from "./types"
 
 export interface RandomSource {
   randomFloat(min: number, max: number): number
@@ -9,10 +19,9 @@ export interface FeatureState {
   tier: BonusTier
   stage: Stage
   progress: number
-  pendingSpawn: boolean
 }
 export function startFeature(tier: BonusTier): FeatureState {
-  return { tier, stage: 1, progress: 0, pendingSpawn: false }
+  return { tier, stage: 1, progress: 0 }
 }
 export function weightedNumber(
   weights: Record<number, number>,
@@ -29,11 +38,11 @@ export function weightedNumber(
   }
   return Number(entries.filter(([, weight]) => weight > 0).at(-1)![0])
 }
-export function featureSpinMultiplier(
+export function featureSpinStage(
   rng: RandomSource,
   stageWeights: Record<Stage, number> = FEATURE_RULES.featureSpinStageWeights,
-): number {
-  return FEATURE_RULES.stageMultipliers[weightedNumber(stageWeights, rng) as Stage]
+): Stage {
+  return weightedNumber(stageWeights, rng) as Stage
 }
 export function spawnPositions(board: Board): Position[] {
   return board.flatMap((reel, x) =>
@@ -42,7 +51,7 @@ export function spawnPositions(board: Board): Position[] {
     ),
   )
 }
-/** Mutates only the evaluated board, after its original reveal was emitted. */
+/** Mutates only the evaluated board; callers preserve the original reveal snapshot. */
 export function spawnWilds(
   board: Board,
   count: number,
@@ -50,8 +59,15 @@ export function spawnWilds(
   rng: RandomSource,
 ): Wild[] {
   const available = spawnPositions(board)
-  if (!Number.isInteger(count) || count < 3 || count > 10 || count > available.length)
-    throw new Error("Wild spawn needs 3–10 distinct non-wild, non-scatter cells")
+  if (
+    !Number.isInteger(count) ||
+    count < 1 ||
+    count > WIDTH * HEIGHT ||
+    count > available.length
+  )
+    throw new Error(
+      `Wild spawn needs 1–${WIDTH * HEIGHT} distinct non-wild, non-scatter cells`,
+    )
   const wilds: Wild[] = []
   for (let i = 0; i < count; i++) {
     const pos = rng.randomItem(available)
@@ -73,22 +89,32 @@ export function collectLowSymbols(board: Board, wins: LineWin[]) {
   }
   return [...collected.values()].sort((a, b) => a.reel - b.reel || a.row - b.row)
 }
+export function isFeatureComplete(state: FeatureState): boolean {
+  return (
+    state.stage === 6 && state.progress >= FEATURE_RULES.stageThresholds[state.tier][6]
+  )
+}
 export function advanceStage(state: FeatureState, count: number): Stage[] {
-  if (state.stage === 5) return []
+  if (isFeatureComplete(state)) return []
+  if (state.stage === 6) {
+    const threshold = FEATURE_RULES.stageThresholds[state.tier][6]
+    if (!Number.isInteger(threshold) || threshold < 1)
+      throw new Error("Stage thresholds must be positive integers")
+    state.progress = Math.min(state.progress + count, threshold)
+    return []
+  }
   state.progress += count
   const stages: Stage[] = []
-  while (state.stage < 5) {
-    const threshold =
-      FEATURE_RULES.stageThresholds[state.tier][state.stage as Exclude<Stage, 5>]
+  while (state.stage < 6) {
+    const threshold = FEATURE_RULES.stageThresholds[state.tier][state.stage]
     if (!Number.isInteger(threshold) || threshold < 1)
       throw new Error("Stage thresholds must be positive integers")
     if (state.progress < threshold) break
     state.progress = FEATURE_RULES.carryProgress ? state.progress - threshold : 0
     state.stage = (state.stage + 1) as Stage
-    state.pendingSpawn = true
     stages.push(state.stage)
     if (!FEATURE_RULES.carryProgress) break
   }
-  if (state.stage === 5) state.progress = 0
+  if (state.stage === 6) state.progress = 0
   return stages
 }
