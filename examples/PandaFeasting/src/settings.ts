@@ -32,6 +32,15 @@ export const FEATURE_RULES = {
   naturalWildWeight: 0.5,
 }
 export const HIDDEN_BUY_PAYOUT_SPREAD = 1.75
+/** Published stage shares and median anchors in base-bet x, fitted inside payout bands. */
+export const FEATURE_SPIN_STAGE_TARGETS = [
+  { multiplier: 1, probability: 0.33, median: 5 },
+  { multiplier: 2, probability: 0.27, median: 10 },
+  { multiplier: 5, probability: 0.13, median: 15 },
+  { multiplier: 10, probability: 0.11, median: 20 },
+  { multiplier: 25, probability: 0.09, median: 30 },
+  { multiplier: 50, probability: 0.07, median: 50 },
+] as const
 /** Reference chart's effective 1-in-X odds for 1-2, 2-5, ..., 5000-10000x.
  * Player probabilities are refitted to each route's floor and existing mean. */
 export const BONUS_REFERENCE_ODDS = {
@@ -59,13 +68,13 @@ export const FEATURE_SPIN_HIGH_WIN_SAMPLING = {
   stageWeights: { 1: 1, 2: 2, 3: 2, 4: 3, 5: 12, 6: 80 } satisfies Record<Stage, number>,
 }
 export const SIM_RUNS: Record<ModeName, number> = {
-  base: 700_000,
-  extraChance: 700_000,
-  extraChance2: 700_000,
-  featureSpin: 100_000,
-  bonusFeature: 100_000,
-  superBonusFeature: 100_000,
-  hiddenBonusFeature: 100_000,
+  base: 10_000,
+  extraChance: 10_000,
+  extraChance2: 10_000,
+  featureSpin: 10_000,
+  bonusFeature: 10_000,
+  superBonusFeature: 10_000,
+  hiddenBonusFeature: 10_000,
 }
 export interface ModeSettings {
   cost: number
@@ -118,11 +127,11 @@ export const NATURAL_MAX_WIN_ONE_IN = {
   extraChance2: 2_800_000,
 } satisfies Record<"base" | "extraChance" | "extraChance2", number>
 /** Paid-round odds of a base-game (non-bonus) panda explosion. Book weighting
- * inside each exact payout band steers every paid base-game mode to Base's rate. */
+ * inside each exact payout band keeps explosions rare in every paid spin mode. */
 export const BASE_GAME_EXPLOSION_ONE_IN = {
-  base: 31,
-  extraChance: 31,
-  extraChance2: 31,
+  base: 80,
+  extraChance: 80,
+  extraChance2: 80,
 } satisfies Record<"base" | "extraChance" | "extraChance2", number>
 /** Published full-screen targets, applied by book weighting within exact payout bands.
  * Stage 4-6 (10x/25x/50x) full screens always pay the cap, so together they take

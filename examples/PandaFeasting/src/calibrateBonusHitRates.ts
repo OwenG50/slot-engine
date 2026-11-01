@@ -7,7 +7,7 @@ import { bonusSpinStats } from "./bonusSpinStats"
 import { fitFullScreenStages } from "./fullScreenWeights"
 import { wildLaunches } from "./wildLaunches"
 import { optimizationBuckets } from "./math"
-import { MODES, FULL_SCREEN_TARGETS, BASE_GAME_EXPLOSION_ONE_IN } from "./settings"
+import { MODES, FULL_SCREEN_TARGETS, BASE_GAME_EXPLOSION_ONE_IN, FEATURE_SPIN_STAGE_TARGETS } from "./settings"
 import { MAX_WIN } from "./types"
 import type { GameEvent, ModeName } from "./types"
 
@@ -48,6 +48,7 @@ export async function calibrateBonusHitRates(root: string) {
     const stats = new Map<number, ReturnType<typeof bonusSpinStats>>()
     const fullScreens = new Map<number, number[]>()
     const baseExplosions = new Map<number, number>()
+    const featureStages = new Map<number, number>()
     for await (const line of createInterface({
       input: createReadStream(path.join(build, `books_${mode}.jsonl`)),
       crlfDelay: Infinity,
@@ -63,6 +64,11 @@ export async function calibrateBonusHitRates(root: string) {
         throw new Error(`${mode}: stale lookup/book ${book.id}`)
       const counts = bonusSpinStats(book.events)
       const launches = wildLaunches(book.events, mode)
+      if (mode === "featureSpin") {
+        if (launches.length !== 1 || launches[0].source !== "featureSpin")
+          throw new Error(`${mode}/${book.id}: expected one FeatureSpin launch`)
+        featureStages.set(book.id, launches[0].multiplier)
+      }
       fullScreens.set(
         book.id,
         launches.filter((launch) => launch.fullScreen).map((launch) => launch.multiplier),
@@ -95,6 +101,7 @@ export async function calibrateBonusHitRates(root: string) {
           hits: stats.get(row.id)?.hits ?? Number(row.cents > 0),
           weight: 1,
           fullScreens: fullScreens.get(row.id)!,
+          multiplier: featureStages.get(row.id),
         })),
     }))
     const maxWinProbability = buckets
@@ -135,10 +142,13 @@ export async function calibrateBonusHitRates(root: string) {
         fitBands,
         targets,
         explosionOneIn === undefined ? undefined : 1 / explosionOneIn,
+        mode === "featureSpin" ? FEATURE_SPIN_STAGE_TARGETS : [],
       )
     } catch (error) {
       throw new Error(`${mode}: full-screen calibration failed`, { cause: error })
     }
+    if (mode === "featureSpin" && !fit.achieved)
+      throw new Error("FeatureSpin stage/median targets unsupported; regenerate broader books")
     if (!fit.achieved)
       console.warn(
         `${mode}: full-screen targets constrained after ${fit.iterations} iterations; payout targets preserved`,
@@ -154,6 +164,36 @@ export async function calibrateBonusHitRates(root: string) {
       weight: Math.round(replacements.get(row.id)! * units),
     }))
     const adjustedTotal = adjusted.reduce((sum, row) => sum + row.weight, 0)
+    const featureStageSummary = mode === "featureSpin"
+      ? FEATURE_SPIN_STAGE_TARGETS.map((target) => {
+          const group = adjusted.filter((row) => featureStages.get(row.id) === target.multiplier)
+            .sort((a, b) => a.cents - b.cents)
+          const mass = group.reduce((sum, row) => sum + row.weight, 0)
+          let cumulative = 0
+          const median = group.find((row) => {
+            cumulative += row.weight
+            return cumulative >= mass / 2
+          })!.cents / 100
+          if (Math.abs(mass / adjustedTotal / target.probability - 1) > 0.006)
+            throw new Error(`FeatureSpin ${target.multiplier}x stage mass changed during rounding`)
+          return {
+            multiplier: target.multiplier, probability: mass / adjustedTotal, median,
+            averagePayout: group.reduce((sum, row) => sum + row.weight * row.cents / 100, 0) / mass,
+          }
+        })
+      : []
+    if (featureStageSummary.some((stage, i) => i > 0 && stage.median <= featureStageSummary[i - 1].median))
+      throw new Error("FeatureSpin stage medians must increase with multiplier")
+    const explosionMass = adjusted.reduce(
+      (sum, row) => sum + row.weight * baseExplosions.get(row.id)!,
+      0,
+    )
+    if (
+      explosionOneIn !== undefined &&
+      fit.targetReached &&
+      Math.abs(explosionMass / adjustedTotal - 1 / explosionOneIn) > 1e-8
+    )
+      throw new Error(`${mode}: base-game explosion target changed during rounding`)
     for (const tier of ["normal", "super", "hidden"] as const) {
       const group = adjusted.filter((row) => stats.get(row.id)?.tier === tier)
       if (!group.length) continue
@@ -236,18 +276,23 @@ export async function calibrateBonusHitRates(root: string) {
         throw new Error(`${mode}: full-screen ${multiplier}x mass changed during rounding`)
     report[mode] = {
       sha256: createHash("sha256").update(text).digest("hex"),
+      ...(mode === "featureSpin" ? { featureStages: featureStageSummary } : {}),
       ...(explosionOneIn === undefined
         ? {}
         : {
             baseGameExplosion: {
               targetOneIn: explosionOneIn,
               reached: fit.targetReached,
-              oneIn:
-                adjustedTotal /
-                adjusted.reduce(
-                  (sum, row) => sum + row.weight * baseExplosions.get(row.id)!,
-                  0,
-                ),
+              oneIn: adjustedTotal / explosionMass,
+              averagePayout:
+                explosionMass > 0
+                  ? adjusted.reduce(
+                      (sum, row) =>
+                        sum +
+                        (row.weight * baseExplosions.get(row.id)! * row.cents) / 100,
+                      0,
+                    ) / explosionMass
+                  : null,
             },
           }),
       fullScreenTargets: {
@@ -274,7 +319,7 @@ export async function calibrateBonusHitRates(root: string) {
     JSON.stringify(
       {
         hitRatePolicy: "unconstrained",
-        bookWeightingPolicy: "full-screen stage targets; exact band mass and mean",
+        bookWeightingPolicy: "full-screen targets; FeatureSpin stage shares and median anchors; exact band mass and mean",
         stageReachPolicy: "unconstrained",
         stagePayoutPolicy: "unconstrained",
         modes: report,

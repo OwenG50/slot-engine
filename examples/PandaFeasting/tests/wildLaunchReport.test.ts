@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import { launchAccumulator, wildLaunches } from "../scripts/reportWildLaunches"
 import { GameEvent } from "../src/types"
 import { fitFullScreenStages } from "../src/fullScreenWeights"
+import { BASE_GAME_EXPLOSION_ONE_IN } from "../src/settings"
 
 const reveal = (natural = false): GameEvent => ({
   type: "reveal",
@@ -25,6 +26,13 @@ const launch = (natural = false): GameEvent => ({
 })
 
 describe("published wild launch report", () => {
+  it("targets a base-game explosion once in 80 paid spins for every natural entry mode", () => {
+    expect(BASE_GAME_EXPLOSION_ONE_IN).toEqual({
+      base: 80,
+      extraChance: 80,
+      extraChance2: 80,
+    })
+  })
   it("moves full-screen stage masses to explicit targets without changing band mass", () => {
     const samples = Array.from({ length: 60 }, (_, id) => ({
       id,
@@ -95,8 +103,8 @@ describe("published wild launch report", () => {
     }))
     const result = fitFullScreenStages(
       [{ name: "variable", probability: 1, average: 17, samples }],
-      new Map([[1, 0.05]]),
-      0.2,
+      new Map([[1, 0.001]]),
+      1 / 80,
     )
     const exploded = samples.reduce(
       (sum, sample) => sum + result.weights.get(sample.id)! * sample.hits,
@@ -108,9 +116,9 @@ describe("published wild launch report", () => {
     )
     expect(result.achieved).toBe(true)
     expect(result.targetReached).toBe(true)
-    expect(exploded).toBeCloseTo(0.2, 6)
+    expect(exploded).toBeCloseTo(1 / 80, 8)
     expect(mean).toBeCloseTo(17, 8)
-    expect(result.masses.get(1)! / 0.05).toBeCloseTo(1, 1)
+    expect(result.masses.get(1)! / 0.001).toBeCloseTo(1, 1)
   })
   it("reports unreachable targets rather than changing payout-band budgets", () => {
     const result = fitFullScreenStages(

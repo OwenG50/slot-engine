@@ -5,7 +5,7 @@ import path from "node:path"
 import { calibrateBonusHitRates } from "../src/calibrateBonusHitRates"
 import * as weights from "../src/bonusSpinWeights"
 import { optimizationBuckets } from "../src/math"
-import { BASE_GAME_EXPLOSION_ONE_IN, MODES } from "../src/settings"
+import { BASE_GAME_EXPLOSION_ONE_IN, FEATURE_SPIN_STAGE_TARGETS, MODES } from "../src/settings"
 import type { ModeName, GameEvent } from "../src/types"
 
 // All bonus books deliberately have four wins in five spins. The payout
@@ -29,12 +29,23 @@ describe("sample-limited build calibration", () => {
           const low = Math.floor(band.average * 100),
             high = Math.ceil(band.average * 100)
           const ratio = high === low ? 0 : (band.average * 100 - low) / (high - low)
-          for (const [cents, share] of high === low
+          const outcomes = mode === "featureSpin"
+            ? [...new Set([
+                Math.round(band.range[0] * 100), Math.round(band.range[1] * 100),
+                low, high,
+                ...FEATURE_SPIN_STAGE_TARGETS.map((target) => target.median * 100)
+                  .filter((cents) => cents >= band.range[0] * 100 && cents <= band.range[1] * 100),
+              ])].map((cents) => [cents, 1] as const)
+            : high === low
             ? [[low, 1]]
             : [
                 [low, 1 - ratio],
                 [high, ratio],
-              ]) {
+              ]
+          for (const [cents, share] of outcomes) {
+            for (const multiplier of mode === "featureSpin"
+              ? FEATURE_SPIN_STAGE_TARGETS.map((target) => target.multiplier)
+              : [undefined]) {
             const id = rows.length + 1
             const events: GameEvent[] = band.tier
               ? [
@@ -59,10 +70,20 @@ describe("sample-limited build calibration", () => {
                   ]).flat(),
                   { type: "freeSpinEnd", data: {} },
                 ]
-              : []
+              : multiplier === undefined ? [] : [
+                  { type: "triggerExplode", data: {} },
+                  { type: "reveal", data: {
+                    board: Array.from({ length: 5 }, () =>
+                      Array.from({ length: 3 }, () => ({ name: "L1" }))),
+                  } },
+                  { type: "spawnNewStageWilds", data: {
+                    wilds: [0, 1, 2].map((row) => ({ reel: 0, row, multiplier })),
+                  } },
+                ]
             books.push({ id, payoutMultiplier: cents, events })
             rows.push(`${id},${Math.round(band.probability * share * 2 ** 45)},${cents}`)
             segmented.push(`${id},${band.name}`)
+            }
           }
         }
         const filename = path.join(publish, `lookUpTable_${mode}_0.csv`)
@@ -103,10 +124,16 @@ describe("sample-limited build calibration", () => {
       for (const [bands, target] of payoutFit.mock.calls) {
         if (target !== undefined) expect(explosionTargets.has(target)).toBe(true)
         for (const band of bands)
-          expect(band.samples.every((sample) => sample.weight === 1)).toBe(true)
+          if (!band.name.startsWith("feature_"))
+            expect(band.samples.every((sample) => sample.weight === 1)).toBe(true)
       }
       expect(report).not.toHaveProperty("targets")
       expect(report).not.toHaveProperty("stageReachTargets")
+      const stages = report.modes.featureSpin.featureStages
+      for (const [i, target] of FEATURE_SPIN_STAGE_TARGETS.entries()) {
+        expect(stages[i].probability).toBeCloseTo(target.probability, 2)
+        if (i > 0) expect(stages[i].median).toBeGreaterThan(stages[i - 1].median)
+      }
       for (const result of Object.values(report.modes) as {
         tiers: {
           hitRate: number

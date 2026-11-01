@@ -277,17 +277,58 @@ weighting. Their final player-facing frequencies can change with optimization.
 - Non-triggering Base/ExtraChance/ExtraChance2 spins roll a 2% explosion
   chance when books are generated. Published odds are set separately by
   `BASE_GAME_EXPLOSION_ONE_IN`: calibration weights books inside each exact
-  payout band so a paid round has a base-game explosion 1 in 31 in all three
-  modes (previously an uncontrolled 1 in 31 / 14.2 / 14.8). Added wilds have
+  payout band so a paid round has a base-game explosion 1 in 80 in all three
+  modes (previously 1 in 31). This reduces explosion frequency without changing
+  payout-band mass or mean; more winning spins use ordinary line wins instead.
+  The calibration report records the average explosion payout in base-bet x
+  and checks that the target survives integer weight rounding. Added wilds have
   1× multipliers. Reveals that trigger any bonus tier,
   including bought-bonus trigger reveals, never emit `triggerExplode` or spawn
   explosion wilds. Stage-entry wilds can still spawn later during the bonus.
+
+The 10,000-book-per-mode validation compares both targets on the same books.
+Explosions are rarer but have a stronger upper tail; small or losing explosions
+remain possible. Payouts below are base-bet multiples, not multiples of mode cost.
+
+| Mode | Explosion odds (before → now) | Mean explosion payout (before → now) | Ordinary winning spins (before → now) |
+| --- | --- | --- | --- |
+| Base | 1 in 31 → 1 in 80 | 9.3x → 18.8x | 16.69% → 18.41% |
+| Extra Chance | 1 in 31 → 1 in 80 | 6.4x → 11.3x | 21.24% → 23.07% |
+| Extra Chance 2 | 1 in 31 → 1 in 80 | 10.2x → 15.6x | 20.02% → 21.92% |
+
+Overall RTP, hit rates, payout-band targets, bonus entry odds, max-win odds and
+full-screen targets are preserved by the weighting change.
+
 - Regular FeatureSpin candidates always explode. They select one shared stage:
   1x at 50%, 2x at 30%, 5x at 6%, 10x at 6%, 25x at 6%, and 50x at 2%.
   The stage proposal weights, bonus food thresholds, and collection rules are
   unchanged; the global stage ladder is now 1x/2x/5x/10x/25x/50x. Published
   weighted stage frequencies can change after payout rejection and calibration;
   these proposal percentages are not guaranteed player-facing odds.
+  Published FeatureSpin shares instead use `FEATURE_SPIN_STAGE_TARGETS`:
+  33% / 27% / 13% / 11% / 9% / 7%. Calibration also targets half of each
+  stage's outcomes at or below 5x / 10x / 15x / 20x / 30x / 50x respectively.
+  These are median anchors, not minimum payouts. Actual weighted medians must
+  strictly increase with stage or calibration fails before publishing.
+  Every payout band's probability and mean, including the loss and max-win
+  bands, stays fixed. Stage appearances are measured across all paid
+  FeatureSpins, including losing spins.
+
+  The current 10k books measure:
+
+  | Multiplier | Published frequency | Median payout | Mean payout | Mean launched wilds |
+  | --- | ---: | ---: | ---: | ---: |
+  | 1x | 33.05% | 5x | 7.85x | 4.52 |
+  | 2x | 26.99% | 10x | 26.87x | 4.17 |
+  | 5x | 12.99% | 15x | 49.82x | 4.24 |
+  | 10x | 10.99% | 20x | 64.44x | 3.89 |
+  | 25x | 8.99% | 27.5x | 118.57x | 3.89 |
+  | 50x | 6.99% | 50x | 199.46x | 3.80 |
+
+  Payouts are base-bet multiples and include losses. Spreading the same 48x
+  mean over more high-stage appearances reduces their conditional means;
+  dead high-stage spins remain possible. Stage frequencies, medians and means
+  are recorded in `bonus-hit-rate-report.json` under `modes.featureSpin.featureStages`.
 - Every mode and candidate path selects the added-wild count using this one pool:
 
 | Added wilds |  3 |  4 |  5 |  6 | 7 | 8 | 9 | 10 |  11 |   12 |  13 |   14 |   15 |
