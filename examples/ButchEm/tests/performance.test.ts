@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import { canRepositionWilds, movementPaths } from "../src/collection"
 import { Board, PAYING_SYMBOLS, Position, SymbolId, positionKey } from "../src/types"
 import { footprint, footprintMask, footprintsOverlap, validAnchors } from "../src/wilds"
-import { BoardProfile, reelWeights } from "../src/reels"
+import { BoardProfile, Phase, reelWeights } from "../src/reels"
 import { referenceMovementPaths, referenceRepositioningPaths } from "./referenceMovement"
 
 describe("ButchEm cached movement equivalence", () => {
@@ -77,8 +77,7 @@ describe("ButchEm cached movement equivalence", () => {
 
   it("preserves reel weights and returns independent weight maps", () => {
     for (const profile of ["standard", "dense", "tail", "maxwin"] as BoardProfile[])
-      for (const inFeature of [false, true]) {
-        const prefix = inFeature ? "bonus" : "base"
+      for (const prefix of ["base", "bonus", "free"] as Phase[]) {
         const expected =
           profile === "standard"
             ? { [prefix + "_standard"]: 1 }
@@ -88,11 +87,11 @@ describe("ButchEm cached movement equivalence", () => {
                   1,
                 ]),
               )
-        const first = reelWeights(profile, inFeature)
+        const first = reelWeights(profile, prefix)
         expect(first).toEqual(expected)
         first[Object.keys(first)[0]] = 999
         first.extra = 123
-        expect(reelWeights(profile, inFeature)).toEqual(expected)
+        expect(reelWeights(profile, prefix)).toEqual(expected)
       }
   })
 

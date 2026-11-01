@@ -1,5 +1,5 @@
 import { GeneratedReelSet } from "@slot-engine/core"
-import { FEATURE_RULES } from "./settings"
+import { FEATURE_RULES, FREE_SPIN_H_WEIGHT_MULTIPLIER } from "./settings"
 import { PAYING_SYMBOLS, PayingSymbol } from "./types"
 
 export type BoardProfile = "standard" | "dense" | "tail" | "maxwin"
@@ -24,13 +24,31 @@ const BASE_WEIGHTS: Record<PayingSymbol, number> = {
   H2: 7,
   H1: 6,
 }
-const TOTAL_WEIGHT = Object.values(BASE_WEIGHTS).reduce((sum, weight) => sum + weight, 0)
+// Triggered-bonus free spins carry a few more H symbols so roaming wilds
+// collect toward upgrades slightly more often.
+const FREE_WEIGHTS = Object.fromEntries(
+  PAYING_SYMBOLS.map((id) => [
+    id,
+    id.startsWith("H")
+      ? BASE_WEIGHTS[id] * FREE_SPIN_H_WEIGHT_MULTIPLIER
+      : BASE_WEIGHTS[id],
+  ]),
+) as Record<PayingSymbol, number>
+/** base: base game; bonus: featureSpin; free: triggered-bonus free spins. */
+export type Phase = "base" | "bonus" | "free"
+const PHASE_WEIGHTS: Record<Phase, Record<PayingSymbol, number>> = {
+  base: BASE_WEIGHTS,
+  bonus: BASE_WEIGHTS,
+  free: FREE_WEIGHTS,
+}
 
 /** Real reel strips used by the board service and editable in the panel. */
 export function createReelSets() {
-  return (["base", "bonus"] as const).flatMap((phase) =>
+  return (["base", "bonus", "free"] as const).flatMap((phase) =>
     (Object.keys(concentrations) as BoardProfile[]).flatMap((profile) => {
       const concentration = concentrations[profile]
+      const weights = PHASE_WEIGHTS[phase]
+      const total = Object.values(weights).reduce((sum, weight) => sum + weight, 0)
       return (profile === "standard" ? [undefined] : PAYING_SYMBOLS).map(
         (focus) =>
           new GeneratedReelSet({
@@ -44,13 +62,11 @@ export function createReelSets() {
               ...Object.fromEntries(
                 PAYING_SYMBOLS.map((id) => [
                   id,
-                  BASE_WEIGHTS[id] +
-                    (id === focus
-                      ? (TOTAL_WEIGHT * concentration) / (1 - concentration)
-                      : 0),
+                  weights[id] +
+                    (id === focus ? (total * concentration) / (1 - concentration) : 0),
                 ]),
               ),
-              W: phase === "bonus" ? FEATURE_RULES.naturalWildWeight : 0.3,
+              W: phase === "base" ? 0.3 : FEATURE_RULES.naturalWildWeight,
               // Scatters live on the physical strips like the other games: base
               // strips carry them for forced trigger draws and organic
               // near-misses, bonus strips keep them very rare for +1 retriggers.
@@ -70,8 +86,7 @@ export function createReelSets() {
 
 const weightCache = new Map<string, Record<string, number>>()
 
-export function reelWeights(profile: BoardProfile, inFeature: boolean) {
-  const prefix = inFeature ? "bonus" : "base"
+export function reelWeights(profile: BoardProfile, prefix: Phase) {
   const key = `${prefix}_${profile}`
   let weights = weightCache.get(key)
   if (!weights) {
@@ -88,6 +103,6 @@ export function reelWeights(profile: BoardProfile, inFeature: boolean) {
     weightCache.set(key, weights)
   }
   // Preserve callers' ownership of mutable weight maps; only construction of
-  // the fixed eight profile/phase combinations is shared between spins.
+  // the fixed twelve profile/phase combinations is shared between spins.
   return { ...weights }
 }

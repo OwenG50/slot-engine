@@ -223,7 +223,32 @@ function enumerateRoutes(from: Position, size: "1" | "2"): MovementRoute[] {
   return result
 }
 
-/** Move every truck once independently of wins; collection paths never target symbols.
+/** Collection routes that cross at least one H whose upgrade is still locked and
+ * that no earlier truck picked up this spin. */
+function seekingPaths(
+  routes: readonly MovementRoute[],
+  board: Board,
+  state: FeatureState,
+  picked: Set<number>,
+): Position[][] {
+  let wanted = 0
+  for (let x = 0; x < WIDTH; x++)
+    for (let y = 0; y < HEIGHT; y++) {
+      const symbol = board[x][y]
+      const key = positionKey([x, y])
+      if (
+        symbol.startsWith("H") &&
+        !state.upgrades[Number(symbol[1]) as UpgradeId] &&
+        !picked.has(key)
+      )
+        wanted |= 1 << key
+    }
+  if (!wanted) return []
+  return routes.filter((route) => route.sweptMask & wanted).map((route) => route.path)
+}
+
+/** Move every truck once independently of wins. With `collectionSeekChance` a
+ * collecting truck picks only among routes that reach a still-needed H symbol.
  * A cell credits only one truck per spin. Finish the full route after reaching
  * five; the caller applies unlocks after every truck finishes at the old size.
  * Repositioning disables collection and requires final footprints without H or S. */
@@ -241,16 +266,28 @@ export function moveRoamingWilds(
     : repositioningPaths(board, state.anchors, size, rules.maxMovesPerSpin, rng)
   if (!collect && !repositioning) throw new Error("No legal roaming-wild repositioning")
   return state.anchors.map((from, roamingWildIndex) => {
-    const paths = repositioning
-      ? [repositioning[roamingWildIndex]]
+    const routes = repositioning
+      ? []
       : movementRoutes(
           from,
           state.anchors.filter((_, index) => index !== roamingWildIndex),
           size,
           rules.maxMovesPerSpin,
-        ).map((route) => route.path)
+        )
+    const paths = repositioning
+      ? [repositioning[roamingWildIndex]]
+      : routes.map((route) => route.path)
     if (!paths.length) throw new Error("No legal roaming-wild movement")
-    const path = repositioning ? paths[0] : rng.randomItem(paths)
+    let path: Position[]
+    if (repositioning) path = paths[0]
+    else {
+      const seeking =
+        rules.collectionSeekChance > 0 &&
+        rng.randomFloat(0, 1) < rules.collectionSeekChance
+          ? seekingPaths(routes, board, state, picked)
+          : []
+      path = rng.randomItem(seeking.length ? seeking : paths)
+    }
     const counts: Partial<Record<UpgradeId, number>> = {}
     const steps = path.map(
       (anchor, stepIndex): MovementStep => ({

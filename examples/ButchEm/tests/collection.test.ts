@@ -637,4 +637,74 @@ describe("ButchEm unrestricted collection endpoints", () => {
       }
     },
   )
+
+  describe("collection seeking", () => {
+    const seekBoard = () => {
+      const source = board("L1")
+      source[4][0] = "H3"
+      return source
+    }
+    const recordChoices = (roll: number) => {
+      const offered: Position[][][] = []
+      const rng: RandomSource = {
+        randomFloat: () => roll,
+        randomItem<T>(items: T[]): T {
+          offered.push(items as unknown as Position[][])
+          return items[0]
+        },
+      }
+      return { rng, offered }
+    }
+    const crosses = (path: Position[], cell: Position) =>
+      path.slice(1).some((anchor) => positionKey(anchor) === positionKey(cell))
+    const all = movementPaths([0, 4], [], "1")
+
+    it("offers only routes that reach a still-locked H symbol when seeking", () => {
+      const { rng, offered } = recordChoices(0)
+      const movement = moveRoamingWilds(
+        seekBoard(),
+        state([[0, 4]]),
+        "1",
+        FEATURE_RULES,
+        rng,
+      )[0]
+      expect(offered[0].length).toBeGreaterThan(0)
+      expect(offered[0].length).toBeLessThan(all.length)
+      expect(offered[0].every((path) => crosses(path, [4, 0]))).toBe(true)
+      expect(movement.collectedSymbols).toEqual([
+        { symbol: "H3", upgrade: 3, count: 1, collected: 1 },
+      ])
+    })
+
+    it("offers every route when the seek roll misses", () => {
+      const { rng, offered } = recordChoices(FEATURE_RULES.collectionSeekChance)
+      moveRoamingWilds(seekBoard(), state([[0, 4]]), "1", FEATURE_RULES, rng)
+      expect(offered[0]).toEqual(all)
+    })
+
+    it("ignores H symbols for upgrades that are already unlocked", () => {
+      const { rng, offered } = recordChoices(0)
+      const feature = state([[0, 4]])
+      feature.upgrades[3] = true
+      moveRoamingWilds(seekBoard(), feature, "1", FEATURE_RULES, rng)
+      expect(offered[0]).toEqual(all)
+    })
+
+    it("never seeks while repositioning", () => {
+      let rolls = 0
+      const rng: RandomSource = {
+        randomFloat: () => (rolls++, 0),
+        randomItem: (items) => items[0],
+      }
+      moveRoamingWilds(seekBoard(), state([[0, 4]]), "1", FEATURE_RULES, rng, false)
+      expect(rolls).toBe(0)
+    })
+
+    it("keeps seeking a slight bias", () => {
+      expect(FEATURE_RULES.collectionSeekChance).toBeGreaterThan(0)
+      expect(FEATURE_RULES.collectionSeekChance).toBeLessThanOrEqual(0.25)
+      for (const upgrade of Object.values(FEATURE_RULES.upgrades))
+        expect(upgrade.requiredSymbols).toBe(5)
+    })
+  })
 })

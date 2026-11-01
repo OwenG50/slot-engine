@@ -4,15 +4,17 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { optimize } from "@slot-engine/optimizer"
 import {
+  BONUS_BUY_MINIMUMS,
   BONUS_TARGETS,
   DESIGN,
+  FEATURE_SPIN_MAX_WIN_ONE_IN,
   FEATURE_SPIN_UPGRADE_COUNT_PROBABILITIES,
   MODES,
+  NATURAL_BONUS_AVERAGES,
+  NATURAL_MAX_WIN_ONE_IN,
 } from "../src/settings"
 import {
   BELOW_COST_TARGETS,
-  BONUS_MEDIAN_TARGETS,
-  EXTRA_CHANCE_MEDIAN_TARGETS,
   HIT_TARGETS,
   mathBuckets,
   optimizationBuckets,
@@ -21,20 +23,23 @@ import {
 } from "../src/math"
 import { MAX_WIN, ModeName } from "../src/types"
 
+const sum = <T>(values: T[], f: (value: T) => number) =>
+  values.reduce((total, value) => total + f(value), 0)
+const mass = (buckets: { probability: number }[]) => sum(buckets, (b) => b.probability)
+const ev = (buckets: { probability: number; average: number }[]) =>
+  sum(buckets, (b) => b.probability * b.average)
+
 describe("ButchEm math budgets", () => {
   for (const name of Object.keys(MODES) as ModeName[]) {
-    it(name + " has a feasible 96% RTP budget and the original mode hit rate", () => {
+    it(name + " has a feasible 96% RTP budget and the mode hit rate", () => {
       const buckets = mathBuckets(name)
       expect(() => validateBuckets(name, buckets)).not.toThrow()
-      expect(buckets.reduce((s, b) => s + b.probability, 0)).toBeCloseTo(1, 12)
-      expect(
-        buckets.reduce((s, b) => s + b.probability * b.average, 0) / MODES[name].cost,
-      ).toBeCloseTo(0.96, 12)
-      const hit = buckets
-        .filter((b) => b.range[0] > 0)
-        .reduce((s, b) => s + b.probability, 0)
+      expect(mass(buckets)).toBeCloseTo(1, 12)
+      expect(ev(buckets) / MODES[name].cost).toBeCloseTo(0.96, 12)
+      const hit = mass(buckets.filter((b) => b.range[0] > 0))
       expect(hit).toBeCloseTo(HIT_TARGETS[name], 12)
       expect(hit).toBeCloseTo(MODES[name].hitRate, 12)
+      expect(() => validateBuckets(name, optimizationBuckets(name))).not.toThrow()
     })
   }
   it("provides an exact max-win bucket in every game mode", () => {
@@ -46,43 +51,81 @@ describe("ButchEm math budgets", () => {
       ).toBe(true)
     }
   })
-  it("scales purchased-mode max-win probability with cost", () => {
-    for (const mode of [
-      "featureSpin",
-      "bonusFeature",
-      "superBonusFeature",
-      "hiddenBonusFeature",
-    ] as const) {
-      const max = mathBuckets(mode).find(
-        (bucket) => bucket.range[0] === MAX_WIN && bucket.range[1] === MAX_WIN,
-      )!
-      expect(max.probability).toBeCloseTo((0.002 * MODES[mode].cost) / MAX_WIN, 12)
-      expect((max.probability * MAX_WIN) / MODES[mode].cost).toBeCloseTo(0.002, 12)
-    }
-  })
-  it("pins base triggers at 1/300, 1/3000 and 1/50000, including their tails", () => {
+  it("pins natural triggers at 1/300, 1/3000 and 1/62500, including their tails", () => {
     for (const [tier, oneIn] of [
       ["normal", 300],
       ["super", 3000],
-      ["hidden", 50000],
+      ["hidden", 62500],
     ] as const) {
       expect(BONUS_TARGETS[tier].oneIn).toBe(oneIn)
       const probability = (mode: ModeName) =>
-        mathBuckets(mode)
-          .filter((b) => b.tier === tier)
-          .reduce((s, b) => s + b.probability, 0)
+        mass(mathBuckets(mode).filter((b) => b.tier === tier))
       expect(probability("base")).toBeCloseTo(1 / oneIn, 12)
       expect(probability("extraChance")).toBeCloseTo(2 / oneIn, 12)
       expect(probability("extraChance2")).toBeCloseTo(5 / oneIn, 12)
+    }
+  })
+  it("keeps natural means, floors and whole-round max-win odds per entry route", () => {
+    for (const mode of ["base", "extraChance", "extraChance2"] as const) {
+      const buckets = optimizationBuckets(mode)
+      for (const tier of ["normal", "super", "hidden"] as const) {
+        const bonus = buckets.filter((b) => b.tier === tier)
+        expect(ev(bonus) / mass(bonus)).toBeCloseTo(NATURAL_BONUS_AVERAGES[mode][tier], 9)
+        expect(Math.min(...bonus.map((b) => b.range[0]))).toBe(
+          BONUS_TARGETS[tier].minimum,
+        )
+      }
+      expect(mass(buckets.filter((b) => b.tier && b.range[0] === MAX_WIN))).toBeCloseTo(
+        1 / NATURAL_MAX_WIN_ONE_IN[mode],
+        15,
+      )
+    }
+  })
+  it("spreads natural Normal and Super rounds well away from their means", () => {
+    for (const mode of ["base", "extraChance", "extraChance2"] as const) {
+      for (const tier of ["normal", "super"] as const) {
+        const bonus = optimizationBuckets(mode).filter((b) => b.tier === tier)
+        const total = mass(bonus)
+        const mean = ev(bonus) / total
+        // Most rounds pay below the mean, and no reporting band dominates.
+        expect(mass(bonus.filter((b) => b.range[1] < mean)) / total).toBeGreaterThan(0.55)
+        expect(Math.max(...bonus.map((b) => b.probability)) / total).toBeLessThan(0.4)
+      }
+    }
+  })
+  it("gives bought bonuses single-peaked curves with low floors and medians below cost", () => {
+    for (const [mode, tier] of [
+      ["bonusFeature", "normal"],
+      ["superBonusFeature", "super"],
+      ["hiddenBonusFeature", "hidden"],
+    ] as const) {
+      const buckets = optimizationBuckets(mode)
+      const cost = MODES[mode].cost
+      expect(Math.min(...buckets.map((b) => b.range[0]))).toBe(BONUS_BUY_MINIMUMS[tier])
+      expect(ev(buckets)).toBeCloseTo(DESIGN.rtp * cost, 9)
+      expect(buckets.every((b) => b.range[1] < cost || b.range[0] >= cost)).toBe(true)
+      const below = mass(buckets.filter((b) => b.range[1] < cost))
+      expect(below).toBeGreaterThan(0.7)
+      expect(below).toBeLessThan(0.82)
+      const regular = buckets.filter((b) => b.range[0] < MAX_WIN)
+      const peak = regular.reduce(
+        (best, b, i) => (b.probability > regular[best].probability ? i : best),
+        0,
+      )
+      regular.forEach((b, i) => {
+        if (i > 0 && i <= peak)
+          expect(b.probability).toBeGreaterThan(regular[i - 1].probability)
+        if (i > peak) expect(b.probability).toBeLessThan(regular[i - 1].probability)
+      })
     }
   })
   it("keeps additive wilds and broad simulation coverage", () => {
     expect(DESIGN.wildCombination).toBe("add")
     expect(HIT_TARGETS).toMatchObject({
       base: 0.2,
-      extraChance: 0.25,
-      extraChance2: 0.25,
-      featureSpin: 0.8,
+      extraChance: 0.22,
+      extraChance2: 0.235,
+      featureSpin: 0.77,
     })
     for (const mode of [
       "base",
@@ -100,59 +143,114 @@ describe("ButchEm math budgets", () => {
       )
     }
   })
-  it("pins below-cost probabilities while preserving RTP and nonzero hit rates", () => {
+  it("pins Extra Chance below-cost probabilities while preserving RTP and hit rates", () => {
     for (const [mode, target] of Object.entries(BELOW_COST_TARGETS) as [
       ModeName,
       number,
     ][]) {
       const buckets = optimizationBuckets(mode)
-      expect(() => validateBuckets(mode, buckets)).not.toThrow()
       const cost = MODES[mode].cost
       expect(buckets.every((b) => b.range[1] < cost || b.range[0] >= cost)).toBe(true)
-      expect(
-        buckets
-          .filter((b) => b.range[1] < cost)
-          .reduce((sum, b) => sum + b.probability, 0),
-      ).toBeCloseTo(target, 12)
-      expect(
-        buckets.filter((b) => b.range[0] > 0).reduce((sum, b) => sum + b.probability, 0),
-      ).toBeCloseTo(HIT_TARGETS[mode], 12)
+      expect(mass(buckets.filter((b) => b.range[1] < cost))).toBeCloseTo(target, 12)
+      expect(mass(buckets.filter((b) => b.range[0] > 0))).toBeCloseTo(
+        HIT_TARGETS[mode],
+        12,
+      )
       for (const bucket of buckets)
         expect(optimizationTargets(mode)[bucket.name].match).toEqual({
           criteria: bucket.criteria,
           winRange: bucket.range,
         })
       const original = mathBuckets(mode)
-      for (const tail of original.filter((b) => /_(tail|large|max)$/.test(b.name)))
-        expect(
-          buckets
-            .filter(
-              (b) =>
-                b.tier === tail.tier &&
-                b.range[0] >= tail.range[0] &&
-                b.range[1] <= tail.range[1],
-            )
-            .reduce((sum, b) => sum + b.probability, 0),
-        ).toBeCloseTo(tail.probability, 12)
-      for (const tier of ["normal", "super", "hidden"] as const) {
-        const mass = (values: typeof original) =>
-          values.filter((b) => b.tier === tier).reduce((sum, b) => sum + b.probability, 0)
-        expect(mass(buckets)).toBeCloseTo(mass(original), 12)
-      }
+      for (const tier of ["normal", "super", "hidden"] as const)
+        expect(mass(buckets.filter((b) => b.tier === tier))).toBeCloseTo(
+          mass(original.filter((b) => b.tier === tier)),
+          12,
+        )
+      const ordinary = buckets.filter((b) => !b.tier)
+      expect(ev(ordinary)).toBeCloseTo(
+        DESIGN.rtp * cost - ev(original.filter((b) => b.tier)),
+        10,
+      )
     }
   })
+  it("reduces Extra Chance small hits and increases the mean ordinary winning payout", () => {
+    for (const [mode, smallHitProbability] of [
+      ["extraChance", 0.12],
+      ["extraChance2", 0.135],
+    ] as const) {
+      const buckets = optimizationBuckets(mode)
+      const ordinary = buckets.filter((b) => !b.tier && b.range[0] > 0)
+      const bonusProbability = mass(buckets.filter((b) => b.tier))
+      expect(mass(ordinary.filter((b) => b.range[1] < MODES[mode].cost))).toBeCloseTo(
+        smallHitProbability,
+        12,
+      )
+      const previousMean = ev(ordinary) / (0.25 - bonusProbability)
+      expect(ev(ordinary) / mass(ordinary)).toBeGreaterThan(previousMean)
+    }
+  })
+  it("pins ExtraChance2 ordinary 5-10x wins at 2.2% of plays", () => {
+    const band = optimizationBuckets("extraChance2").find(
+      (b) => b.name === "baseWin_5_10",
+    )!
+    expect(band.probability).toBeCloseTo(0.022, 12)
+    expect(band.average).toBe(7)
+    expect(band.range).toEqual([5, 9.99])
+  })
+  for (const mode of ["extraChance", "extraChance2"] as const) {
+    it(mode + " optimizes the new hit rate and ordinary payout targets", async () => {
+      const root = mkdtempSync(path.join(tmpdir(), "butch-extra-chance-"))
+      const lookupTable = path.join(root, "lookup.csv")
+      const lookupTableSegmented = path.join(root, "segmented.csv")
+      const buckets = optimizationBuckets(mode)
+      const lookup: string[] = []
+      const segmented: string[] = []
+      for (const bucket of buckets) {
+        for (const payout of new Set(bucket.range)) {
+          const id = lookup.length + 1
+          lookup.push(`${id},1,${Math.round(payout * 100)}`)
+          segmented.push(`${id},${bucket.criteria[0]},${payout},0`)
+        }
+      }
+      try {
+        writeFileSync(lookupTable, lookup.join("\n"))
+        writeFileSync(lookupTableSegmented, segmented.join("\n"))
+        const result = await optimize({
+          input: { lookupTable, lookupTableSegmented },
+          output: { lookupTable: path.join(root, "optimized.csv") },
+          targets: optimizationTargets(mode),
+          cost: MODES[mode].cost,
+          rtp: DESIGN.rtp,
+          verbose: false,
+        })
+        expect(result.rtp).toBeCloseTo(DESIGN.rtp, 8)
+        expect(
+          sum(
+            Object.values(result.criteria).filter((g) => g.minWin > 0),
+            (g) => g.probability,
+          ),
+        ).toBeCloseTo(MODES[mode].hitRate, 8)
+        for (const bucket of buckets) {
+          expect(result.criteria[bucket.name].probability).toBeCloseTo(
+            bucket.probability,
+            8,
+          )
+        }
+        if (mode === "extraChance2")
+          expect(result.criteria.baseWin_5_10.probability).toBeCloseTo(0.022, 8)
+      } finally {
+        rmSync(root, { recursive: true, force: true })
+      }
+    })
+  }
   it("reshapes base wins without changing their probability or payout budget", () => {
     const before = mathBuckets("base").find((bucket) => bucket.name === "baseWin")!
     const after = optimizationBuckets("base").filter((bucket) =>
       bucket.name.startsWith("baseWin_"),
     )
-    expect(after.reduce((sum, bucket) => sum + bucket.probability, 0)).toBeCloseTo(
-      before.probability,
-      12,
-    )
-    expect(
-      after.reduce((sum, bucket) => sum + bucket.probability * bucket.average, 0),
-    ).toBeCloseTo(before.probability * before.average, 12)
+    expect(mass(after)).toBeCloseTo(before.probability, 12)
+    expect(ev(after)).toBeCloseTo(before.probability * before.average, 12)
     for (const [name, probability] of [
       ["baseWin_under_025", 0.04],
       ["baseWin_025_05", 0.03],
@@ -163,156 +261,64 @@ describe("ButchEm math budgets", () => {
         12,
       )
   })
-  it("keeps hidden floors and similar mean/median targets across entry modes", () => {
-    for (const [mode, mean, median] of [
-      ["base", 960, 900],
-      ["extraChance", 940, 885],
-      ["extraChance2", 930, 875],
-      ["hiddenBonusFeature", 960, 900],
-    ] as const) {
-      const hidden = optimizationBuckets(mode).filter((b) => b.tier === "hidden")
-      const mass = hidden.reduce((sum, b) => sum + b.probability, 0)
-      expect(
-        hidden.reduce((sum, b) => sum + b.probability * b.average, 0) / mass,
-      ).toBeCloseTo(mean, 9)
-      expect(Math.min(...hidden.map((b) => b.range[0]))).toBe(800)
-      expect(
-        hidden
-          .filter((b) => b.range[1] <= median)
-          .reduce((sum, b) => sum + b.probability, 0) / mass,
-      ).toBeCloseTo(0.5, 12)
-      expect(
-        hidden
-          .filter((b) => b.range[0] >= 1000)
-          .reduce((sum, b) => sum + b.probability, 0) / mass,
-      ).toBeCloseTo(0.2, 12)
-    }
-  })
-  it("funds similar Extra Chance bonuses from ordinary wins at the same hit and recovery rates", () => {
-    for (const [mode, normal, superMean, ordinaryEV] of [
-      ["extraChance", 92, 280, 0.6024],
-      ["extraChance2", 90, 276, 0.827],
-    ] as const) {
-      const buckets = optimizationBuckets(mode)
-      for (const [tier, mean] of [
-        ["normal", normal],
-        ["super", superMean],
-      ] as const) {
-        const bonus = buckets.filter((b) => b.tier === tier)
-        const mass = bonus.reduce((sum, b) => sum + b.probability, 0)
-        expect(
-          bonus.reduce((sum, b) => sum + b.probability * b.average, 0) / mass,
-        ).toBeCloseTo(mean, 10)
-        // Regrouping must cover payouts from previous simulation partitions too.
-        expect(bonus.every((b) => b.criteria.length === 6)).toBe(true)
-        expect(
-          bonus
-            .filter((b) => b.range[1] <= EXTRA_CHANCE_MEDIAN_TARGETS[mode][tier])
-            .reduce((sum, b) => sum + b.probability, 0) / mass,
-        ).toBeCloseTo(0.5, 12)
-      }
-      const ordinary = buckets.filter((b) => !b.tier && b.range[0] > 0)
-      expect(ordinary.reduce((sum, b) => sum + b.probability * b.average, 0)).toBeCloseTo(
-        ordinaryEV,
-        10,
-      )
-      const recovery = ordinary.find((b) => b.range[1] === 4.99)!
-      expect(recovery.probability).toBeGreaterThan(mode === "extraChance" ? 0.035 : 0.025)
-      expect(
-        buckets
-          .filter((b) => b.range[0] >= MODES[mode].cost)
-          .reduce((sum, b) => sum + b.probability, 0),
-      ).toBeCloseTo(0.1, 12)
-      expect(
-        buckets.filter((b) => b.range[0] > 0).reduce((sum, b) => sum + b.probability, 0),
-      ).toBeCloseTo(0.25, 12)
-    }
-  })
-  it("pins the buy's populated upper bands and median cuts", () => {
-    const normal = optimizationBuckets("bonusFeature")
-    const superBonus = optimizationBuckets("superBonusFeature")
-    const probability = (buckets: typeof normal, min: number, max = Infinity) =>
-      buckets
-        .filter((b) => b.range[0] >= min && b.range[1] < max)
-        .reduce((sum, b) => sum + b.probability, 0)
-    expect(probability(normal, 200, 500)).toBeCloseTo(0.028, 12)
-    expect(probability(normal, 250, 500)).toBeCloseTo(0.02, 12)
-    expect(probability(normal, 500, 1000)).toBeCloseTo(0.0023, 12)
-    expect(probability(superBonus, 1000)).toBeCloseTo(0.00774, 12)
-    for (const [buckets, tier] of [
-      [normal, "normal"],
-      [superBonus, "super"],
-    ] as const)
-      expect(
-        buckets
-          .filter((b) => b.range[1] <= BONUS_MEDIAN_TARGETS[tier])
-          .reduce((sum, b) => sum + b.probability, 0),
-      ).toBeCloseTo(0.5, 12)
-  })
-  it("aligns all conditional reporting-band probabilities with the corresponding buy", () => {
-    const edges = [0, 25, 50, 100, 200, 250, 500, 1000, 2000, 3000, 5000, 10000, 10000.01]
-    for (const [tier, buy] of [
-      ["normal", "bonusFeature"],
-      ["super", "superBonusFeature"],
-      ["hidden", "hiddenBonusFeature"],
-    ] as const) {
-      const reference = optimizationBuckets(buy)
-      for (const mode of ["base", "extraChance", "extraChance2"] as const) {
-        const bonus = optimizationBuckets(mode).filter((b) => b.tier === tier)
-        const mass = bonus.reduce((sum, b) => sum + b.probability, 0)
-        for (let i = 0; i < edges.length - 1; i++) {
-          const min = edges[i],
-            max = edges[i + 1]
-          const probability = (values: typeof bonus) =>
-            values
-              .filter((b) => b.range[0] >= min && b.range[1] < max)
-              .reduce((sum, b) => sum + b.probability, 0)
-          expect(probability(bonus) / mass).toBeCloseTo(probability(reference), 12)
-          expect(bonus.some((b) => b.range[0] < max && b.range[1] >= max)).toBe(false)
-        }
-        if (mode === "base") {
-          expect(
-            bonus.reduce((sum, b) => sum + b.probability * b.average, 0) / mass,
-          ).toBeCloseTo(DESIGN.rtp * MODES[buy].cost, 10)
-        }
-      }
-    }
-  })
-  it("preserves feature-spin upgrade-count payout budgets", () => {
-    for (const count of [1, 2, 3, 4] as const) {
-      const before = mathBuckets("featureSpin").filter(
-        (b) => b.startingUpgradeCount === count,
-      )
-      const after = optimizationBuckets("featureSpin").filter(
-        (b) => b.startingUpgradeCount === count,
-      )
-      expect(after.reduce((sum, b) => sum + b.probability, 0)).toBeCloseTo(
+})
+
+describe("ButchEm featureSpin curve", () => {
+  const buckets = mathBuckets("featureSpin")
+  const counts = [1, 2, 3, 4] as const
+  const byCount = (count: number) =>
+    buckets.filter((b) => b.startingUpgradeCount === count)
+
+  it("preserves the 70/15/10/5 upgrade-count mix", () => {
+    for (const count of counts)
+      expect(mass(byCount(count))).toBeCloseTo(
         FEATURE_SPIN_UPGRADE_COUNT_PROBABILITIES[count],
         12,
       )
-      expect(after.reduce((sum, b) => sum + b.probability * b.average, 0)).toBeCloseTo(
-        before.reduce((sum, b) => sum + b.probability * b.average, 0),
-        12,
-      )
-    }
+    expect(buckets.every((b) => counts.includes(b.startingUpgradeCount as 1))).toBe(true)
   })
-  it.each([50, 57.5])("optimizes books with a %sx four-upgrade floor while preserving all feature-spin budgets", async (fourUpgradeFloor) => {
+  it("matches the shared payout chart and max-win odds", () => {
+    const band = (min: number, max: number) =>
+      mass(buckets.filter((b) => b.range[0] === min && b.range[1] === max))
+    expect(band(0, 0)).toBeCloseTo(0.23, 12)
+    expect(band(2, 4.99)).toBeCloseTo(0.18, 12)
+    expect(band(5, 9.99)).toBeCloseTo(0.21, 12)
+    expect(band(10, 19.99)).toBeCloseTo(0.14, 12)
+    // 20-50x stays thin; that budget sits in the 250x+ tail.
+    expect(band(20, 24.99) + band(25, 49.99)).toBeCloseTo(0.075, 12)
+    expect(band(250, 499.99)).toBeCloseTo(0.026, 12)
+    expect(band(500, 999.99)).toBeCloseTo(0.0155, 12)
+    expect(band(1000, 1999.99)).toBeCloseTo(0.0045, 12)
+    expect(ev(buckets.filter((b) => b.range[0] >= 250)) / ev(buckets)).toBeGreaterThan(
+      0.6,
+    )
+    const max = buckets.filter((b) => b.range[0] === MAX_WIN)
+    expect(max).toHaveLength(1)
+    expect(max[0].startingUpgradeCount).toBe(4)
+    expect(max[0].probability).toBeCloseTo(1 / FEATURE_SPIN_MAX_WIN_ONE_IN, 15)
+    expect(
+      buckets.filter((b) => b.range[1] === 0).every((b) => b.startingUpgradeCount === 1),
+    ).toBe(true)
+  })
+  it("usually, but not always, pays more with more upgrades", () => {
+    const means = counts.map((count) => ev(byCount(count)) / mass(byCount(count)))
+    for (let i = 1; i < means.length; i++) expect(means[i]).toBeGreaterThan(means[i - 1])
+    // Every count shares the 100-250x band, so extra upgrades are not a guarantee.
+    for (const count of counts)
+      expect(
+        byCount(count).some((b) => b.range[0] === 100 && b.range[1] === 249.99),
+      ).toBe(true)
+    expect(mass(byCount(2).filter((b) => b.range[1] < 50)) / 0.15).toBeGreaterThan(0.5)
+  })
+  it("optimizes a minimal book set to the configured featureSpin targets", async () => {
     const root = mkdtempSync(path.join(tmpdir(), "butch-feature-targets-"))
     const lookupTable = path.join(root, "lookup.csv")
     const lookupTableSegmented = path.join(root, "segmented.csv")
-    const buckets = optimizationBuckets("featureSpin")
+    const targets = optimizationBuckets("featureSpin")
     const lookup: string[] = []
     const segmented: string[] = []
-    // Cover both the absent 25-50 band and the reported 57.5-97.5 support:
-    // a target must be feasible for actual books, not just its declared range.
-    for (const bucket of buckets) {
-      const support = bucket.name === "feature_4_50_100"
-        ? [fourUpgradeFloor, 97.5]
-        : bucket.name === "feature_4_100_250"
-          ? [100, 247.5]
-          : bucket.range
-      for (const payout of new Set(support)) {
-        if (bucket.startingUpgradeCount === 4 && payout < 50) continue
+    for (const bucket of targets) {
+      for (const payout of new Set(bucket.range)) {
         const id = lookup.length + 1
         lookup.push(`${id},1,${Math.round(payout * 100)}`)
         segmented.push(`${id},${bucket.criteria[0]},${payout},0`)
@@ -334,57 +340,21 @@ describe("ButchEm math budgets", () => {
       expect(
         criteria
           .filter(([, group]) => group.minWin > 0)
-          .reduce((sum, [, group]) => sum + group.probability, 0),
+          .reduce((total, [, group]) => total + group.probability, 0),
       ).toBeCloseTo(HIT_TARGETS.featureSpin, 8)
-      expect(
-        criteria
-          .filter(([, group]) => group.maxWin < MODES.featureSpin.cost)
-          .reduce((sum, [, group]) => sum + group.probability, 0),
-      ).toBeCloseTo(BELOW_COST_TARGETS.featureSpin!, 8)
-      for (const count of [1, 2, 3, 4] as const) {
+      for (const count of counts) {
         const groups = criteria.filter(([name]) => name.startsWith(`feature_${count}_`))
-        expect(groups.reduce((sum, [, group]) => sum + group.probability, 0)).toBeCloseTo(
+        expect(groups.reduce((total, [, g]) => total + g.probability, 0)).toBeCloseTo(
           FEATURE_SPIN_UPGRADE_COUNT_PROBABILITIES[count],
           8,
         )
-        const expectedPayout = mathBuckets("featureSpin")
-          .filter((bucket) => bucket.startingUpgradeCount === count)
-          .reduce((sum, bucket) => sum + bucket.probability * bucket.average, 0)
-        expect(
-          groups.reduce((sum, [, group]) => sum + group.probability * group.avgWin, 0),
-        ).toBeCloseTo(expectedPayout, 8)
       }
-      expect(result.criteria.feature_4_max.probability).toBeCloseTo(0.00001, 8)
-      expect(result.criteria.feature_4_50_100.probability).toBeCloseTo(0.00505, 8)
-      expect(result.criteria.feature_4_50_100.avgWin).toBeCloseTo(75, 8)
-      expect(result.criteria.feature_4_100_250.probability).toBeCloseTo(0.025, 8)
-      expect(result.criteria.feature_4_100_250.avgWin).toBeCloseTo(111.53, 8)
-      expect(result.criteria.feature_4_25_50).toBeUndefined()
-      expect(
-        mathBuckets("featureSpin").find((bucket) => bucket.name === "feature_4_win")!
-          .range[0],
-      ).toBe(50)
+      expect(result.criteria.feature_4_max.probability).toBeCloseTo(
+        1 / FEATURE_SPIN_MAX_WIN_ONE_IN,
+        8,
+      )
     } finally {
       rmSync(root, { recursive: true, force: true })
     }
-  })
-  it("preserves the optimized featureSpin upgrade-count distribution", () => {
-    const buckets = mathBuckets("featureSpin")
-    for (const count of [1, 2, 3, 4] as const) {
-      expect(
-        buckets
-          .filter((bucket) => bucket.startingUpgradeCount === count)
-          .reduce((sum, bucket) => sum + bucket.probability, 0),
-      ).toBeCloseTo(FEATURE_SPIN_UPGRADE_COUNT_PROBABILITIES[count], 12)
-    }
-    expect(buckets.find((bucket) => bucket.name === "feature_4_win")).toMatchObject({
-      startingUpgradeCount: 4,
-    })
-    expect(buckets.find((bucket) => bucket.name === "feature_4_max")).toMatchObject({
-      probability: 0.00001,
-      average: MAX_WIN,
-      range: [MAX_WIN, MAX_WIN],
-      startingUpgradeCount: 4,
-    })
   })
 })
