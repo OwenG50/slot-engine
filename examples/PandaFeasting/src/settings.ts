@@ -68,13 +68,13 @@ export const FEATURE_SPIN_HIGH_WIN_SAMPLING = {
   stageWeights: { 1: 1, 2: 2, 3: 2, 4: 3, 5: 12, 6: 80 } satisfies Record<Stage, number>,
 }
 export const SIM_RUNS: Record<ModeName, number> = {
-  base: 10_000,
-  extraChance: 10_000,
-  extraChance2: 10_000,
-  featureSpin: 10_000,
-  bonusFeature: 10_000,
-  superBonusFeature: 10_000,
-  hiddenBonusFeature: 10_000,
+  base: 700_000,
+  extraChance: 700_000,
+  extraChance2: 700_000,
+  featureSpin: 100_000,
+  bonusFeature: 100_000,
+  superBonusFeature: 100_000,
+  hiddenBonusFeature: 100_000,
 }
 export interface ModeSettings {
   cost: number
