@@ -84,6 +84,34 @@ geometry, faster collision/landing checks, and fewer board allocations measured
 **1.9-2.2x faster generation** across all seven modes, with identical seeded
 books and retry counts. The benchmark excludes disk output and optimization.
 
+Most remaining simulation time is spent on rejected attempts: low payout bands
+of high-tier bonuses can need over 1,000 attempts per accepted book. Because
+wins only accumulate, the game flow abandons an attempt (`skipAttempt`) as soon
+as its running win exceeds the result set's upper bound, instead of playing out
+the remaining free spins. Accepted rounds are unaffected, so outcome
+distributions are unchanged, but seeded books differ from earlier builds. This
+measured **3.0x faster generation** overall (3.5-4x for the bonus buys) and cut
+a full `build` from about 35 to 12 minutes.
+
+Low bonus bands — those whose top is at most half the tier's average payout
+(`LIGHT_BAND_SHARE` in `src/math.ts`), such as normal buy 1-20x, super buy
+10-100x and hidden buy 50-200x — simulate their free spins on a separate
+`free_light` strip. It uses the base-game H density instead of the 1.35x bonus
+boost (`LIGHT_FREE_SPIN_H_WEIGHT_MULTIPLIER` in `src/settings.ts`); the
+triggering spin and every other band are unchanged. These bands now need
+3-6x fewer attempts per accepted book, cutting a full `build` to under 8
+minutes. Upgrade counts in those bands are about the same (slightly higher for
+hidden), with the first upgrade arriving about 0.1-0.3 spins later.
+
+All free-spin strips (`free_*`, including `free_light`) use denser low symbols
+than the base game: L4/L3/L2/L1 weights of 21/19/12/10 instead of 17/16/15/14,
+times 1.2 (`FREE_SPIN_L_WEIGHTS` and `FREE_SPIN_L_WEIGHT_MULTIPLIER` in
+`src/settings.ts`). This lifts the hit rate of the opening free spins, before
+any upgrade is active, from about 33% to 40% (normal) and 36% to 44% (super).
+The trade-off is about 3 points less H on the board, so the first upgrade
+arrives about 0.1-0.2 spins later. Delete `__build__/reels_*-free_*.csv` after
+changing these weights.
+
 Smaller runs provide less variety and may not support every optimization target
 after you edit the math. Increase the sample count if a target lacks candidates.
 
@@ -233,7 +261,12 @@ moves when the route is clear. The movement event structure is unchanged;
 `steps` can now contain up to **9 entries**, including the starting anchor.
 Regenerate and re-optimize books to apply the longer paths to generated results.
 Both phases use the same movement geometry and syntax. Collection routes are
-chosen randomly, independently of symbols and winning clusters. Collection
+independent of winning clusters. Each collecting truck seeks with probability
+`collectionSeekChance` (0.75): it then picks uniformly among the highest-scoring
+legal routes, where each crossed, not-yet-picked H cell whose upgrade is still
+locked scores the size of its same-symbol cluster. Large H clusters therefore
+beat scattered singles. Otherwise, or when no route reaches such a cell, any
+legal route is equally likely. Collection
 movement may finish over H1-H4 symbols, including in any cell of a 2x2 footprint;
 H symbols under the final step collect just like those under intermediate steps.
 

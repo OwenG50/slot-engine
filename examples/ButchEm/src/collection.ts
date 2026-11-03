@@ -223,28 +223,72 @@ function enumerateRoutes(from: Position, size: "1" | "2"): MovementRoute[] {
   return result
 }
 
-/** Collection routes that cross at least one H whose upgrade is still locked and
- * that no earlier truck picked up this spin. */
+/** The best collection routes over H symbols whose upgrade is still locked and
+ * that no earlier truck picked up this spin. Each such cell scores the size of
+ * its orthogonal same-symbol cluster, so routes through large H clusters beat
+ * routes past scattered singles; ties keep their original route order. */
 function seekingPaths(
   routes: readonly MovementRoute[],
   board: Board,
   state: FeatureState,
   picked: Set<number>,
 ): Position[][] {
+  const wantedCell = (x: number, y: number) => {
+    const symbol = board[x][y]
+    return (
+      symbol.startsWith("H") &&
+      !state.upgrades[Number(symbol[1]) as UpgradeId] &&
+      !picked.has(positionKey([x, y]))
+    )
+  }
+  const score = new Array<number>(WIDTH * HEIGHT).fill(0)
   let wanted = 0
   for (let x = 0; x < WIDTH; x++)
     for (let y = 0; y < HEIGHT; y++) {
-      const symbol = board[x][y]
       const key = positionKey([x, y])
-      if (
-        symbol.startsWith("H") &&
-        !state.upgrades[Number(symbol[1]) as UpgradeId] &&
-        !picked.has(key)
-      )
-        wanted |= 1 << key
+      if (score[key] || !wantedCell(x, y)) continue
+      const cluster: Position[] = [[x, y]]
+      const seen = new Set([key])
+      for (let i = 0; i < cluster.length; i++) {
+        const [cx, cy] = cluster[i]
+        for (const [nx, ny] of [
+          [cx + 1, cy],
+          [cx - 1, cy],
+          [cx, cy + 1],
+          [cx, cy - 1],
+        ] as Position[]) {
+          if (nx < 0 || nx >= WIDTH || ny < 0 || ny >= HEIGHT) continue
+          const next = positionKey([nx, ny])
+          if (seen.has(next) || board[nx][ny] !== board[x][y] || !wantedCell(nx, ny))
+            continue
+          seen.add(next)
+          cluster.push([nx, ny])
+        }
+      }
+      for (const cell of seen) {
+        score[cell] = cluster.length
+        wanted |= 1 << cell
+      }
     }
   if (!wanted) return []
-  return routes.filter((route) => route.sweptMask & wanted).map((route) => route.path)
+  let best = 0
+  let result: Position[][] = []
+  for (const route of routes) {
+    let hits = route.sweptMask & wanted
+    let total = 0
+    while (hits) {
+      const bit = hits & -hits
+      total += score[31 - Math.clz32(bit)]
+      hits ^= bit
+    }
+    if (!total || total < best) continue
+    if (total > best) {
+      best = total
+      result = []
+    }
+    result.push(route.path)
+  }
+  return result
 }
 
 /** Move every truck once independently of wins. With `collectionSeekChance` a

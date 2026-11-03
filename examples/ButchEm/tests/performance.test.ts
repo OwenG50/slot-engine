@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest"
 import { canRepositionWilds, movementPaths } from "../src/collection"
 import { Board, PAYING_SYMBOLS, Position, SymbolId, positionKey } from "../src/types"
 import { footprint, footprintMask, footprintsOverlap, validAnchors } from "../src/wilds"
-import { BoardProfile, Phase, reelWeights } from "../src/reels"
+import { BoardProfile, Phase, createReelSets, reelWeights } from "../src/reels"
+import { LIGHT_BAND_SHARE, bonusAverage, mathBuckets } from "../src/math"
 import { referenceMovementPaths, referenceRepositioningPaths } from "./referenceMovement"
 
 describe("ButchEm cached movement equivalence", () => {
@@ -93,6 +94,42 @@ describe("ButchEm cached movement equivalence", () => {
         first.extra = 123
         expect(reelWeights(profile, prefix)).toEqual(expected)
       }
+  })
+
+  it("uses the light strip only for free spins of light bands", () => {
+    expect(reelWeights("light", "free")).toEqual({ free_light: 1 })
+    expect(reelWeights("light", "base")).toEqual({ base_standard: 1 })
+    expect(reelWeights("light", "bonus")).toEqual({ bonus_standard: 1 })
+    const ids = createReelSets().map((set) => set.id)
+    expect(ids.filter((id) => id === "free_light")).toHaveLength(1)
+  })
+
+  it("uses denser L4/L3 weights on free-spin strips only", () => {
+    const weights = (id: string) =>
+      (createReelSets().find((set) => set.id === id) as unknown as {
+        symbolWeights: Map<string, number>
+      }).symbolWeights
+    for (const id of ["free_standard", "free_light"]) {
+      const w = weights(id)
+      expect(w.get("L4")).toBeCloseTo(21 * 1.2)
+      expect(w.get("L1")).toBeCloseTo(10 * 1.2)
+    }
+    expect(weights("base_standard").get("L4")).toBe(17)
+    expect(weights("bonus_standard").get("L4")).toBe(17)
+  })
+
+  it("assigns light strips only to bonus bands topping out at half the tier average", () => {
+    for (const mode of ["base", "bonusFeature", "superBonusFeature", "hiddenBonusFeature"] as const) {
+      const light = mathBuckets(mode).filter((bucket) => bucket.profile === "light")
+      expect(light.length).toBeGreaterThan(0)
+      for (const bucket of light) {
+        expect(bucket.tier).toBeDefined()
+        expect(bucket.range[1]).toBeLessThanOrEqual(
+          bonusAverage(mode, bucket.tier!) * LIGHT_BAND_SHARE,
+        )
+      }
+    }
+    expect(mathBuckets("featureSpin").some((bucket) => bucket.profile === "light")).toBe(false)
   })
 
   it.each(["1", "2"] as const)(

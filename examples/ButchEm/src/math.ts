@@ -81,6 +81,10 @@ export function bonusDistribution(
       )
 }
 
+/** Bonus bands whose top is at most this share of their tier's average payout
+ * simulate free spins on the lighter "free_light" strip. */
+export const LIGHT_BAND_SHARE = 0.5
+
 function tierBuckets(
   mode: ModeName,
   tier: BonusTier,
@@ -91,8 +95,15 @@ function tierBuckets(
     ...b,
     name: tier + "_" + b.name,
     tier,
-    // Reel focus helps the simulator reach rare 2,000x+ round totals.
-    profile: b.range[0] >= 2000 && b.range[0] < MAX_WIN ? ("tail" as const) : undefined,
+    // Reel focus helps the simulator reach rare 2,000x+ round totals; lighter
+    // free-spin strips make low bands (top at most half the tier average) cheap
+    // to reach instead of rejecting hundreds of richer bonuses per book.
+    profile:
+      b.range[0] >= 2000 && b.range[0] < MAX_WIN
+        ? ("tail" as const)
+        : b.range[1] <= average * LIGHT_BAND_SHARE
+          ? ("light" as const)
+          : undefined,
     probability: b.probability * probability,
   }))
 }
@@ -361,7 +372,10 @@ export function optimizationBuckets(mode: ModeName): OptimizationBucket[] {
       {
         name: "baseWin_200_plus",
         probability: 0.0005,
-        average: 200,
+        // Ordinary base wins cap near the 200x full H1 board. Large runs also
+        // produce a few 200.2-200.4x books, which a mean of exactly 200x would
+        // need to exclude, so the optimizer rejects it as infeasible.
+        average: 200.01,
         range: [200, 1999.99],
       },
     ] satisfies Omit<OptimizationBucket, "criteria">[]

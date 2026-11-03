@@ -55,6 +55,16 @@ export function onHandleGameFlow(ctx: Context) {
   let triggerPositions: { reel: number; row: number }[] = []
   let feature: FeatureState | undefined
   const isFeatureSpin = mode === "featureSpin"
+  // Wins only accumulate, so once a round passes its result set's upper bound
+  // core is certain to reject it. Abandon it instead of playing out the rest
+  // of the free spins; accepted rounds are played exactly as before.
+  const resultSet = ctx.state.currentResultSet
+  const maxAccepted =
+    !resultSet.forceMaxWin && Array.isArray(resultSet.multiplier)
+      ? resultSet.multiplier[1]
+      : Infinity
+  const overshot = () =>
+    Math.round(ctx.services.wallet.getCurrentWin() * 10_000) / 10_000 > maxAccepted
 
   // Draws real reel stops like the reference games. Trigger spins force
   // `forceScatters` scatter stops (exact count), organic spins retry until at
@@ -256,6 +266,10 @@ export function onHandleGameFlow(ctx: Context) {
     // that lands its 3/4/5 scatters from actual reel stops.
     const targetScatters = tier ? { normal: 3, super: 4, hidden: 5 }[tier] : 0
     const triggerWin = reveal(false, targetScatters)
+    if (tier && overshot()) {
+      ctx.state.skipAttempt = true
+      return
+    }
     if (tier && !ctx.state.triggeredMaxWin) {
       const awarded = ctx.services.game.getFreeSpinsForScatters(
         SPIN_TYPE.BASE_GAME,
@@ -279,6 +293,10 @@ export function onHandleGameFlow(ctx: Context) {
           total: ctx.state.totalFreespinAmount,
         })
         reveal(true)
+        if (overshot()) {
+          ctx.state.skipAttempt = true
+          return
+        }
       }
       ctx.state.currentFreespinAmount = 0
       emit(EVENT.freeSpinEnd, {

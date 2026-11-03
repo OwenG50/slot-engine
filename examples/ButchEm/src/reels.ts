@@ -1,9 +1,17 @@
 import { GeneratedReelSet } from "@slot-engine/core"
-import { FEATURE_RULES, FREE_SPIN_H_WEIGHT_MULTIPLIER } from "./settings"
+import {
+  FEATURE_RULES,
+  FREE_SPIN_H_WEIGHT_MULTIPLIER,
+  FREE_SPIN_L_WEIGHTS,
+  FREE_SPIN_L_WEIGHT_MULTIPLIER,
+  LIGHT_FREE_SPIN_H_WEIGHT_MULTIPLIER,
+} from "./settings"
 import { PAYING_SYMBOLS, PayingSymbol } from "./types"
 
-export type BoardProfile = "standard" | "dense" | "tail" | "maxwin"
-const concentrations: Record<BoardProfile, number> = {
+/** "light" lowers H density on free spins only, so low payout bands of
+ * triggered bonuses are reached in fewer simulation attempts. */
+export type BoardProfile = "standard" | "dense" | "tail" | "maxwin" | "light"
+const concentrations: Record<Exclude<BoardProfile, "light">, number> = {
   standard: 0,
   dense: 0.2,
   tail: 0.45,
@@ -25,15 +33,20 @@ const BASE_WEIGHTS: Record<PayingSymbol, number> = {
   H1: 6,
 }
 // Triggered-bonus free spins carry a few more H symbols so roaming wilds
-// collect toward upgrades slightly more often.
-const FREE_WEIGHTS = Object.fromEntries(
-  PAYING_SYMBOLS.map((id) => [
-    id,
-    id.startsWith("H")
-      ? BASE_WEIGHTS[id] * FREE_SPIN_H_WEIGHT_MULTIPLIER
-      : BASE_WEIGHTS[id],
-  ]),
-) as Record<PayingSymbol, number>
+// collect toward upgrades slightly more often, and denser L4/L3 for more
+// small early hits.
+function freeWeights(hMultiplier: number) {
+  return Object.fromEntries(
+    PAYING_SYMBOLS.map((id) => [
+      id,
+      id.startsWith("H")
+        ? BASE_WEIGHTS[id] * hMultiplier
+        : FREE_SPIN_L_WEIGHTS[id as keyof typeof FREE_SPIN_L_WEIGHTS] *
+          FREE_SPIN_L_WEIGHT_MULTIPLIER,
+    ]),
+  ) as Record<PayingSymbol, number>
+}
+const FREE_WEIGHTS = freeWeights(FREE_SPIN_H_WEIGHT_MULTIPLIER)
 /** base: base game; bonus: featureSpin; free: triggered-bonus free spins. */
 export type Phase = "base" | "bonus" | "free"
 const PHASE_WEIGHTS: Record<Phase, Record<PayingSymbol, number>> = {
@@ -42,10 +55,24 @@ const PHASE_WEIGHTS: Record<Phase, Record<PayingSymbol, number>> = {
   free: FREE_WEIGHTS,
 }
 
+const LIGHT_FREE_WEIGHTS = freeWeights(LIGHT_FREE_SPIN_H_WEIGHT_MULTIPLIER)
+
 /** Real reel strips used by the board service and editable in the panel. */
 export function createReelSets() {
+  return [
+    ...profileReelSets(),
+    new GeneratedReelSet({
+      id: "free_light",
+      rowsAmount: 1000,
+      symbolWeights: { ...LIGHT_FREE_WEIGHTS, W: FEATURE_RULES.naturalWildWeight, S: 0.08 },
+      spaceBetweenSameSymbols: { S: 5 },
+    }),
+  ]
+}
+
+function profileReelSets() {
   return (["base", "bonus", "free"] as const).flatMap((phase) =>
-    (Object.keys(concentrations) as BoardProfile[]).flatMap((profile) => {
+    (Object.keys(concentrations) as Exclude<BoardProfile, "light">[]).flatMap((profile) => {
       const concentration = concentrations[profile]
       const weights = PHASE_WEIGHTS[phase]
       const total = Object.values(weights).reduce((sum, weight) => sum + weight, 0)
@@ -91,7 +118,9 @@ export function reelWeights(profile: BoardProfile, prefix: Phase) {
   let weights = weightCache.get(key)
   if (!weights) {
     weights =
-      profile === "standard"
+      profile === "light"
+        ? { [prefix === "free" ? "free_light" : prefix + "_standard"]: 1 }
+        : profile === "standard"
         ? { [prefix + "_standard"]: 1 }
         : Object.fromEntries(
             PAYING_SYMBOLS.map((id) => [

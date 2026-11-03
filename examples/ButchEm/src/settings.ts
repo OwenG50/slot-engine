@@ -14,8 +14,9 @@ export interface FeatureRules {
   maxMovesPerSpin: number
   naturalWildWeight: number
   maxRoamingWilds: number
-  /** Chance per truck per collection move to pick only among routes that cross
-   * an H symbol whose upgrade is still locked; otherwise any route is equally likely. */
+  /** Chance per truck per collection move to pick only among the best-scoring
+   * routes over H symbols whose upgrade is still locked (each such cell scores
+   * its same-symbol cluster size); otherwise any route is equally likely. */
   collectionSeekChance: number
 }
 
@@ -32,7 +33,7 @@ export const FEATURE_RULES: FeatureRules = {
   maxMovesPerSpin: MAX_ROAMING_MOVES,
   naturalWildWeight: 0,
   maxRoamingWilds: 2,
-  collectionSeekChance: 0.25,
+  collectionSeekChance: 0.75,
 }
 
 /** H1-H4 weight multiplier on the free-spin reel strips of triggered bonuses
@@ -41,6 +42,18 @@ export const FEATURE_RULES: FeatureRules = {
  * changing this value. */
 export const FREE_SPIN_H_WEIGHT_MULTIPLIER = 1.35
 
+/** H1-H4 weight multiplier on the "free_light" strip used by free spins of
+ * low payout bonus bands (see LIGHT_BAND_SHARE in math.ts), against the same
+ * base weights. Delete __build__/reels_*-free_light.csv after changing it. */
+export const LIGHT_FREE_SPIN_H_WEIGHT_MULTIPLIER = 1
+
+/** L1-L4 weights on every free-spin strip ("free_*" including "free_light"),
+ * before FREE_SPIN_L_WEIGHT_MULTIPLIER. Weight is concentrated on the lowest
+ * paying L4/L3 so small clusters land more often in the opening free spins.
+ * Base-game and featureSpin strips keep the base weights. Delete
+ * __build__/reels_*-free_*.csv after changing these values. */
+export const FREE_SPIN_L_WEIGHTS = { L4: 21, L3: 19, L2: 12, L1: 10 }
+export const FREE_SPIN_L_WEIGHT_MULTIPLIER = 1.2
 /** Final optimized probabilities for the number of upgrades in featureSpin. */
 export const FEATURE_SPIN_UPGRADE_COUNT_PROBABILITIES = {
   1: 0.7,
@@ -55,13 +68,13 @@ export const NON_TRIGGER_SCATTER_ACCEPTANCE = 0.85
 
 /** Accepted simulation books to generate for each mode. */
 export const SIM_RUNS = {
-  base: 10_000,
-  extraChance: 10_000,
-  extraChance2: 10_000,
-  featureSpin: 10_000,
-  bonusFeature: 10_000,
-  superBonusFeature: 10_000,
-  hiddenBonusFeature: 10_000,
+  base: 500_000,
+  extraChance: 500_000,
+  extraChance2: 500_000,
+  featureSpin: 100_000,
+  bonusFeature: 100_000,
+  superBonusFeature: 100_000,
+  hiddenBonusFeature: 100_000,
 } satisfies Record<ModeName, number>
 
 export interface ModeSettings {

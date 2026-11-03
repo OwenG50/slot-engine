@@ -18,7 +18,8 @@ const state = (anchors: Position[]): FeatureState => ({
   anchors: structuredClone(anchors),
 })
 const choosePath = (...paths: Position[][]): RandomSource => ({
-  randomFloat: () => 0,
+  // Miss the seek roll so every legal route is offered.
+  randomFloat: () => 1,
   randomItem<T>(items: T[]): T {
     const expected = paths.shift()
     const found = items.find((item) => JSON.stringify(item) === JSON.stringify(expected))
@@ -700,9 +701,33 @@ describe("ButchEm unrestricted collection endpoints", () => {
       expect(rolls).toBe(0)
     })
 
-    it("keeps seeking a slight bias", () => {
-      expect(FEATURE_RULES.collectionSeekChance).toBeGreaterThan(0)
-      expect(FEATURE_RULES.collectionSeekChance).toBeLessThanOrEqual(0.25)
+    it("prefers routes through large still-needed H clusters over scattered singles", () => {
+      const source = board("L1")
+      // Three scattered H4 singles along the top row vs. a 2x2 H2 cluster.
+      source[1][0] = "H4"
+      source[3][0] = "H4"
+      source[0][1] = "H4"
+      source[2][3] = "H2"
+      source[3][3] = "H2"
+      source[2][2] = "H2"
+      source[3][2] = "H2"
+      const { rng, offered } = recordChoices(0)
+      const movement = moveRoamingWilds(source, state([[0, 4]]), "1", FEATURE_RULES, rng)[0]
+      expect(offered[0].length).toBeGreaterThan(0)
+      for (const path of offered[0])
+        expect(
+          [
+            [2, 3],
+            [3, 3],
+            [2, 2],
+            [3, 2],
+          ].filter((cell) => crosses(path, cell as Position)).length,
+        ).toBeGreaterThanOrEqual(2)
+      expect(movement.collectedSymbols.some((entry) => entry.symbol === "H2")).toBe(true)
+    })
+
+    it("keeps a strong seeking bias with five symbols per upgrade", () => {
+      expect(FEATURE_RULES.collectionSeekChance).toBe(0.75)
       for (const upgrade of Object.values(FEATURE_RULES.upgrades))
         expect(upgrade.requiredSymbols).toBe(5)
     })
