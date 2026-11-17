@@ -131,7 +131,7 @@ round. Do not concatenate them into a playback fixture.
   "data": {
     "board": [
       [{"name":"H3"},{"name":"L2"},{"name":"L1"},{"name":"L4"}],
-      [{"name":"H1"},{"name":"W1","Wild":true,"multiplier":1},{"name":"H2"},{"name":"H3"}],
+      [{"name":"H1"},{"name":"W1","Wild":true,"multiplier":35},{"name":"H2"},{"name":"H3"}],
       [{"name":"L3"},{"name":"L4"},{"name":"H2"},{"name":"L4"}],
       [{"name":"L1"},{"name":"L2"},{"name":"H1"},{"name":"L3"}],
       [{"name":"S","Scatter":true},{"name":"H2"},{"name":"L2"},{"name":"L4"}]
@@ -159,8 +159,8 @@ round. Do not concatenate them into a playback fixture.
   cameras also prevent scatter landings. Paid trigger-spin scatters do not
   consume this allowance. When all cameras are active, no more scatters land
   during that bonus, even if an earlier scatter was overwritten by a car.
-- New cars reveal with a **placeholder** multiplier of 1. Use the subsequent
-  `carMove.initialMultiplier` for their actual starting labels.
+- New cars reveal with their sampled starting `multiplier`, matching the subsequent
+  `carMove.initialMultiplier` before camera doubles or collision addition.
 - Existing sticky cars reveal with their current multipliers.
 - `anticipation` has one 0/1 value per reel; 1 means earlier reels already
   revealed at least two scatters. It is an animation hint, not a trigger.
@@ -521,8 +521,8 @@ spin's win. Ordinary paid-only rounds do not emit this event.
   trigger spin. Buys land exactly 3/4/5 scatters for Normal/Super/Hidden before
   this event; its line wins count toward the total, without consuming a free spin.
 - Paid 3/4/5 scatter landings map to Normal/Super/Hidden, but **this event**
-  authorizes entry. FeatureSpin may suppress an organic trigger; a paid spin
-  already at the cap does not enter a bonus.
+  authorizes entry. This includes FeatureSpin: landed scatters are never
+  randomly suppressed. A paid spin already at the cap does not enter a bonus.
 - Free-spin scatters activate cameras; they do not retrigger/add free spins.
 - There are no trigger positions in this event. Use the preceding trigger
   reveal for scatter transition effects, including bought bonuses.
@@ -631,8 +631,8 @@ these numbers. Old books with that removed event are obsolete.
 - Dispatch all nine events and surface malformed/unsupported events explicitly.
 - Use the server's event stream, never local outcome generation.
 - Keep original reveals immutable and reconstruct movement on a separate board.
-- Read car symbols at original start positions; show actual initial multipliers
-  from `carMove`, not reveal's 1x placeholder.
+- Read car symbols and initial multipliers at original start positions in the reveal;
+  each new car's `multiplier` matches `carMove.initialMultiplier`.
 - Support left/right movement, overlapping paths, empty car lists, and all
   three collision kinds.
 - Associate `newNew` crash partners using reciprocal references.

@@ -20,6 +20,15 @@ upper limit; it does not pin the published probability of eight cars.
 Tier entry adds 0/1/2 new cameras on inactive reels for Normal/Super/Hidden and
 guarantees 0/1/2 new cars on free spin 1, excluding inherited cars.
 
+Paid FeatureSpin uses its own `speed_trap_feature_spin_v2` strips with scatter
+weight 0.24 and a minimum scatter quota of 0.2%, unchanged from its paid-spin
+scatter reduction. Free spins in every mode, including all bonus buys and
+FeatureSpin-triggered bonuses, use `speed_trap_bonus_v12`: scatter weight 0.6
+and minimum quota 0.5%, both 50% lower than v11's 1.2 and 1%.
+Paying-symbol and car weights, multipliers, partner settings, and initial camera
+guarantees are unchanged. Paid-spin strips are unchanged. Optimized bonus-entry odds remain
+fixed; 3/4/5 paid scatters always trigger their corresponding bonus unless capped.
+
 Car multiplier values use flattened descending weights: W3 weights 6,5,4,3;
 W2 weights 11,10,9,8,7,6,5,4; W1 weights 10,9,8,7,6,5, in ascending-value
 order. Each higher initial multiplier remains strictly rarer within its type.
@@ -27,12 +36,12 @@ order. Each higher initial multiplier remains strictly rarer within its type.
 Reel car weights are balanced toward more W2/W1 variety: base W1 0.26,
 W2 0.24, W3 0.32; bonus W1 0.78, W2 0.60, W3 0.70. Bonus reels use higher
 weights for every car type. Reel IDs `speed_trap_base_v4` and
-`speed_trap_bonus_v11` regenerate cached strips.
+`speed_trap_bonus_v12` regenerate cached strips.
 These are strip-generation weights, not published arrival shares, which also
 depend on legal-board rejection and payout optimization. Rebuilt weighted
 books have W3 at roughly 47-60% of car arrivals, W2 near 25-37%, and W1 near
 14-21% (5-8% of bought-bonus trigger-spin cars). Purchased Normal/Super/Hidden
-bonuses average 2.080/2.877/3.997 new cars, excluding trigger-spin cars carried
+bonuses average 2.706/3.532/4.146 new cars, excluding trigger-spin cars carried
 into the bonus.
 
 | Car | Initial multipliers |
@@ -178,11 +187,17 @@ The book's top-level `payoutMultiplier`, unlike event amounts, stores x100.
 
 ### Spin playback
 
+Paid spins in every mode, including FeatureSpin, trigger Normal/Super/Hidden
+bonuses on 3/4/5 scatters, unless the trigger spin already reaches the max-win cap.
+There is no random cancellation after scatters land. FeatureSpin's five-times-rarer
+bonus odds are enforced by the optimizer's tier probabilities.
+
 1. `reveal`: render `board`, `anticipation`, and the full `cameraStatus` array
    (`{ reel, active }` for all five reels). Each cell has `name` and optional
    `Wild`, `Scatter`, and `multiplier`. Sticky cars show their current multiplier;
-   newly landed cars initially show 1 and receive their actual multiplier in
-   `carMove`. During free spins, `newlyActivatedCameras` lists the reels activated
+   newly landed cars show their sampled starting multiplier, matching
+   `carMove.initialMultiplier` before any camera doubles. During free spins,
+   `newlyActivatedCameras` lists the reels activated
    by this reveal's scatters (possibly empty). `anticipation` is always all
    zeroes during free spins in every bonus tier.
 2. `carMove`: animate only the newly landed cars. Each car contains

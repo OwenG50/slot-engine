@@ -60,7 +60,7 @@ export const FEATURE_TRIGGER_BONUS_MINIMUMS: Record<BonusTier, number> = {
   hidden: 1600,
 }
 
-/** In FeatureSpin, hitting a bonus is 5x less likely than base-game trigger odds. */
+/** Optimized FeatureSpin bonus entry is 5x rarer; landed scatters always trigger. */
 export const FEATURE_TO_BONUS_TRIGGER_SCALE = 0.2
 
 export const SIM_RUNS: Record<ModeName, number> = {

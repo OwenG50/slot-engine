@@ -44,7 +44,7 @@ export function createResultSets(mode: ModeName) {
         },
         reelWeights: {
           [SPIN_TYPE.BASE_GAME]: {
-            [mode === "featureSpin" ? REEL_SET_IDS.bonus : REEL_SET_IDS.base]: 1,
+            [mode === "featureSpin" ? REEL_SET_IDS.featureSpin : REEL_SET_IDS.base]: 1,
           },
           [SPIN_TYPE.FREE_SPINS]: { [REEL_SET_IDS.bonus]: 1 },
         },

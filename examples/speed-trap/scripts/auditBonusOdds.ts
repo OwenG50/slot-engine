@@ -51,6 +51,9 @@ function auditResolvedWins(book: Book) {
       const current = board
       const symbols = event.data.cars.map((car) => current[car.start.reel][car.start.row].name)
       for (const car of event.data.cars)
+        assert.equal(current[car.start.reel][car.start.row].multiplier, car.initialMultiplier,
+          `book ${book.id}: reveal differs from sampled initial multiplier`)
+      for (const car of event.data.cars)
         for (let reel = Math.min(car.start.reel, car.end.reel);
           reel <= Math.max(car.start.reel, car.end.reel); reel++)
           current[reel][car.start.row] = { name: "W", Wild: true, multiplier: 1 }
@@ -117,6 +120,17 @@ async function main() {
       const triggers = book.events.filter((event) => event.type === "freeSpinTrigger")
       assert(triggers.length <= 1)
       const tier = triggers[0]?.data.tier
+      const firstReveal = book.events.find((event) => event.type === "reveal")
+      assert(firstReveal?.type === "reveal")
+      const scatters = firstReveal.data.board.flat().filter((cell) => cell.name === "S").length
+      const scatterTier = scatters >= 5 ? "hidden" : scatters === 4 ? "super" :
+        scatters === 3 ? "normal" : undefined
+      const triggerIndex = book.events.findIndex((event) => event.type === "freeSpinTrigger")
+      const paidEvents = triggerIndex < 0 ? book.events : book.events.slice(0, triggerIndex)
+      const paidWin = paidEvents.reduce((sum, event) =>
+        sum + (event.type === "winInfo" ? event.data.totalWin : 0), 0)
+      assert.equal(tier, paidWin >= MAX_WIN ? undefined : scatterTier,
+        `${mode} book ${book.id}: paid scatters do not match bonus entry`)
       if (tier) {
         assert(win >= bonusMinimum(mode, tier), `${mode}: bonus below minimum`)
         tiers[tier].mass += weight
@@ -141,7 +155,7 @@ async function main() {
     }
     const max = bands.find((band) => band.range[0] === MAX_WIN)!
     close(max.mass / mass, maxWinProbability(mode), `${mode} exact max`)
-    console.log(`${mode}: ${books} books; wild-trail line awards, bonus odds, floors, bands, max odds, RTP valid`)
+    console.log(`${mode}: ${books} books; reveal multipliers, wild-trail line awards, scatter triggers, bonus odds, floors, bands, max odds, RTP valid`)
   }
 }
 

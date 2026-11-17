@@ -3,7 +3,8 @@ import { HEIGHT, PAYING_SYMBOLS, WIDTH } from "./types"
 
 export const REEL_SET_IDS = {
   base: "speed_trap_base_v4",
-  bonus: "speed_trap_bonus_v11",
+  bonus: "speed_trap_bonus_v12",
+  featureSpin: "speed_trap_feature_spin_v2",
 } as const
 
 const BASE_WEIGHTS = Object.fromEntries(
@@ -55,7 +56,7 @@ export function maxWinReelStops(
 }
 
 export function createReelSets() {
-  return (["base", "bonus"] as const).map(
+  return (["base", "bonus", "featureSpin"] as const).map(
     (phase) =>
       new GeneratedReelSet({
         id: REEL_SET_IDS[phase],
@@ -63,12 +64,12 @@ export function createReelSets() {
         rowsAmount: 1200,
         symbolWeights: {
           ...BASE_WEIGHTS,
-          W1: phase === "bonus" ? 0.78 : 0.26,
-          W2: phase === "bonus" ? 0.6 : 0.24,
-          W3: phase === "bonus" ? 0.7 : 0.32,
-          S: phase === "bonus" ? 1.2 : 1.5,
+          W1: phase === "base" ? 0.26 : 0.78,
+          W2: phase === "base" ? 0.24 : 0.6,
+          W3: phase === "base" ? 0.32 : 0.7,
+          S: phase === "base" ? 1.5 : phase === "featureSpin" ? 0.24 : 0.6,
         },
-        symbolQuotas: { S: 1 },
+        symbolQuotas: { S: phase === "base" ? 1 : phase === "featureSpin" ? 0.2 : 0.5 },
         spaceBetweenSameSymbols: { S: 3 },
       }),
   )

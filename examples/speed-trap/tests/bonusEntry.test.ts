@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { SPIN_TYPE } from "@slot-engine/core"
 import { game } from ".."
 import { anticipation, RevealSymbol } from "../src/events"
 import { onHandleGameFlow } from "../src/onHandleGameFlow"
@@ -10,6 +11,7 @@ import { Board, ModeName } from "../src/types"
 interface MovingCar {
   start: { reel: number; row: number }
   end: { reel: number; row: number }
+  initialMultiplier: number
   multiplier: number
 }
 
@@ -34,6 +36,33 @@ function carsAfterReveal(events: BookEvent[], revealIndex: number): MovingCar[] 
 }
 
 describe("car reel frequency and variety", () => {
+  it("keeps paid FeatureSpin's low-scatter strip separate from free-spin strips", () => {
+    const simulation = (game as unknown as { simulation: NativeSimulation }).simulation
+    const sets = simulation.gameConfig.gameModes.featureSpin.reelSets
+    for (const set of sets) {
+      set.associatedGameModeName = "featureSpin"
+      set.generateReels(simulation.gameConfig)
+    }
+    const feature = sets.find((set) => set.id === REEL_SET_IDS.featureSpin)!.reels
+    const bonus = sets.find((set) => set.id === REEL_SET_IDS.bonus)!.reels
+    const scatterCount = (reels: typeof feature) =>
+      reels.flat().filter((cell) => cell.id === "S").length
+    expect(scatterCount(feature)).toBeGreaterThan(0)
+    expect(scatterCount(feature)).toBeLessThan(scatterCount(bonus))
+    for (const strip of feature) {
+      expect(strip).toHaveLength(1200)
+      for (const symbol of ["W1", "W2", "W3"])
+        expect(strip.some((cell) => cell.id === symbol)).toBe(true)
+    }
+    for (const mode of Object.keys(MODES) as ModeName[])
+      for (const result of createResultSets(mode)) {
+        expect(result.reelWeights[SPIN_TYPE.BASE_GAME]).toEqual({
+          [mode === "featureSpin" ? REEL_SET_IDS.featureSpin : REEL_SET_IDS.base]: 1,
+        })
+        expect(result.reelWeights[SPIN_TYPE.FREE_SPINS]).toEqual({ [REEL_SET_IDS.bonus]: 1 })
+      }
+  })
+
   it.each(Object.keys(MODES) as ModeName[])(
     "%s mixes car types on base and denser bonus strips",
     (mode) => {
@@ -47,6 +76,9 @@ describe("car reel frequency and variety", () => {
       const bonus = sets.find((set) => set.id === REEL_SET_IDS.bonus)!.reels.flat()
       expect(base).toHaveLength(6000)
       expect(bonus).toHaveLength(6000)
+      const scatterDensity = bonus.filter((cell) => cell.id === "S").length / bonus.length
+      expect(scatterDensity).toBeGreaterThan(0.006)
+      expect(scatterDensity).toBeLessThan(0.016)
       for (const strip of [base, bonus]) {
         const counts = ["W1", "W2", "W3"].map((symbol) =>
           strip.filter((cell) => cell.id === symbol).length,
@@ -152,6 +184,40 @@ describe("bought bonus trigger spins", () => {
         expect(MODES[mode].boughtTier).toBe(tier)
         if (criteria.endsWith("_max")) expect(final.data.amount).toBe(10000)
       }
+    },
+    30_000,
+  )
+})
+
+describe("new-car reveal multipliers", () => {
+  it.each(Object.keys(MODES) as ModeName[])(
+    "%s reveals sampled initial multipliers before movement and camera doubles",
+    (mode) => {
+      const simulation = (game as unknown as { simulation: NativeSimulation }).simulation
+      simulation.workerCtx = undefined
+      for (const reel of simulation.gameConfig.gameModes[mode].reelSets) {
+        reel.associatedGameModeName = mode
+        reel.generateReels(simulation.gameConfig)
+      }
+      const tier = MODES[mode].boughtTier
+      simulation.runSingleSimulation({
+        simId: 26, mode,
+        criteria: tier ? `${tier}_buy_100_1000` : "normal_bonus",
+        index: 0,
+      })
+      const events = simulation.workerCtx!.services.data._getBook().events
+      let checked = 0
+      for (const [index, event] of events.entries()) {
+        if (event.type !== "reveal") continue
+        const board = event.data.board as RevealSymbol[][]
+        for (const car of carsAfterReveal(events, index)) {
+          expect(car.initialMultiplier).toBeGreaterThan(1)
+          expect(board[car.start.reel][car.start.row].multiplier)
+            .toBe(car.initialMultiplier)
+          checked++
+        }
+      }
+      expect(checked).toBeGreaterThan(0)
     },
     30_000,
   )
@@ -265,6 +331,22 @@ describe("trigger-spin sticky cars", () => {
 })
 
 describe("FeatureSpin guarantees and bonus inheritance", () => {
+  it("never publishes an ordinary FeatureSpin with three or more scatters", () => {
+    const simulation = (game as unknown as { simulation: NativeSimulation }).simulation
+    simulation.workerCtx = undefined
+    for (const reel of simulation.gameConfig.gameModes.featureSpin.reelSets) {
+      reel.associatedGameModeName = "featureSpin"
+      reel.generateReels(simulation.gameConfig)
+    }
+    simulation.runSingleSimulation({
+      simId: 232, mode: "featureSpin", criteria: "base_2_10", index: 0,
+    })
+    const events = simulation.workerCtx!.services.data._getBook().events
+    const board = events[0].data.board as RevealSymbol[][]
+    expect(board.flat().filter((cell) => cell.name === "S").length).toBeLessThan(3)
+    expect(events.some((event) => event.type === "freeSpinTrigger")).toBe(false)
+  }, 30_000)
+
   it("generates eight moving cars through its dedicated coverage pool", () => {
     const simulation = (game as unknown as { simulation: NativeSimulation }).simulation
     simulation.workerCtx = undefined

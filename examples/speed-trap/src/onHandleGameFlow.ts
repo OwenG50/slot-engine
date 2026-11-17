@@ -27,7 +27,6 @@ import {
 import {
   BONUS_ENTRY_RULES,
   FEATURE_SPIN_MIN_NEW_CARS,
-  FEATURE_TO_BONUS_TRIGGER_SCALE,
   HEAD_ON_FREE_PAIR_CHANCE,
   HEAD_ON_PARTNER_CHANCE,
   MODES,
@@ -197,6 +196,8 @@ export function onHandleGameFlow(ctx: Context) {
     const baseMultipliers = new Map(
       stickyCars.map((car) => [positionKey(car.position), car.multiplier]),
     )
+    for (const car of movement.event.cars)
+      baseMultipliers.set(positionKey([car.start.reel, car.start.row]), car.initialMultiplier)
     emit(EVENT.reveal, {
       board: revealBoard(draw.board, (pos) => baseMultipliers.get(positionKey(pos)) ?? 1),
       anticipation: isFreeSpin ? draw.board.map(() => 0) : anticipation(draw.board),
@@ -322,16 +323,7 @@ export function onHandleGameFlow(ctx: Context) {
     forceTier: forcedTier,
   })
 
-  let tier = forcedTier ?? triggerTierFromScatters(paidSpin.scatterCount)
-  if (
-    tier &&
-    isFeatureSpinMode &&
-    !forcedTier &&
-    randomFloat() > FEATURE_TO_BONUS_TRIGGER_SCALE
-  ) {
-    tier = undefined
-  }
-
+  const tier = forcedTier ?? triggerTierFromScatters(paidSpin.scatterCount)
   if (tier && !ctx.state.triggeredMaxWin) {
     ctx.state.userData.bonusTier = tier
     runBonus({

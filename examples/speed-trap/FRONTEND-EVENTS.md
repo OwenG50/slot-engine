@@ -92,7 +92,7 @@ Example paid-spin reveal:
       [{ "name": "H3" }, { "name": "L2" }, { "name": "L1" }, { "name": "L4" }],
       [
         { "name": "H1" },
-        { "name": "W1", "Wild": true, "multiplier": 1 },
+        { "name": "W1", "Wild": true, "multiplier": 35 },
         { "name": "H2" },
         { "name": "H3" }
       ],
@@ -127,9 +127,9 @@ scatter activating reel 2's camera:
   "data": {
     "board": [
       [
-        { "name": "W3", "Wild": true, "multiplier": 1 },
+        { "name": "W3", "Wild": true, "multiplier": 2 },
         { "name": "L2" },
-        { "name": "W3", "Wild": true, "multiplier": 1 },
+        { "name": "W3", "Wild": true, "multiplier": 2 },
         { "name": "L4" }
       ],
       [{ "name": "H1" }, { "name": "L3" }, { "name": "H2" }, { "name": "H3" }],
@@ -162,8 +162,9 @@ Frontend handling:
   reveal's activations. Apply it **before animating car movement**.
 - `newlyActivatedCameras` is present on every free-spin reveal, including `[]`
   when no camera was newly activated. It is absent on paid-spin reveals.
-- New cars reveal with `multiplier: 1`; their actual final multiplier comes
-  in `carMove`. Existing sticky cars reveal their current multiplier.
+- New cars reveal with their sampled `multiplier`, matching
+  `carMove.initialMultiplier` before any camera doubles or collision addition.
+  Existing sticky cars reveal their current multiplier.
 - `anticipation` contains one 0/1 value per reel. A reel is marked 1 when
   earlier revealed reels already contained at least two scatters.
   It is an animation hint, **not** a bonus trigger or camera status.
@@ -250,8 +251,8 @@ Repeated-flash example, following the free-spin reveal above:
 
 Mutual-crash example: the W2 at reel 0 starts at 6x, and the W3 at reel 4
 starts at 2x. Both move before stopping adjacent at reels 2 and 3;
-both receive 8x. Use the initial values for the addition animation, not reveal's
-1x placeholder. The two cars explicitly reference one another by original
+both receive 8x. Use the initial values from the reveal or `carMove.initialMultiplier`
+for the addition animation. The two cars explicitly reference one another by original
 landing position and final position.
 
 ```json
@@ -557,8 +558,9 @@ Hidden example:
   after a paid spin; bonus buys also play a trigger spin before `freeSpinTrigger`,
   landing exactly 3/4/5 scatters for Normal/Super/Hidden respectively.
 - Paid 3/4/5 scatter landings map to Normal/Super/Hidden, but **the event is the
-  authority** for starting a bonus. FeatureSpin can suppress an organic trigger;
-  a paid round that already reached the cap does not start free spins.
+  authority** for starting a bonus. This includes FeatureSpin: landed scatters
+  are never randomly suppressed. A paid round that already reached the cap
+  does not start free spins.
 - Free-spin scatters activate cameras; they do not award extra free spins.
 - There are no trigger positions in this event. For all entries, use the
   preceding paid reveal if scatter positions are needed for transition effects.
