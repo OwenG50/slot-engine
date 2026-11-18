@@ -250,7 +250,7 @@ export function addHeadOnPartners(params: {
   return result
 }
 
-const HEAD_ON_PAIR_REELS: ReadonlyArray<readonly [number, number]> = [[0, 3], [0, 4], [1, 4], [1, 3]]
+export const HEAD_ON_PAIR_REELS: ReadonlyArray<readonly [number, number]> = [[0, 3], [0, 4], [1, 4], [1, 3]]
 
 function hasOpposingPair(board: Board, sticky: Set<string>) {
   for (let row = 0; row < board[0].length; row++) {

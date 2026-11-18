@@ -1,5 +1,6 @@
 import { GeneratedReelSet } from "@slot-engine/core"
-import { HEIGHT, PAYING_SYMBOLS, WIDTH } from "./types"
+import { HEAD_ON_PAIR_REELS } from "./feature"
+import { HEIGHT, PAYING_SYMBOLS } from "./types"
 
 export const REEL_SET_IDS = {
   base: "speed_trap_base_v4",
@@ -12,9 +13,23 @@ const BASE_WEIGHTS = Object.fromEntries(
 )
 
 type Strip = { id: string }[]
-const maxWinStops = new WeakMap<Strip, Map<number, number[]>>()
+const maxWinStops = new WeakMap<Strip, Map<string, number[]>>()
 
-/** Condition two edge cars and intervening H1s on real stops. */
+function stopsForSymbol(strip: Strip, symbol: string) {
+  let cache = maxWinStops.get(strip)
+  if (!cache) {
+    cache = new Map()
+    maxWinStops.set(strip, cache)
+  }
+  let stops = cache.get(symbol)
+  if (!stops) {
+    stops = strip.flatMap((cell, stop) => cell.id === symbol ? [stop] : [])
+    cache.set(symbol, stops)
+  }
+  return stops
+}
+
+/** Condition a random legal car pair and H1s on existing reel stops. */
 export function maxWinReelStops(
   reels: Strip[],
   randomFloat: () => number,
@@ -22,33 +37,21 @@ export function maxWinReelStops(
 ) {
   if (!rows.length) throw new Error("Speed Trap max-win sampling needs an empty row")
   const row = rows[Math.floor(randomFloat() * rows.length)]
+  const [left, right] = HEAD_ON_PAIR_REELS[
+    Math.floor(randomFloat() * HEAD_ON_PAIR_REELS.length)
+  ]
   const forcedStops: Record<string, number> = {}
   reels.forEach((strip, reel) => {
-    const carReel = reel === 0 || reel === WIDTH - 1
-    let cache = maxWinStops.get(strip)
-    if (!cache) {
-      cache = new Map()
-      maxWinStops.set(strip, cache)
-    }
-    let stops = cache.get(reel)
-    if (!stops) {
-      // Mix car tiers to retain upper-tail coverage as car density changes.
-      const candidates = reel === 0 ? ["W3", "W2", "W1"] : ["W1", "W2", "W3"]
-      for (const symbol of carReel ? candidates : ["H1"]) {
-        const candidates = strip.flatMap((cell, stop) =>
-          cell.id === symbol ? [stop] : [],
-        )
-        if (candidates.length) {
-          stops = candidates
-          break
-        }
-      }
-      if (!stops)
-        throw new Error(
-          `Speed Trap max-win sampling needs ${carReel ? "car symbols" : "H1"} on reel ${reel}`,
-        )
-      cache.set(reel, stops)
-    }
+    const carReel = reel === left || reel === right
+    const symbols = carReel
+      ? ["W1", "W2", "W3"].filter((symbol) => stopsForSymbol(strip, symbol).length > 0)
+      : ["H1"]
+    if (!symbols.length)
+      throw new Error(`Speed Trap max-win sampling needs car symbols on reel ${reel}`)
+    const symbol = symbols[Math.floor(randomFloat() * symbols.length)]
+    const stops = stopsForSymbol(strip, symbol)
+    if (!stops.length)
+      throw new Error(`Speed Trap max-win sampling needs H1 on reel ${reel}`)
     const stop = stops[Math.floor(randomFloat() * stops.length)]!
     forcedStops[reel] = (stop - row + strip.length) % strip.length
   })

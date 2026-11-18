@@ -464,7 +464,11 @@ never apply a waiting-car update to the unmultiplied `W` left at its start.
 - Present only for positive spin wins. Highlight supplied positions on the
   **resolved** board.
 - `kind` is matched symbol count, **not a payline ID**.
-- `symbol` is the paying symbol; an all-wild five-symbol line uses `H1`.
+- `symbol` is the paying symbol; a leading run of 3, 4, or 5 wilds uses `H1`,
+  including runs stopped by a scatter. Each payline pays its longest valid
+  match, even if a shorter leading-wild award would pay more: `W3 W W W L2`
+  pays five L2 symbols, not four wilds. A line pays once.
+  Highlight only the supplied positions.
 - `winWithoutMult` is the paytable amount; `multiplier` is the line multiplier.
   Here `1.2 * 8 = 9.6`.
 - Only wild multipliers above 1 on the matched portion of a line are summed.

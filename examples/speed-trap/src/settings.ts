@@ -35,8 +35,8 @@ export const MODES: Record<ModeName, ModeSettings> = {
 export const DESIGN = { rtp: 0.96, wildCombination: "add" } as const
 
 export const BONUS_TARGETS = {
-  normal: { oneIn: 300, average: 96, minimum: 16 },
-  super: { oneIn: 3000, average: 288, minimum: 87 },
+  normal: { oneIn: 250, average: 96, minimum: 16 },
+  super: { oneIn: 2000, average: 288, minimum: 87 },
   hidden: { oneIn: 62_500, average: 960, minimum: 1011 },
 } satisfies Record<BonusTier, { oneIn: number; average: number; minimum: number }>
 

@@ -1,0 +1,1324 @@
+Slot Engine Build Analysis
+Game: speed-trap
+Timestamp: 2026-11-18_13-54-01
+Build Dir: C:\Users\opgei\Desktop\Github Local\slot-engine\examples\speed-trap\__build__
+
+
+  Slot Engine Build Analyser
+  C:\Users\opgei\Desktop\Github Local\slot-engine\examples\speed-trap\__build__
+
+  Found 7 mode(s): base, extraChance, extraChance2, featureSpin, bonusFeature, superBonusFeature, hiddenBonusFeature
+  Analysing (this may take a moment for large files)...
+
+
+====================================================================================================
+  MODE: base (cost=1x base bet)
+  Overall RTP: 96.0000% | Target RTP: unavailable in build metadata
+  Non-Zero Hit Rate: 20.0000% (1 in 5.00 mode plays)
+  Null Hit Rate: 80.0000% (1 in 1.25 mode plays)
+  Highest Published Payout: 10000.00x base bet | Frequency: 1 in 4.000M
+  Any Bonus Entry: 0.4516% (1 in 221.43 mode plays)
+  All probabilities use published LUT weights. A mode play includes its triggering spin and all free spins.
+  Win ranges are in base-bet multiples; RTP divides by mode cost. Frequency is conditional on the population in each section.
+
+  Entire Mode - Total Payout Distribution (all mode plays)
+  Weighted mean: 0.9600x base bet | Median: 0.00 | P90: 1.00 | P95: 1.80 | Max: 10000.00
+  Non-zero: 20.0000% (1 in 5.00) | Null (0 payouts): 80.0000% (1 in 1.25)
+  RTP contribution: 96.0000% of mode spend
+  Range                      Probability           Frequency    Share of payout      RTP points
+  0x                            80.0000%           1 in 1.25            0.0000%         0.0000%
+  >0x - <0.25x                   4.9578%          1 in 20.17            0.8374%         0.8039%
+  0.25x - <0.5x                  0.7989%         1 in 125.17            0.3170%         0.3043%
+  0.5x - <1x                     3.2433%          1 in 30.83            2.1269%         2.0418%
+  1x - <2x                       6.4467%          1 in 15.51            9.0657%         8.7031%
+  2x - <5x                       2.7502%          1 in 36.36            8.0214%         7.7006%
+  5x - <10x                      0.6962%         1 in 143.64            4.3511%         4.1770%
+  10x - <25x                     0.5778%         1 in 173.06            9.2420%         8.8723%
+  25x - <50x                     0.1922%         1 in 520.36            6.6321%         6.3669%
+  50x - <100x                    0.1461%         1 in 684.58           10.9695%        10.5307%
+  100x - <250x                   0.1388%         1 in 720.51           21.6899%        20.8223%
+  250x - <500x                   0.0422%        1 in 2368.34           14.3033%        13.7311%
+  500x - <1kx                    0.0065%       1 in 15404.01            5.0717%         4.8688%
+  1kx - <3kx                     0.0028%       1 in 35843.76            4.6251%         4.4401%
+  3kx - <5kx                     0.0004%      1 in 271258.76            1.4995%         1.4395%
+  5kx - <10kx                    0.0001%      1 in 753340.18            0.9870%         0.9476%
+  10kx+                        2.500e-5%         1 in 4.000M            0.2604%         0.2500%
+
+  Base Game - Payout Distribution (non-bonus plays only; includes single feature spins)
+  Weighted mean: 0.3585x base bet | Median: 0.00 | P90: 1.00 | P95: 1.60 | Max: 49.40
+  Non-zero: 19.6371% (1 in 5.09) | Null (0 payouts): 80.3629% (1 in 1.24)
+  RTP contribution: 35.6920% of mode spend
+  Range                      Probability           Frequency    Share of payout      RTP points
+  0x                            80.3629%           1 in 1.24            0.0000%         0.0000%
+  >0x - <0.25x                   4.9803%          1 in 20.08            2.2523%         0.8039%
+  0.25x - <0.5x                  0.8025%         1 in 124.60            0.8526%         0.3043%
+  0.5x - <1x                     3.2580%          1 in 30.69            5.7206%         2.0418%
+  1x - <2x                       6.4760%          1 in 15.44           24.3839%         8.7031%
+  2x - <5x                       2.7627%          1 in 36.20           21.5750%         7.7006%
+  5x - <10x                      0.6993%         1 in 142.99           11.7029%         4.1770%
+  10x - <25x                     0.5356%         1 in 186.70           22.0554%         7.8720%
+  25x - <50x                     0.1226%         1 in 815.35           11.4572%         4.0893%
+  50x - <100x                    0.0000%               never            0.0000%         0.0000%
+  100x - <250x                   0.0000%               never            0.0000%         0.0000%
+  250x - <500x                   0.0000%               never            0.0000%         0.0000%
+  500x - <1kx                    0.0000%               never            0.0000%         0.0000%
+  1kx - <3kx                     0.0000%               never            0.0000%         0.0000%
+  3kx - <5kx                     0.0000%               never            0.0000%         0.0000%
+  5kx - <10kx                    0.0000%               never            0.0000%         0.0000%
+  10kx+                          0.0000%               never            0.0000%         0.0000%
+
+  Bonus Free Spins
+  Entry: 0.4000% (1 in 250.00 mode plays) | Share of bonus entries: 88.5740%
+  Retriggered rounds: 0.0000%
+  Bonus-play totals include the triggering spin and all free spins. Individual free-spin payouts exclude the triggering spin. All positive-weight outcomes are included.
+
+  Bonus - Total Bonus Play Payout Distribution (includes triggering spin; conditional on this tier)
+  Weighted mean: 91.5337x base bet | Median: 75.20 | P90: 168.70 | P95: 248.50 | Max: 499.50
+  Non-zero: 100.0000% (1 in 1.00) | Null (0 payouts): 0.0000% (never)
+  RTP contribution: 36.6135% of mode spend
+  Range                      Probability           Frequency    Share of payout      RTP points
+  0x                             0.0000%               never            0.0000%         0.0000%
+  >0x - <0.25x                   0.0000%               never            0.0000%         0.0000%
+  0.25x - <0.5x                  0.0000%               never            0.0000%         0.0000%
+  0.5x - <1x                     0.0000%               never            0.0000%         0.0000%
+  1x - <2x                       0.0000%               never            0.0000%         0.0000%
+  2x - <5x                       0.0000%               never            0.0000%         0.0000%
+  5x - <10x                      0.0000%               never            0.0000%         0.0000%
+  10x - <25x                    11.1559%           1 in 8.96            2.7320%         1.0003%
+  25x - <50x                    17.5201%           1 in 5.71            6.2205%         2.2775%
+  50x - <100x                   36.5187%           1 in 2.74           28.7618%        10.5307%
+  100x - <250x                  29.9588%           1 in 3.34           45.2947%        16.5840%
+  250x - <500x                   4.8466%          1 in 20.63           16.9910%         6.2210%
+  500x - <1kx                    0.0000%               never            0.0000%         0.0000%
+  1kx - <3kx                     0.0000%               never            0.0000%         0.0000%
+  3kx - <5kx                     0.0000%               never            0.0000%         0.0000%
+  5kx - <10kx                    0.0000%               never            0.0000%         0.0000%
+  10kx+                          0.0000%               never            0.0000%         0.0000%
+
+  Bonus - Individual Free-Spin Payout Distribution (weighted across actual spins played)
+  Weighted mean: 9.0426x base bet | Median: 0.00 | P90: 28.70 | P95: 51.40 | Max: 468.00
+  Non-zero: 49.2849% (1 in 2.03) | Null (0 payouts): 50.7151% (1 in 1.97)
+  RTP contribution: 36.1704% of mode spend
+  Range                      Probability           Frequency    Share of payout      RTP points
+  0x                            50.7151%           1 in 1.97            0.0000%         0.0000%
+  >0x - <0.25x                   5.1453%          1 in 19.44            0.0945%         0.0342%
+  0.25x - <0.5x                  1.9453%          1 in 51.41            0.0818%         0.0296%
+  0.5x - <1x                     4.5913%          1 in 21.78            0.3327%         0.1203%
+  1x - <2x                       4.7985%          1 in 20.84            0.6958%         0.2517%
+  2x - <5x                       6.8722%          1 in 14.55            2.3985%         0.8675%
+  5x - <10x                      5.3084%          1 in 18.84            4.1292%         1.4936%
+  10x - <25x                     9.2603%          1 in 10.80           16.8868%         6.1080%
+  25x - <50x                     6.0637%          1 in 16.49           23.6539%         8.5557%
+  50x - <100x                    3.9291%          1 in 25.45           29.6279%        10.7165%
+  100x - <250x                   1.2975%          1 in 77.07           19.6360%         7.1024%
+  250x - <500x                   0.0734%        1 in 1363.01            2.4628%         0.8908%
+  500x - <1kx                    0.0000%               never            0.0000%         0.0000%
+  1kx - <3kx                     0.0000%               never            0.0000%         0.0000%
+  3kx - <5kx                     0.0000%               never            0.0000%         0.0000%
+  5kx - <10kx                    0.0000%               never            0.0000%         0.0000%
+  10kx+                          0.0000%               never            0.0000%         0.0000%
+
+  Bonus - Spins Played per Round (includes retriggers; may stop at win cap)
+  Weighted mean: 10.0000 spins | Median: 10.00 | P90: 10.00 | P95: 10.00 | Max: 10.00
+  Range                      Probability           Frequency     Share of spins
+  0 spins                        0.0000%               never            0.0000%
+  1-3 spins                      0.0000%               never            0.0000%
+  4-6 spins                      0.0000%               never            0.0000%
+  7-10 spins                   100.0000%           1 in 1.00          100.0000%
+  11-15 spins                    0.0000%               never            0.0000%
+  16-20 spins                    0.0000%               never            0.0000%
+  21-30 spins                    0.0000%               never            0.0000%
+  31+ spins                      0.0000%               never            0.0000%
+
+  Super Bonus Free Spins
+  Entry: 0.0500% (1 in 2000.00 mode plays) | Share of bonus entries: 11.0717%
+  Retriggered rounds: 0.0000%
+  Bonus-play totals include the triggering spin and all free spins. Individual free-spin payouts exclude the triggering spin. All positive-weight outcomes are included.
+
+  Super Bonus - Total Bonus Play Payout Distribution (includes triggering spin; conditional on this tier)
+  Weighted mean: 384.4570x base bet | Median: 275.90 | P90: 749.40 | P95: 934.40 | Max: 1999.20
+  Non-zero: 100.0000% (1 in 1.00) | Null (0 payouts): 0.0000% (never)
+  RTP contribution: 19.2229% of mode spend
+  Range                      Probability           Frequency    Share of payout      RTP points
+  0x                             0.0000%               never            0.0000%         0.0000%
+  >0x - <0.25x                   0.0000%               never            0.0000%         0.0000%
+  0.25x - <0.5x                  0.0000%               never            0.0000%         0.0000%
+  0.5x - <1x                     0.0000%               never            0.0000%         0.0000%
+  1x - <2x                       0.0000%               never            0.0000%         0.0000%
+  2x - <5x                       0.0000%               never            0.0000%         0.0000%
+  5x - <10x                      0.0000%               never            0.0000%         0.0000%
+  10x - <25x                     0.0000%               never            0.0000%         0.0000%
+  25x - <50x                     0.0000%               never            0.0000%         0.0000%
+  50x - <100x                    0.0000%               never            0.0000%         0.0000%
+  100x - <250x                  37.9092%           1 in 2.64           22.0487%         4.2384%
+  250x - <500x                  45.6746%           1 in 2.19           39.0688%         7.5101%
+  500x - <1kx                   12.9836%           1 in 7.70           25.3283%         4.8688%
+  1kx - <3kx                     3.4326%          1 in 29.13           13.5542%         2.6055%
+  3kx - <5kx                     0.0000%               never            0.0000%         0.0000%
+  5kx - <10kx                    0.0000%               never            0.0000%         0.0000%
+  10kx+                          0.0000%               never            0.0000%         0.0000%
+
+  Super Bonus - Individual Free-Spin Payout Distribution (weighted across actual spins played)
+  Weighted mean: 38.2745x base bet | Median: 6.00 | P90: 116.50 | P95: 183.50 | Max: 1714.10
+  Non-zero: 68.9849% (1 in 1.45) | Null (0 payouts): 31.0151% (1 in 3.22)
+  RTP contribution: 19.1373% of mode spend
+  Range                      Probability           Frequency    Share of payout      RTP points
+  0x                            31.0151%           1 in 3.22            0.0000%         0.0000%
+  >0x - <0.25x                   2.1668%          1 in 46.15            0.0094%         0.0018%
+  0.25x - <0.5x                  0.7106%         1 in 140.73            0.0073%         0.0014%
+  0.5x - <1x                     2.7023%          1 in 37.01            0.0462%         0.0088%
+  1x - <2x                       3.5476%          1 in 28.19            0.1268%         0.0243%
+  2x - <5x                       7.6449%          1 in 13.08            0.6444%         0.1233%
+  5x - <10x                      7.9936%          1 in 12.51            1.4758%         0.2824%
+  10x - <25x                    12.6390%           1 in 7.91            5.4379%         1.0407%
+  25x - <50x                    10.3384%           1 in 9.67            9.7599%         1.8678%
+  50x - <100x                    9.4029%          1 in 10.64           17.3585%         3.3219%
+  100x - <250x                   9.4818%          1 in 10.55           39.0304%         7.4693%
+  250x - <500x                   1.7884%          1 in 55.92           15.7537%         3.0148%
+  500x - <1kx                    0.5209%         1 in 191.99            8.8556%         1.6947%
+  1kx - <3kx                     0.0478%        1 in 2091.68            1.4941%         0.2859%
+  3kx - <5kx                     0.0000%               never            0.0000%         0.0000%
+  5kx - <10kx                    0.0000%               never            0.0000%         0.0000%
+  10kx+                          0.0000%               never            0.0000%         0.0000%
+
+  Super Bonus - Spins Played per Round (includes retriggers; may stop at win cap)
+  Weighted mean: 10.0000 spins | Median: 10.00 | P90: 10.00 | P95: 10.00 | Max: 10.00
+  Range                      Probability           Frequency     Share of spins
+  0 spins                        0.0000%               never            0.0000%
+  1-3 spins                      0.0000%               never            0.0000%
+  4-6 spins                      0.0000%               never            0.0000%
+  7-10 spins                   100.0000%           1 in 1.00          100.0000%
+  11-15 spins                    0.0000%               never            0.0000%
+  16-20 spins                    0.0000%               never            0.0000%
+  21-30 spins                    0.0000%               never            0.0000%
+  31+ spins                      0.0000%               never            0.0000%
+
+  Hidden Bonus Free Spins
+  Entry: 0.0016% (1 in 62500.00 mode plays) | Share of bonus entries: 0.3543%
+  Retriggered rounds: 0.0000%
+  Bonus-play totals include the triggering spin and all free spins. Individual free-spin payouts exclude the triggering spin. All positive-weight outcomes are included.
+
+  Hidden Bonus - Total Bonus Play Payout Distribution (includes triggering spin; conditional on this tier)
+  Weighted mean: 2794.7773x base bet | Median: 1932.10 | P90: 4983.80 | P95: 7394.00 | Max: 10000.00
+  Non-zero: 100.0000% (1 in 1.00) | Null (0 payouts): 0.0000% (never)
+  RTP contribution: 4.4716% of mode spend
+  Range                      Probability           Frequency    Share of payout      RTP points
+  0x                             0.0000%               never            0.0000%         0.0000%
+  >0x - <0.25x                   0.0000%               never            0.0000%         0.0000%
+  0.25x - <0.5x                  0.0000%               never            0.0000%         0.0000%
+  0.5x - <1x                     0.0000%               never            0.0000%         0.0000%
+  1x - <2x                       0.0000%               never            0.0000%         0.0000%
+  2x - <5x                       0.0000%               never            0.0000%         0.0000%
+  5x - <10x                      0.0000%               never            0.0000%         0.0000%
+  10x - <25x                     0.0000%               never            0.0000%         0.0000%
+  25x - <50x                     0.0000%               never            0.0000%         0.0000%
+  50x - <100x                    0.0000%               never            0.0000%         0.0000%
+  100x - <250x                   0.0000%               never            0.0000%         0.0000%
+  250x - <500x                   0.0000%               never            0.0000%         0.0000%
+  500x - <1kx                    0.0000%               never            0.0000%         0.0000%
+  1kx - <3kx                    67.1004%           1 in 1.49           41.0267%         1.8346%
+  3kx - <5kx                    23.0407%           1 in 4.34           32.1919%         1.4395%
+  5kx - <10kx                    8.2964%          1 in 12.05           21.1905%         0.9476%
+  10kx+                          1.5625%          1 in 64.00            5.5908%         0.2500%
+
+  Hidden Bonus - Individual Free-Spin Payout Distribution (weighted across actual spins played)
+  Weighted mean: 281.4997x base bet | Median: 108.00 | P90: 750.00 | P95: 1107.20 | Max: 10000.00
+  Non-zero: 89.2783% (1 in 1.12) | Null (0 payouts): 10.7217% (1 in 9.33)
+  RTP contribution: 4.4669% of mode spend
+  Range                      Probability           Frequency    Share of payout      RTP points
+  0x                            10.7217%           1 in 9.33            0.0000%         0.0000%
+  >0x - <0.25x                   0.2488%         1 in 401.96            0.0001%       6.351e-6%
+  0.25x - <0.5x                  0.2140%         1 in 467.26            0.0003%       1.297e-5%
+  0.5x - <1x                     0.5811%         1 in 172.07            0.0015%       6.577e-5%
+  1x - <2x                       1.4225%          1 in 70.30            0.0072%         0.0003%
+  2x - <5x                       3.1386%          1 in 31.86            0.0374%         0.0017%
+  5x - <10x                      4.2409%          1 in 23.58            0.1077%         0.0048%
+  10x - <25x                     7.6666%          1 in 13.04            0.4566%         0.0204%
+  25x - <50x                     8.2880%          1 in 12.07            1.0614%         0.0474%
+  50x - <100x                   11.7341%           1 in 8.52            3.0128%         0.1346%
+  100x - <250x                  19.7342%           1 in 5.07           11.5332%         0.5152%
+  250x - <500x                  14.6998%           1 in 6.80           18.7455%         0.8373%
+  500x - <1kx                   11.2412%           1 in 8.90           27.9502%         1.2485%
+  1kx - <3kx                     5.6264%          1 in 17.77           30.3170%         1.3542%
+  3kx - <5kx                     0.3478%         1 in 287.50            4.5445%         0.2030%
+  5kx - <10kx                    0.0875%        1 in 1142.55            1.9862%         0.0887%
+  10kx+                          0.0067%       1 in 14897.53            0.2385%         0.0107%
+
+  Hidden Bonus - Spins Played per Round (includes retriggers; may stop at win cap)
+  Weighted mean: 9.9177 spins | Median: 10.00 | P90: 10.00 | P95: 10.00 | Max: 10.00
+  Range                      Probability           Frequency     Share of spins
+  0 spins                        0.0000%               never            0.0000%
+  1-3 spins                      0.5443%         1 in 183.71            0.1374%
+  4-6 spins                      0.6931%         1 in 144.27            0.3281%
+  7-10 spins                    98.7625%           1 in 1.01           99.5345%
+  11-15 spins                    0.0000%               never            0.0000%
+  16-20 spins                    0.0000%               never            0.0000%
+  21-30 spins                    0.0000%               never            0.0000%
+  31+ spins                      0.0000%               never            0.0000%
+
+  Reconciliation: non-bonus base-play payouts + total bonus-play payouts = 96.0000% RTP (mode total 96.0000%).
+
+====================================================================================================
+  MODE: extraChance (cost=1.5x base bet)
+  Overall RTP: 96.0000% | Target RTP: unavailable in build metadata
+  Non-Zero Hit Rate: 24.0000% (1 in 4.17 mode plays)
+  Null Hit Rate: 76.0000% (1 in 1.32 mode plays)
+  Highest Published Payout: 10000.00x base bet | Frequency: 1 in 3.200M
+  Any Bonus Entry: 0.9032% (1 in 110.72 mode plays)
+  All probabilities use published LUT weights. A mode play includes its triggering spin and all free spins.
+  Win ranges are in base-bet multiples; RTP divides by mode cost. Frequency is conditional on the population in each section.
+
+  Entire Mode - Total Payout Distribution (all mode plays)
+  Weighted mean: 1.4400x base bet | Median: 0.00 | P90: 1.50 | P95: 3.60 | Max: 10000.00
+  Non-zero: 24.0000% (1 in 4.17) | Null (0 payouts): 76.0000% (1 in 1.32)
+  RTP contribution: 96.0000% of mode spend
+  Range                      Probability           Frequency    Share of payout      RTP points
+  0x                            76.0000%           1 in 1.32            0.0000%         0.0000%
+  >0x - <0.25x                   3.9915%          1 in 25.05            0.4588%         0.4404%
+  0.25x - <0.5x                  1.0260%          1 in 97.46            0.2740%         0.2631%
+  0.5x - <1x                     4.6846%          1 in 21.35            2.1058%         2.0215%
+  1x - <2x                       6.6383%          1 in 15.06            6.1979%         5.9500%
+  2x - <5x                       4.9057%          1 in 20.38           11.6751%        11.2081%
+  5x - <10x                      1.2710%          1 in 78.68            6.4817%         6.2224%
+  10x - <25x                     0.6934%         1 in 144.21            8.7682%         8.4174%
+  25x - <50x                     0.3669%         1 in 272.56            8.2647%         7.9342%
+  50x - <100x                    0.2061%         1 in 485.29           10.6853%        10.2579%
+  100x - <250x                   0.1386%         1 in 721.55           15.1840%        14.5766%
+  250x - <500x                   0.0592%        1 in 1689.04           14.5362%        13.9548%
+  500x - <1kx                    0.0123%        1 in 8125.43            6.2763%         6.0253%
+  1kx - <3kx                     0.0055%       1 in 18106.35            5.9674%         5.7287%
+  3kx - <5kx                     0.0006%      1 in 158578.48            1.6979%         1.6300%
+  5kx - <10kx                    0.0003%      1 in 399575.77            1.2096%         1.1613%
+  10kx+                        3.125e-5%         1 in 3.200M            0.2170%         0.2083%
+
+  Base Game - Payout Distribution (non-bonus plays only; includes single feature spins)
+  Weighted mean: 0.5069x base bet | Median: 0.00 | P90: 1.40 | P95: 3.00 | Max: 49.70
+  Non-zero: 23.3073% (1 in 4.29) | Null (0 payouts): 76.6927% (1 in 1.30)
+  RTP contribution: 33.4876% of mode spend
+  Range                      Probability           Frequency    Share of payout      RTP points
+  0x                            76.6927%           1 in 1.30            0.0000%         0.0000%
+  >0x - <0.25x                   4.0279%          1 in 24.83            1.3151%         0.4404%
+  0.25x - <0.5x                  1.0354%          1 in 96.58            0.7856%         0.2631%
+  0.5x - <1x                     4.7273%          1 in 21.15            6.0366%         2.0215%
+  1x - <2x                       6.6988%          1 in 14.93           17.7678%         5.9500%
+  2x - <5x                       4.9504%          1 in 20.20           33.4696%        11.2081%
+  5x - <10x                      1.2825%          1 in 77.97           18.5812%         6.2224%
+  10x - <25x                     0.4949%         1 in 202.07           16.1968%         5.4239%
+  25x - <50x                     0.0901%        1 in 1109.36            5.8473%         1.9581%
+  50x - <100x                    0.0000%               never            0.0000%         0.0000%
+  100x - <250x                   0.0000%               never            0.0000%         0.0000%
+  250x - <500x                   0.0000%               never            0.0000%         0.0000%
+  500x - <1kx                    0.0000%               never            0.0000%         0.0000%
+  1kx - <3kx                     0.0000%               never            0.0000%         0.0000%
+  3kx - <5kx                     0.0000%               never            0.0000%         0.0000%
+  5kx - <10kx                    0.0000%               never            0.0000%         0.0000%
+  10kx+                          0.0000%               never            0.0000%         0.0000%
+
+  Bonus Free Spins
+  Entry: 0.8000% (1 in 125.00 mode plays) | Share of bonus entries: 88.5740%
+  Retriggered rounds: 0.0000%
+  Bonus-play totals include the triggering spin and all free spins. Individual free-spin payouts exclude the triggering spin. All positive-weight outcomes are included.
+
+  Bonus - Total Bonus Play Payout Distribution (includes triggering spin; conditional on this tier)
+  Weighted mean: 56.4551x base bet | Median: 34.70 | P90: 121.80 | P95: 157.40 | Max: 199.90
+  Non-zero: 100.0000% (1 in 1.00) | Null (0 payouts): 0.0000% (never)
+  RTP contribution: 30.1094% of mode spend
+  Range                      Probability           Frequency    Share of payout      RTP points
+  0x                             0.0000%               never            0.0000%         0.0000%
+  >0x - <0.25x                   0.0000%               never            0.0000%         0.0000%
+  0.25x - <0.5x                  0.0000%               never            0.0000%         0.0000%
+  0.5x - <1x                     0.0000%               never            0.0000%         0.0000%
+  1x - <2x                       0.0000%               never            0.0000%         0.0000%
+  2x - <5x                       0.0000%               never            0.0000%         0.0000%
+  5x - <10x                      0.0000%               never            0.0000%         0.0000%
+  10x - <25x                    25.3800%           1 in 3.94            9.9422%         2.9935%
+  25x - <50x                    34.6948%           1 in 2.88           19.8478%         5.9760%
+  50x - <100x                   25.7579%           1 in 3.88           34.0689%        10.2579%
+  100x - <250x                  14.1673%           1 in 7.06           36.1412%        10.8819%
+  250x - <500x                   0.0000%               never            0.0000%         0.0000%
+  500x - <1kx                    0.0000%               never            0.0000%         0.0000%
+  1kx - <3kx                     0.0000%               never            0.0000%         0.0000%
+  3kx - <5kx                     0.0000%               never            0.0000%         0.0000%
+  5kx - <10kx                    0.0000%               never            0.0000%         0.0000%
+  10kx+                          0.0000%               never            0.0000%         0.0000%
+
+  Bonus - Individual Free-Spin Payout Distribution (weighted across actual spins played)
+  Weighted mean: 5.5620x base bet | Median: 0.00 | P90: 18.60 | P95: 31.20 | Max: 195.80
+  Non-zero: 44.9658% (1 in 2.22) | Null (0 payouts): 55.0342% (1 in 1.82)
+  RTP contribution: 29.6642% of mode spend
+  Range                      Probability           Frequency    Share of payout      RTP points
+  0x                            55.0342%           1 in 1.82            0.0000%         0.0000%
+  >0x - <0.25x                   5.4550%          1 in 18.33            0.1644%         0.0488%
+  0.25x - <0.5x                  1.9215%          1 in 52.04            0.1325%         0.0393%
+  0.5x - <1x                     5.6704%          1 in 17.64            0.6600%         0.1958%
+  1x - <2x                       5.3646%          1 in 18.64            1.2520%         0.3714%
+  2x - <5x                       6.3072%          1 in 15.85            3.5458%         1.0518%
+  5x - <10x                      4.6256%          1 in 21.62            5.9526%         1.7658%
+  10x - <25x                     8.8303%          1 in 11.32           26.3846%         7.8268%
+  25x - <50x                     4.1755%          1 in 23.95           25.4906%         7.5616%
+  50x - <100x                    2.1625%          1 in 46.24           26.1194%         7.7481%
+  100x - <250x                   0.4532%         1 in 220.63           10.2981%         3.0548%
+  250x - <500x                   0.0000%               never            0.0000%         0.0000%
+  500x - <1kx                    0.0000%               never            0.0000%         0.0000%
+  1kx - <3kx                     0.0000%               never            0.0000%         0.0000%
+  3kx - <5kx                     0.0000%               never            0.0000%         0.0000%
+  5kx - <10kx                    0.0000%               never            0.0000%         0.0000%
+  10kx+                          0.0000%               never            0.0000%         0.0000%
+
+  Bonus - Spins Played per Round (includes retriggers; may stop at win cap)
+  Weighted mean: 10.0000 spins | Median: 10.00 | P90: 10.00 | P95: 10.00 | Max: 10.00
+  Range                      Probability           Frequency     Share of spins
+  0 spins                        0.0000%               never            0.0000%
+  1-3 spins                      0.0000%               never            0.0000%
+  4-6 spins                      0.0000%               never            0.0000%
+  7-10 spins                   100.0000%           1 in 1.00          100.0000%
+  11-15 spins                    0.0000%               never            0.0000%
+  16-20 spins                    0.0000%               never            0.0000%
+  21-30 spins                    0.0000%               never            0.0000%
+  31+ spins                      0.0000%               never            0.0000%
+
+  Super Bonus Free Spins
+  Entry: 0.1000% (1 in 1000.00 mode plays) | Share of bonus entries: 11.0717%
+  Retriggered rounds: 0.0000%
+  Bonus-play totals include the triggering spin and all free spins. Individual free-spin payouts exclude the triggering spin. All positive-weight outcomes are included.
+
+  Super Bonus - Total Bonus Play Payout Distribution (includes triggering spin; conditional on this tier)
+  Weighted mean: 402.7632x base bet | Median: 329.00 | P90: 706.20 | P95: 911.90 | Max: 1998.80
+  Non-zero: 100.0000% (1 in 1.00) | Null (0 payouts): 0.0000% (never)
+  RTP contribution: 26.8509% of mode spend
+  Range                      Probability           Frequency    Share of payout      RTP points
+  0x                             0.0000%               never            0.0000%         0.0000%
+  >0x - <0.25x                   0.0000%               never            0.0000%         0.0000%
+  0.25x - <0.5x                  0.0000%               never            0.0000%         0.0000%
+  0.5x - <1x                     0.0000%               never            0.0000%         0.0000%
+  1x - <2x                       0.0000%               never            0.0000%         0.0000%
+  2x - <5x                       0.0000%               never            0.0000%         0.0000%
+  5x - <10x                      0.0000%               never            0.0000%         0.0000%
+  10x - <25x                     0.0000%               never            0.0000%         0.0000%
+  25x - <50x                     0.0000%               never            0.0000%         0.0000%
+  50x - <100x                    0.0000%               never            0.0000%         0.0000%
+  100x - <250x                  25.2526%           1 in 3.96           13.7602%         3.6947%
+  250x - <500x                  59.2053%           1 in 1.69           51.9714%        13.9548%
+  500x - <1kx                   12.3070%           1 in 8.13           22.4398%         6.0253%
+  1kx - <3kx                     3.2350%          1 in 30.91           11.8286%         3.1761%
+  3kx - <5kx                     0.0000%               never            0.0000%         0.0000%
+  5kx - <10kx                    0.0000%               never            0.0000%         0.0000%
+  10kx+                          0.0000%               never            0.0000%         0.0000%
+
+  Super Bonus - Individual Free-Spin Payout Distribution (weighted across actual spins played)
+  Weighted mean: 40.0738x base bet | Median: 6.00 | P90: 122.00 | P95: 195.60 | Max: 1786.40
+  Non-zero: 68.5382% (1 in 1.46) | Null (0 payouts): 31.4618% (1 in 3.18)
+  RTP contribution: 26.7158% of mode spend
+  Range                      Probability           Frequency    Share of payout      RTP points
+  0x                            31.4618%           1 in 3.18            0.0000%         0.0000%
+  >0x - <0.25x                   1.9980%          1 in 50.05            0.0085%         0.0023%
+  0.25x - <0.5x                  0.8013%         1 in 124.80            0.0076%         0.0020%
+  0.5x - <1x                     2.3264%          1 in 42.99            0.0381%         0.0102%
+  1x - <2x                       3.5624%          1 in 28.07            0.1257%         0.0336%
+  2x - <5x                       7.8808%          1 in 12.69            0.6392%         0.1708%
+  5x - <10x                      7.0064%          1 in 14.27            1.2496%         0.3338%
+  10x - <25x                    11.9301%           1 in 8.38            4.9531%         1.3233%
+  25x - <50x                    10.6890%           1 in 9.36            9.6843%         2.5872%
+  50x - <100x                    9.9301%          1 in 10.07           17.5350%         4.6846%
+  100x - <250x                   9.5467%          1 in 10.47           37.5002%        10.0185%
+  250x - <500x                   2.3656%          1 in 42.27           19.5847%         5.2322%
+  500x - <1kx                    0.4677%         1 in 213.81            7.6719%         2.0496%
+  1kx - <3kx                     0.0337%        1 in 2969.55            1.0022%         0.2677%
+  3kx - <5kx                     0.0000%               never            0.0000%         0.0000%
+  5kx - <10kx                    0.0000%               never            0.0000%         0.0000%
+  10kx+                          0.0000%               never            0.0000%         0.0000%
+
+  Super Bonus - Spins Played per Round (includes retriggers; may stop at win cap)
+  Weighted mean: 10.0000 spins | Median: 10.00 | P90: 10.00 | P95: 10.00 | Max: 10.00
+  Range                      Probability           Frequency     Share of spins
+  0 spins                        0.0000%               never            0.0000%
+  1-3 spins                      0.0000%               never            0.0000%
+  4-6 spins                      0.0000%               never            0.0000%
+  7-10 spins                   100.0000%           1 in 1.00          100.0000%
+  11-15 spins                    0.0000%               never            0.0000%
+  16-20 spins                    0.0000%               never            0.0000%
+  21-30 spins                    0.0000%               never            0.0000%
+  31+ spins                      0.0000%               never            0.0000%
+
+  Hidden Bonus Free Spins
+  Entry: 0.0032% (1 in 31250.00 mode plays) | Share of bonus entries: 0.3543%
+  Retriggered rounds: 0.0000%
+  Bonus-play totals include the triggering spin and all free spins. Individual free-spin payouts exclude the triggering spin. All positive-weight outcomes are included.
+
+  Hidden Bonus - Total Bonus Play Payout Distribution (includes triggering spin; conditional on this tier)
+  Weighted mean: 2602.5905x base bet | Median: 1823.90 | P90: 4818.20 | P95: 6738.20 | Max: 10000.00
+  Non-zero: 100.0000% (1 in 1.00) | Null (0 payouts): 0.0000% (never)
+  RTP contribution: 5.5522% of mode spend
+  Range                      Probability           Frequency    Share of payout      RTP points
+  0x                             0.0000%               never            0.0000%         0.0000%
+  >0x - <0.25x                   0.0000%               never            0.0000%         0.0000%
+  0.25x - <0.5x                  0.0000%               never            0.0000%         0.0000%
+  0.5x - <1x                     0.0000%               never            0.0000%         0.0000%
+  1x - <2x                       0.0000%               never            0.0000%         0.0000%
+  2x - <5x                       0.0000%               never            0.0000%         0.0000%
+  5x - <10x                      0.0000%               never            0.0000%         0.0000%
+  10x - <25x                     0.0000%               never            0.0000%         0.0000%
+  25x - <50x                     0.0000%               never            0.0000%         0.0000%
+  50x - <100x                    0.0000%               never            0.0000%         0.0000%
+  100x - <250x                   0.0000%               never            0.0000%         0.0000%
+  250x - <500x                   0.0000%               never            0.0000%         0.0000%
+  500x - <1kx                    0.0000%               never            0.0000%         0.0000%
+  1kx - <3kx                    71.4963%           1 in 1.40           45.9749%         2.5526%
+  3kx - <5kx                    19.7063%           1 in 5.07           29.3576%         1.6300%
+  5kx - <10kx                    7.8208%          1 in 12.79           20.9153%         1.1613%
+  10kx+                          0.9766%         1 in 102.40            3.7523%         0.2083%
+
+  Hidden Bonus - Individual Free-Spin Payout Distribution (weighted across actual spins played)
+  Weighted mean: 261.1985x base bet | Median: 91.60 | P90: 711.90 | P95: 1054.60 | Max: 10000.00
+  Non-zero: 88.8169% (1 in 1.13) | Null (0 payouts): 11.1831% (1 in 8.94)
+  RTP contribution: 5.5437% of mode spend
+  Range                      Probability           Frequency    Share of payout      RTP points
+  0x                            11.1831%           1 in 8.94            0.0000%         0.0000%
+  >0x - <0.25x                   0.3170%         1 in 315.48            0.0002%       1.020e-5%
+  0.25x - <0.5x                  0.2623%         1 in 381.24            0.0004%       2.181e-5%
+  0.5x - <1x                     0.5225%         1 in 191.37            0.0014%       7.505e-5%
+  1x - <2x                       1.0075%          1 in 99.25            0.0056%         0.0003%
+  2x - <5x                       3.1963%          1 in 31.29            0.0405%         0.0022%
+  5x - <10x                      4.4854%          1 in 22.29            0.1254%         0.0070%
+  10x - <25x                     8.6993%          1 in 11.50            0.5470%         0.0303%
+  25x - <50x                     8.8907%          1 in 11.25            1.2289%         0.0681%
+  50x - <100x                   12.7222%           1 in 7.86            3.5097%         0.1946%
+  100x - <250x                  18.4341%           1 in 5.42           11.6465%         0.6456%
+  250x - <500x                  14.0540%           1 in 7.12           19.3272%         1.0714%
+  500x - <1kx                   10.7579%           1 in 9.30           28.7282%         1.5926%
+  1kx - <3kx                     5.1413%          1 in 19.45           29.4720%         1.6338%
+  3kx - <5kx                     0.2620%         1 in 381.69            3.7468%         0.2077%
+  5kx - <10kx                    0.0613%        1 in 1630.44            1.5073%         0.0836%
+  10kx+                          0.0030%       1 in 33873.83            0.1130%         0.0063%
+
+  Hidden Bonus - Spins Played per Round (includes retriggers; may stop at win cap)
+  Weighted mean: 9.9488 spins | Median: 10.00 | P90: 10.00 | P95: 10.00 | Max: 10.00
+  Range                      Probability           Frequency     Share of spins
+  0 spins                        0.0000%               never            0.0000%
+  1-3 spins                      0.3427%         1 in 291.84            0.0841%
+  4-6 spins                      0.4087%         1 in 244.66            0.1968%
+  7-10 spins                    99.2486%           1 in 1.01           99.7191%
+  11-15 spins                    0.0000%               never            0.0000%
+  16-20 spins                    0.0000%               never            0.0000%
+  21-30 spins                    0.0000%               never            0.0000%
+  31+ spins                      0.0000%               never            0.0000%
+
+  Reconciliation: non-bonus base-play payouts + total bonus-play payouts = 96.0000% RTP (mode total 96.0000%).
+
+====================================================================================================
+  MODE: extraChance2 (cost=3x base bet)
+  Overall RTP: 96.0000% | Target RTP: unavailable in build metadata
+  Non-Zero Hit Rate: 25.0000% (1 in 4.00 mode plays)
+  Null Hit Rate: 75.0000% (1 in 1.33 mode plays)
+  Highest Published Payout: 10000.00x base bet | Frequency: 1 in 2.800M
+  Any Bonus Entry: 2.2580% (1 in 44.29 mode plays)
+  All probabilities use published LUT weights. A mode play includes its triggering spin and all free spins.
+  Win ranges are in base-bet multiples; RTP divides by mode cost. Frequency is conditional on the population in each section.
+
+  Entire Mode - Total Payout Distribution (all mode plays)
+  Weighted mean: 2.8800x base bet | Median: 0.00 | P90: 2.60 | P95: 5.00 | Max: 10000.00
+  Non-zero: 25.0000% (1 in 4.00) | Null (0 payouts): 75.0000% (1 in 1.33)
+  RTP contribution: 96.0000% of mode spend
+  Range                      Probability           Frequency    Share of payout      RTP points
+  0x                            75.0000%           1 in 1.33            0.0000%         0.0000%
+  >0x - <0.25x                   2.2481%          1 in 44.48            0.1311%         0.1259%
+  0.25x - <0.5x                  0.5489%         1 in 182.19            0.0733%         0.0703%
+  0.5x - <1x                     3.0793%          1 in 32.47            0.6897%         0.6621%
+  1x - <2x                       4.7680%          1 in 20.97            2.4089%         2.3125%
+  2x - <5x                       9.2633%          1 in 10.80            9.9536%         9.5554%
+  5x - <10x                      2.1433%          1 in 46.66            5.0531%         4.8509%
+  10x - <25x                     1.3009%          1 in 76.87            8.2327%         7.9034%
+  25x - <50x                     0.6496%         1 in 153.95            7.5745%         7.2715%
+  50x - <100x                    0.4895%         1 in 204.30           12.6369%        12.1314%
+  100x - <250x                   0.3280%         1 in 304.90           17.8926%        17.1769%
+  250x - <500x                   0.1354%         1 in 738.57           16.9238%        16.2469%
+  500x - <1kx                    0.0299%        1 in 3341.82            7.5588%         7.2565%
+  1kx - <3kx                     0.0137%        1 in 7298.57            7.3027%         7.0105%
+  3kx - <5kx                     0.0015%       1 in 67476.30            1.9921%         1.9124%
+  5kx - <10kx                    0.0006%      1 in 164487.65            1.4524%         1.3943%
+  10kx+                        3.571e-5%         1 in 2.800M            0.1240%         0.1190%
+
+  Base Game - Payout Distribution (non-bonus plays only; includes single feature spins)
+  Weighted mean: 0.6535x base bet | Median: 0.00 | P90: 2.50 | P95: 4.00 | Max: 19.90
+  Non-zero: 23.2674% (1 in 4.30) | Null (0 payouts): 76.7326% (1 in 1.30)
+  RTP contribution: 21.2912% of mode spend
+  Range                      Probability           Frequency    Share of payout      RTP points
+  0x                            76.7326%           1 in 1.30            0.0000%         0.0000%
+  >0x - <0.25x                   2.3000%          1 in 43.48            0.5912%         0.1259%
+  0.25x - <0.5x                  0.5616%         1 in 178.08            0.3303%         0.0703%
+  0.5x - <1x                     3.1505%          1 in 31.74            3.1099%         0.6621%
+  1x - <2x                       4.8782%          1 in 20.50           10.8613%         2.3125%
+  2x - <5x                       9.4773%          1 in 10.55           44.8798%         9.5554%
+  5x - <10x                      2.1928%          1 in 45.60           22.7838%         4.8509%
+  10x - <25x                     0.7070%         1 in 141.44           17.4437%         3.7140%
+  25x - <50x                     0.0000%               never            0.0000%         0.0000%
+  50x - <100x                    0.0000%               never            0.0000%         0.0000%
+  100x - <250x                   0.0000%               never            0.0000%         0.0000%
+  250x - <500x                   0.0000%               never            0.0000%         0.0000%
+  500x - <1kx                    0.0000%               never            0.0000%         0.0000%
+  1kx - <3kx                     0.0000%               never            0.0000%         0.0000%
+  3kx - <5kx                     0.0000%               never            0.0000%         0.0000%
+  5kx - <10kx                    0.0000%               never            0.0000%         0.0000%
+  10kx+                          0.0000%               never            0.0000%         0.0000%
+
+  Bonus Free Spins
+  Entry: 2.0000% (1 in 50.00 mode plays) | Share of bonus entries: 88.5740%
+  Retriggered rounds: 0.0000%
+  Bonus-play totals include the triggering spin and all free spins. Individual free-spin payouts exclude the triggering spin. All positive-weight outcomes are included.
+
+  Bonus - Total Bonus Play Payout Distribution (includes triggering spin; conditional on this tier)
+  Weighted mean: 53.4015x base bet | Median: 34.30 | P90: 114.00 | P95: 150.80 | Max: 199.80
+  Non-zero: 100.0000% (1 in 1.00) | Null (0 payouts): 0.0000% (never)
+  RTP contribution: 35.6010% of mode spend
+  Range                      Probability           Frequency    Share of payout      RTP points
+  0x                             0.0000%               never            0.0000%         0.0000%
+  >0x - <0.25x                   0.0000%               never            0.0000%         0.0000%
+  0.25x - <0.5x                  0.0000%               never            0.0000%         0.0000%
+  0.5x - <1x                     0.0000%               never            0.0000%         0.0000%
+  1x - <2x                       0.0000%               never            0.0000%         0.0000%
+  2x - <5x                       0.0000%               never            0.0000%         0.0000%
+  5x - <10x                      0.0000%               never            0.0000%         0.0000%
+  10x - <25x                    30.4919%           1 in 3.28           11.7677%         4.1894%
+  25x - <50x                    32.4787%           1 in 3.08           20.4250%         7.2715%
+  50x - <100x                   24.4733%           1 in 4.09           34.0759%        12.1314%
+  100x - <250x                  12.5561%           1 in 7.96           33.7313%        12.0087%
+  250x - <500x                   0.0000%               never            0.0000%         0.0000%
+  500x - <1kx                    0.0000%               never            0.0000%         0.0000%
+  1kx - <3kx                     0.0000%               never            0.0000%         0.0000%
+  3kx - <5kx                     0.0000%               never            0.0000%         0.0000%
+  5kx - <10kx                    0.0000%               never            0.0000%         0.0000%
+  10kx+                          0.0000%               never            0.0000%         0.0000%
+
+  Bonus - Individual Free-Spin Payout Distribution (weighted across actual spins played)
+  Weighted mean: 5.2669x base bet | Median: 0.00 | P90: 16.80 | P95: 30.10 | Max: 192.00
+  Non-zero: 44.4026% (1 in 2.25) | Null (0 payouts): 55.5974% (1 in 1.80)
+  RTP contribution: 35.1127% of mode spend
+  Range                      Probability           Frequency    Share of payout      RTP points
+  0x                            55.5974%           1 in 1.80            0.0000%         0.0000%
+  >0x - <0.25x                   6.0146%          1 in 16.63            0.1895%         0.0665%
+  0.25x - <0.5x                  2.1935%          1 in 45.59            0.1588%         0.0558%
+  0.5x - <1x                     4.7343%          1 in 21.12            0.5844%         0.2052%
+  1x - <2x                       5.4394%          1 in 18.38            1.3548%         0.4757%
+  2x - <5x                       5.9498%          1 in 16.81            3.4769%         1.2208%
+  5x - <10x                      4.8530%          1 in 20.61            6.5772%         2.3094%
+  10x - <25x                     8.8589%          1 in 11.29           27.4246%         9.6295%
+  25x - <50x                     4.0562%          1 in 24.65           26.7063%         9.3773%
+  50x - <100x                    1.9300%          1 in 51.81           24.5482%         8.6195%
+  100x - <250x                   0.3730%         1 in 268.08            8.9793%         3.1529%
+  250x - <500x                   0.0000%               never            0.0000%         0.0000%
+  500x - <1kx                    0.0000%               never            0.0000%         0.0000%
+  1kx - <3kx                     0.0000%               never            0.0000%         0.0000%
+  3kx - <5kx                     0.0000%               never            0.0000%         0.0000%
+  5kx - <10kx                    0.0000%               never            0.0000%         0.0000%
+  10kx+                          0.0000%               never            0.0000%         0.0000%
+
+  Bonus - Spins Played per Round (includes retriggers; may stop at win cap)
+  Weighted mean: 10.0000 spins | Median: 10.00 | P90: 10.00 | P95: 10.00 | Max: 10.00
+  Range                      Probability           Frequency     Share of spins
+  0 spins                        0.0000%               never            0.0000%
+  1-3 spins                      0.0000%               never            0.0000%
+  4-6 spins                      0.0000%               never            0.0000%
+  7-10 spins                   100.0000%           1 in 1.00          100.0000%
+  11-15 spins                    0.0000%               never            0.0000%
+  16-20 spins                    0.0000%               never            0.0000%
+  21-30 spins                    0.0000%               never            0.0000%
+  31+ spins                      0.0000%               never            0.0000%
+
+  Super Bonus Free Spins
+  Entry: 0.2500% (1 in 400.00 mode plays) | Share of bonus entries: 11.0717%
+  Retriggered rounds: 0.0000%
+  Bonus-play totals include the triggering spin and all free spins. Individual free-spin payouts exclude the triggering spin. All positive-weight outcomes are included.
+
+  Super Bonus - Total Bonus Play Payout Distribution (includes triggering spin; conditional on this tier)
+  Weighted mean: 389.5261x base bet | Median: 322.40 | P90: 680.90 | P95: 903.90 | Max: 1999.30
+  Non-zero: 100.0000% (1 in 1.00) | Null (0 payouts): 0.0000% (never)
+  RTP contribution: 32.4605% of mode spend
+  Range                      Probability           Frequency    Share of payout      RTP points
+  0x                             0.0000%               never            0.0000%         0.0000%
+  >0x - <0.25x                   0.0000%               never            0.0000%         0.0000%
+  0.25x - <0.5x                  0.0000%               never            0.0000%         0.0000%
+  0.5x - <1x                     0.0000%               never            0.0000%         0.0000%
+  1x - <2x                       0.0000%               never            0.0000%         0.0000%
+  2x - <5x                       0.0000%               never            0.0000%         0.0000%
+  5x - <10x                      0.0000%               never            0.0000%         0.0000%
+  10x - <25x                     0.0000%               never            0.0000%         0.0000%
+  25x - <50x                     0.0000%               never            0.0000%         0.0000%
+  50x - <100x                    0.0000%               never            0.0000%         0.0000%
+  100x - <250x                  30.7411%           1 in 3.25           15.9214%         5.1682%
+  250x - <500x                  54.1586%           1 in 1.85           50.0512%        16.2469%
+  500x - <1kx                   11.9695%           1 in 8.35           22.3548%         7.2565%
+  1kx - <3kx                     3.1308%          1 in 31.94           11.6726%         3.7890%
+  3kx - <5kx                     0.0000%               never            0.0000%         0.0000%
+  5kx - <10kx                    0.0000%               never            0.0000%         0.0000%
+  10kx+                          0.0000%               never            0.0000%         0.0000%
+
+  Super Bonus - Individual Free-Spin Payout Distribution (weighted across actual spins played)
+  Weighted mean: 38.7183x base bet | Median: 6.00 | P90: 117.00 | P95: 188.00 | Max: 1808.00
+  Non-zero: 68.9374% (1 in 1.45) | Null (0 payouts): 31.0626% (1 in 3.22)
+  RTP contribution: 32.2652% of mode spend
+  Range                      Probability           Frequency    Share of payout      RTP points
+  0x                            31.0626%           1 in 3.22            0.0000%         0.0000%
+  >0x - <0.25x                   2.3353%          1 in 42.82            0.0099%         0.0032%
+  0.25x - <0.5x                  0.9436%         1 in 105.98            0.0094%         0.0030%
+  0.5x - <1x                     2.4739%          1 in 40.42            0.0435%         0.0140%
+  1x - <2x                       3.4272%          1 in 29.18            0.1204%         0.0388%
+  2x - <5x                       8.0845%          1 in 12.37            0.6731%         0.2172%
+  5x - <10x                      7.1701%          1 in 13.95            1.3402%         0.4324%
+  10x - <25x                    12.3777%           1 in 8.08            5.2683%         1.6998%
+  25x - <50x                    10.5395%           1 in 9.49            9.6789%         3.1229%
+  50x - <100x                    9.9413%          1 in 10.06           18.3641%         5.9252%
+  100x - <250x                   8.9242%          1 in 11.21           36.3648%        11.7332%
+  250x - <500x                   2.1875%          1 in 45.72           18.7549%         6.0513%
+  500x - <1kx                    0.5002%         1 in 199.94            8.3575%         2.6966%
+  1kx - <3kx                     0.0325%        1 in 3080.91            1.0152%         0.3276%
+  3kx - <5kx                     0.0000%               never            0.0000%         0.0000%
+  5kx - <10kx                    0.0000%               never            0.0000%         0.0000%
+  10kx+                          0.0000%               never            0.0000%         0.0000%
+
+  Super Bonus - Spins Played per Round (includes retriggers; may stop at win cap)
+  Weighted mean: 10.0000 spins | Median: 10.00 | P90: 10.00 | P95: 10.00 | Max: 10.00
+  Range                      Probability           Frequency     Share of spins
+  0 spins                        0.0000%               never            0.0000%
+  1-3 spins                      0.0000%               never            0.0000%
+  4-6 spins                      0.0000%               never            0.0000%
+  7-10 spins                   100.0000%           1 in 1.00          100.0000%
+  11-15 spins                    0.0000%               never            0.0000%
+  16-20 spins                    0.0000%               never            0.0000%
+  21-30 spins                    0.0000%               never            0.0000%
+  31+ spins                      0.0000%               never            0.0000%
+
+  Hidden Bonus Free Spins
+  Entry: 0.0080% (1 in 12500.00 mode plays) | Share of bonus entries: 0.3543%
+  Retriggered rounds: 0.0000%
+  Bonus-play totals include the triggering spin and all free spins. Individual free-spin payouts exclude the triggering spin. All positive-weight outcomes are included.
+
+  Hidden Bonus - Total Bonus Play Payout Distribution (includes triggering spin; conditional on this tier)
+  Weighted mean: 2492.7294x base bet | Median: 1780.00 | P90: 4701.20 | P95: 6203.50 | Max: 10000.00
+  Non-zero: 100.0000% (1 in 1.00) | Null (0 payouts): 0.0000% (never)
+  RTP contribution: 6.6473% of mode spend
+  Range                      Probability           Frequency    Share of payout      RTP points
+  0x                             0.0000%               never            0.0000%         0.0000%
+  >0x - <0.25x                   0.0000%               never            0.0000%         0.0000%
+  0.25x - <0.5x                  0.0000%               never            0.0000%         0.0000%
+  0.5x - <1x                     0.0000%               never            0.0000%         0.0000%
+  1x - <2x                       0.0000%               never            0.0000%         0.0000%
+  2x - <5x                       0.0000%               never            0.0000%         0.0000%
+  5x - <10x                      0.0000%               never            0.0000%         0.0000%
+  10x - <25x                     0.0000%               never            0.0000%         0.0000%
+  25x - <50x                     0.0000%               never            0.0000%         0.0000%
+  50x - <100x                    0.0000%               never            0.0000%         0.0000%
+  100x - <250x                   0.0000%               never            0.0000%         0.0000%
+  250x - <500x                   0.0000%               never            0.0000%         0.0000%
+  500x - <1kx                    0.0000%               never            0.0000%         0.0000%
+  1kx - <3kx                    73.4292%           1 in 1.36           48.4642%         3.2215%
+  3kx - <5kx                    18.5250%           1 in 5.40           28.7698%         1.9124%
+  5kx - <10kx                    7.5994%          1 in 13.16           20.9751%         1.3943%
+  10kx+                          0.4464%         1 in 224.00            1.7909%         0.1190%
+
+  Hidden Bonus - Individual Free-Spin Payout Distribution (weighted across actual spins played)
+  Weighted mean: 249.4620x base bet | Median: 86.50 | P90: 682.60 | P95: 995.20 | Max: 10000.00
+  Non-zero: 88.4301% (1 in 1.13) | Null (0 payouts): 11.5699% (1 in 8.64)
+  RTP contribution: 6.6370% of mode spend
+  Range                      Probability           Frequency    Share of payout      RTP points
+  0x                            11.5699%           1 in 8.64            0.0000%         0.0000%
+  >0x - <0.25x                   0.3797%         1 in 263.39            0.0002%       1.437e-5%
+  0.25x - <0.5x                  0.4065%         1 in 246.00            0.0006%       4.121e-5%
+  0.5x - <1x                     0.7813%         1 in 127.99            0.0021%         0.0001%
+  1x - <2x                       1.1521%          1 in 86.80            0.0063%         0.0004%
+  2x - <5x                       4.0928%          1 in 24.43            0.0545%         0.0036%
+  5x - <10x                      4.7111%          1 in 21.23            0.1377%         0.0091%
+  10x - <25x                     7.9998%          1 in 12.50            0.5314%         0.0353%
+  25x - <50x                     9.6395%          1 in 10.37            1.4078%         0.0934%
+  50x - <100x                   11.8829%           1 in 8.42            3.4537%         0.2292%
+  100x - <250x                  17.7168%           1 in 5.64           11.6634%         0.7741%
+  250x - <500x                  13.9402%           1 in 7.17           20.4641%         1.3582%
+  500x - <1kx                   10.7694%           1 in 9.29           29.8552%         1.9815%
+  1kx - <3kx                     4.6881%          1 in 21.33           28.0866%         1.8641%
+  3kx - <5kx                     0.2342%         1 in 426.99            3.4308%         0.2277%
+  5kx - <10kx                    0.0348%        1 in 2874.60            0.8607%         0.0571%
+  10kx+                          0.0011%       1 in 89170.82            0.0450%         0.0030%
+
+  Hidden Bonus - Spins Played per Round (includes retriggers; may stop at win cap)
+  Weighted mean: 9.9770 spins | Median: 10.00 | P90: 10.00 | P95: 10.00 | Max: 10.00
+  Range                      Probability           Frequency     Share of spins
+  0 spins                        0.0000%               never            0.0000%
+  1-3 spins                      0.1488%         1 in 672.00            0.0384%
+  4-6 spins                      0.1913%         1 in 522.67            0.0909%
+  7-10 spins                    99.6599%           1 in 1.00           99.8707%
+  11-15 spins                    0.0000%               never            0.0000%
+  16-20 spins                    0.0000%               never            0.0000%
+  21-30 spins                    0.0000%               never            0.0000%
+  31+ spins                      0.0000%               never            0.0000%
+
+  Reconciliation: non-bonus base-play payouts + total bonus-play payouts = 96.0000% RTP (mode total 96.0000%).
+
+====================================================================================================
+  MODE: featureSpin (cost=50x base bet)
+  Overall RTP: 96.0000% | Target RTP: unavailable in build metadata
+  Non-Zero Hit Rate: 78.0000% (1 in 1.28 mode plays)
+  Null Hit Rate: 22.0000% (1 in 4.55 mode plays)
+  Highest Published Payout: 10000.00x base bet | Frequency: 1 in 60000.00
+  Any Bonus Entry: 0.0903% (1 in 1107.17 mode plays)
+  All probabilities use published LUT weights. A mode play includes its triggering spin and all free spins.
+  Win ranges are in base-bet multiples; RTP divides by mode cost. Frequency is conditional on the population in each section.
+
+  Entire Mode - Total Payout Distribution (all mode plays)
+  Weighted mean: 48.0000x base bet | Median: 6.40 | P90: 103.00 | P95: 228.00 | Max: 10000.00
+  Non-zero: 78.0000% (1 in 1.28) | Null (0 payouts): 22.0000% (1 in 4.55)
+  RTP contribution: 96.0000% of mode spend
+  Range                      Probability           Frequency    Share of payout      RTP points
+  0x                            22.0000%           1 in 4.55            0.0000%         0.0000%
+  >0x - <0.25x                   0.1646%         1 in 607.57            0.0006%         0.0005%
+  0.25x - <0.5x                  0.1133%         1 in 882.27            0.0009%         0.0009%
+  0.5x - <1x                     0.3503%         1 in 285.51            0.0047%         0.0046%
+  1x - <2x                       1.8846%          1 in 53.06            0.0562%         0.0540%
+  2x - <5x                      15.7047%           1 in 6.37            1.0937%         1.0500%
+  5x - <10x                     19.3691%           1 in 5.16            2.6979%         2.5900%
+  10x - <25x                    16.4495%           1 in 6.08            5.2749%         5.0639%
+  25x - <50x                     7.6311%          1 in 13.10            5.4751%         5.2561%
+  50x - <100x                    5.8631%          1 in 17.06            8.1667%         7.8400%
+  100x - <250x                   5.9144%          1 in 16.91           18.6022%        17.8581%
+  250x - <500x                   2.3442%          1 in 42.66           17.0756%        16.3926%
+  500x - <1kx                    1.7275%          1 in 57.89           24.0625%        23.1000%
+  1kx - <3kx                     0.4468%         1 in 223.84           13.9271%        13.3700%
+  3kx - <5kx                     0.0223%        1 in 4486.18            1.6729%         1.6060%
+  5kx - <10kx                    0.0129%        1 in 7744.27            1.5417%         1.4800%
+  10kx+                          0.0017%       1 in 60000.00            0.3472%         0.3333%
+
+  Base Game - Payout Distribution (non-bonus plays only; includes single feature spins)
+  Weighted mean: 47.5014x base bet | Median: 6.30 | P90: 101.50 | P95: 224.60 | Max: 9994.70
+  Non-zero: 77.9801% (1 in 1.28) | Null (0 payouts): 22.0199% (1 in 4.54)
+  RTP contribution: 94.9169% of mode spend
+  Range                      Probability           Frequency    Share of payout      RTP points
+  0x                            22.0199%           1 in 4.54            0.0000%         0.0000%
+  >0x - <0.25x                   0.1647%         1 in 607.02            0.0006%         0.0005%
+  0.25x - <0.5x                  0.1134%         1 in 881.47            0.0009%         0.0009%
+  0.5x - <1x                     0.3506%         1 in 285.25            0.0048%         0.0046%
+  1x - <2x                       1.8863%          1 in 53.01            0.0569%         0.0540%
+  2x - <5x                      15.7189%           1 in 6.36            1.1062%         1.0500%
+  5x - <10x                     19.3867%           1 in 5.16            2.7287%         2.5900%
+  10x - <25x                    16.4644%           1 in 6.07            5.3351%         5.0639%
+  25x - <50x                     7.6380%          1 in 13.09            5.5376%         5.2561%
+  50x - <100x                    5.8684%          1 in 17.04            8.2599%         7.8400%
+  100x - <250x                   5.8752%          1 in 17.02           18.6716%        17.7225%
+  250x - <500x                   2.3290%          1 in 42.94           17.1431%        16.2717%
+  500x - <1kx                    1.7084%          1 in 58.54           24.0454%        22.8232%
+  1kx - <3kx                     0.4416%         1 in 226.47           13.9036%        13.1968%
+  3kx - <5kx                     0.0220%        1 in 4542.32            1.6698%         1.5850%
+  5kx - <10kx                    0.0127%        1 in 7855.05            1.5359%         1.4578%
+  10kx+                          0.0000%               never            0.0000%         0.0000%
+
+  Bonus Free Spins
+  Entry: 0.0800% (1 in 1250.00 mode plays) | Share of bonus entries: 88.5740%
+  Retriggered rounds: 0.0000%
+  Bonus-play totals include the triggering spin and all free spins. Individual free-spin payouts exclude the triggering spin. All positive-weight outcomes are included.
+
+  Bonus - Total Bonus Play Payout Distribution (includes triggering spin; conditional on this tier)
+  Weighted mean: 552.9336x base bet | Median: 227.20 | P90: 761.20 | P95: 1247.00 | Max: 10000.00
+  Non-zero: 100.0000% (1 in 1.00) | Null (0 payouts): 0.0000% (never)
+  RTP contribution: 0.8847% of mode spend
+  Range                      Probability           Frequency    Share of payout      RTP points
+  0x                             0.0000%               never            0.0000%         0.0000%
+  >0x - <0.25x                   0.0000%               never            0.0000%         0.0000%
+  0.25x - <0.5x                  0.0000%               never            0.0000%         0.0000%
+  0.5x - <1x                     0.0000%               never            0.0000%         0.0000%
+  1x - <2x                       0.0000%               never            0.0000%         0.0000%
+  2x - <5x                       0.0000%               never            0.0000%         0.0000%
+  5x - <10x                      0.0000%               never            0.0000%         0.0000%
+  10x - <25x                     0.0000%               never            0.0000%         0.0000%
+  25x - <50x                     0.0000%               never            0.0000%         0.0000%
+  50x - <100x                    0.0000%               never            0.0000%         0.0000%
+  100x - <250x                  55.7074%           1 in 1.80           15.3360%         0.1357%
+  250x - <500x                  21.6183%           1 in 4.63           13.6632%         0.1209%
+  500x - <1kx                   16.1017%           1 in 6.21           19.4696%         0.1722%
+  1kx - <3kx                     4.1883%          1 in 23.88           11.4432%         0.1012%
+  3kx - <5kx                     0.1809%         1 in 552.74            1.1666%         0.0103%
+  5kx - <10kx                    0.1200%         1 in 833.41            1.2436%         0.0110%
+  10kx+                          2.0833%          1 in 48.00           37.6778%         0.3333%
+
+  Bonus - Individual Free-Spin Payout Distribution (weighted across actual spins played)
+  Weighted mean: 45.2029x base bet | Median: 1.80 | P90: 77.00 | P95: 148.10 | Max: 9880.00
+  Non-zero: 63.0143% (1 in 1.59) | Null (0 payouts): 36.9857% (1 in 2.70)
+  RTP contribution: 0.7160% of mode spend
+  Range                      Probability           Frequency    Share of payout      RTP points
+  0x                            36.9857%           1 in 2.70            0.0000%         0.0000%
+  >0x - <0.25x                   3.2015%          1 in 31.24            0.0112%       8.023e-5%
+  0.25x - <0.5x                  1.3680%          1 in 73.10            0.0115%       8.244e-5%
+  0.5x - <1x                     3.1431%          1 in 31.82            0.0460%         0.0003%
+  1x - <2x                       5.8485%          1 in 17.10            0.1761%         0.0013%
+  2x - <5x                       8.7194%          1 in 11.47            0.5953%         0.0043%
+  5x - <10x                      7.7246%          1 in 12.95            1.2107%         0.0087%
+  10x - <25x                    10.5211%           1 in 9.50            3.7560%         0.0269%
+  25x - <50x                     7.9628%          1 in 12.56            6.2679%         0.0449%
+  50x - <100x                    6.7895%          1 in 14.73           10.6300%         0.0761%
+  100x - <250x                   4.9108%          1 in 20.36           16.5597%         0.1186%
+  250x - <500x                   1.5248%          1 in 65.58           11.4004%         0.0816%
+  500x - <1kx                    0.6336%         1 in 157.82            9.4875%         0.0679%
+  1kx - <3kx                     0.4750%         1 in 210.54           18.0514%         0.1292%
+  3kx - <5kx                     0.1088%         1 in 919.02            9.4174%         0.0674%
+  5kx - <10kx                    0.0827%        1 in 1209.23           12.3788%         0.0886%
+  10kx+                          0.0000%               never            0.0000%         0.0000%
+
+  Bonus - Spins Played per Round (includes retriggers; may stop at win cap)
+  Weighted mean: 9.8999 spins | Median: 10.00 | P90: 10.00 | P95: 10.00 | Max: 10.00
+  Range                      Probability           Frequency     Share of spins
+  0 spins                        0.0000%               never            0.0000%
+  1-3 spins                      0.7515%         1 in 133.07            0.1736%
+  4-6 spins                      0.6027%         1 in 165.93            0.2991%
+  7-10 spins                    98.6458%           1 in 1.01           99.5273%
+  11-15 spins                    0.0000%               never            0.0000%
+  16-20 spins                    0.0000%               never            0.0000%
+  21-30 spins                    0.0000%               never            0.0000%
+  31+ spins                      0.0000%               never            0.0000%
+
+  Super Bonus Free Spins
+  Entry: 0.0100% (1 in 10000.00 mode plays) | Share of bonus entries: 11.0717%
+  Retriggered rounds: 0.0000%
+  Bonus-play totals include the triggering spin and all free spins. Individual free-spin payouts exclude the triggering spin. All positive-weight outcomes are included.
+
+  Super Bonus - Total Bonus Play Payout Distribution (includes triggering spin; conditional on this tier)
+  Weighted mean: 894.8333x base bet | Median: 702.60 | P90: 1433.20 | P95: 1960.80 | Max: 9979.80
+  Non-zero: 100.0000% (1 in 1.00) | Null (0 payouts): 0.0000% (never)
+  RTP contribution: 0.1790% of mode spend
+  Range                      Probability           Frequency    Share of payout      RTP points
+  0x                             0.0000%               never            0.0000%         0.0000%
+  >0x - <0.25x                   0.0000%               never            0.0000%         0.0000%
+  0.25x - <0.5x                  0.0000%               never            0.0000%         0.0000%
+  0.5x - <1x                     0.0000%               never            0.0000%         0.0000%
+  1x - <2x                       0.0000%               never            0.0000%         0.0000%
+  2x - <5x                       0.0000%               never            0.0000%         0.0000%
+  5x - <10x                      0.0000%               never            0.0000%         0.0000%
+  10x - <25x                     0.0000%               never            0.0000%         0.0000%
+  25x - <50x                     0.0000%               never            0.0000%         0.0000%
+  50x - <100x                    0.0000%               never            0.0000%         0.0000%
+  100x - <250x                   0.0000%               never            0.0000%         0.0000%
+  250x - <500x                   0.0000%               never            0.0000%         0.0000%
+  500x - <1kx                   78.1980%           1 in 1.28           58.4269%         0.1046%
+  1kx - <3kx                    20.3012%           1 in 4.93           34.2045%         0.0612%
+  3kx - <5kx                     0.9180%         1 in 108.93            3.6367%         0.0065%
+  5kx - <10kx                    0.5827%         1 in 171.61            3.7320%         0.0067%
+  10kx+                          0.0000%               never            0.0000%         0.0000%
+
+  Super Bonus - Individual Free-Spin Payout Distribution (weighted across actual spins played)
+  Weighted mean: 74.5096x base bet | Median: 18.10 | P90: 204.90 | P95: 361.40 | Max: 7410.80
+  Non-zero: 75.7601% (1 in 1.32) | Null (0 payouts): 24.2399% (1 in 4.13)
+  RTP contribution: 0.1490% of mode spend
+  Range                      Probability           Frequency    Share of payout      RTP points
+  0x                            24.2399%           1 in 4.13            0.0000%         0.0000%
+  >0x - <0.25x                   1.3590%          1 in 73.58            0.0028%       4.164e-6%
+  0.25x - <0.5x                  0.4362%         1 in 229.24            0.0023%       3.420e-6%
+  0.5x - <1x                     1.2376%          1 in 80.80            0.0119%       1.779e-5%
+  1x - <2x                       2.0771%          1 in 48.14            0.0392%       5.838e-5%
+  2x - <5x                       6.7096%          1 in 14.90            0.2896%         0.0004%
+  5x - <10x                      5.8733%          1 in 17.03            0.5678%         0.0008%
+  10x - <25x                    13.6371%           1 in 7.33            3.0796%         0.0046%
+  25x - <50x                    12.0543%           1 in 8.30            5.8097%         0.0087%
+  50x - <100x                   12.7604%           1 in 7.84           12.3547%         0.0184%
+  100x - <250x                  11.2558%           1 in 8.88           23.1752%         0.0345%
+  250x - <500x                   5.6926%          1 in 17.57           26.7806%         0.0399%
+  500x - <1kx                    2.2445%          1 in 44.55           19.8592%         0.0296%
+  1kx - <3kx                     0.4165%         1 in 240.08            7.7379%         0.0115%
+  3kx - <5kx                     0.0058%       1 in 17310.86            0.2716%         0.0004%
+  5kx - <10kx                    0.0002%      1 in 422619.55            0.0180%       2.685e-5%
+  10kx+                          0.0000%               never            0.0000%         0.0000%
+
+  Super Bonus - Spins Played per Round (includes retriggers; may stop at win cap)
+  Weighted mean: 10.0000 spins | Median: 10.00 | P90: 10.00 | P95: 10.00 | Max: 10.00
+  Range                      Probability           Frequency     Share of spins
+  0 spins                        0.0000%               never            0.0000%
+  1-3 spins                      0.0000%               never            0.0000%
+  4-6 spins                      0.0000%               never            0.0000%
+  7-10 spins                   100.0000%           1 in 1.00          100.0000%
+  11-15 spins                    0.0000%               never            0.0000%
+  16-20 spins                    0.0000%               never            0.0000%
+  21-30 spins                    0.0000%               never            0.0000%
+  31+ spins                      0.0000%               never            0.0000%
+
+  Hidden Bonus Free Spins
+  Entry: 0.0003% (1 in 312500.00 mode plays) | Share of bonus entries: 0.3543%
+  Retriggered rounds: 0.0000%
+  Bonus-play totals include the triggering spin and all free spins. Individual free-spin payouts exclude the triggering spin. All positive-weight outcomes are included.
+
+  Hidden Bonus - Total Bonus Play Payout Distribution (includes triggering spin; conditional on this tier)
+  Weighted mean: 3034.8296x base bet | Median: 2605.00 | P90: 5150.70 | P95: 5648.40 | Max: 9988.50
+  Non-zero: 100.0000% (1 in 1.00) | Null (0 payouts): 0.0000% (never)
+  RTP contribution: 0.0194% of mode spend
+  Range                      Probability           Frequency    Share of payout      RTP points
+  0x                             0.0000%               never            0.0000%         0.0000%
+  >0x - <0.25x                   0.0000%               never            0.0000%         0.0000%
+  0.25x - <0.5x                  0.0000%               never            0.0000%         0.0000%
+  0.5x - <1x                     0.0000%               never            0.0000%         0.0000%
+  1x - <2x                       0.0000%               never            0.0000%         0.0000%
+  2x - <5x                       0.0000%               never            0.0000%         0.0000%
+  5x - <10x                      0.0000%               never            0.0000%         0.0000%
+  10x - <25x                     0.0000%               never            0.0000%         0.0000%
+  25x - <50x                     0.0000%               never            0.0000%         0.0000%
+  50x - <100x                    0.0000%               never            0.0000%         0.0000%
+  100x - <250x                   0.0000%               never            0.0000%         0.0000%
+  250x - <500x                   0.0000%               never            0.0000%         0.0000%
+  500x - <1kx                    0.0000%               never            0.0000%         0.0000%
+  1kx - <3kx                    69.3173%           1 in 1.44           55.1537%         0.0107%
+  3kx - <5kx                    18.3903%           1 in 5.44           21.6342%         0.0042%
+  5kx - <10kx                   12.2924%           1 in 8.14           23.2120%         0.0045%
+  10kx+                          0.0000%               never            0.0000%         0.0000%
+
+  Hidden Bonus - Individual Free-Spin Payout Distribution (weighted across actual spins played)
+  Weighted mean: 283.8233x base bet | Median: 92.00 | P90: 829.80 | P95: 1244.40 | Max: 7322.20
+  Non-zero: 89.0487% (1 in 1.12) | Null (0 payouts): 10.9513% (1 in 9.13)
+  RTP contribution: 0.0182% of mode spend
+  Range                      Probability           Frequency    Share of payout      RTP points
+  0x                            10.9513%           1 in 9.13            0.0000%         0.0000%
+  >0x - <0.25x                   0.1794%         1 in 557.54          7.991e-5%       1.452e-8%
+  0.25x - <0.5x                  0.3883%         1 in 257.56            0.0005%       9.939e-8%
+  0.5x - <1x                     0.3549%         1 in 281.80            0.0009%       1.636e-7%
+  1x - <2x                       0.7424%         1 in 134.69            0.0034%       6.139e-7%
+  2x - <5x                       1.9739%          1 in 50.66            0.0230%       4.186e-6%
+  5x - <10x                      3.8051%          1 in 26.28            0.0996%       1.809e-5%
+  10x - <25x                     8.5343%          1 in 11.72            0.4806%       8.730e-5%
+  25x - <50x                    10.3924%           1 in 9.62            1.3088%         0.0002%
+  50x - <100x                   14.0769%           1 in 7.10            3.6294%         0.0007%
+  100x - <250x                  18.1074%           1 in 5.52           10.6178%         0.0019%
+  250x - <500x                  11.3341%           1 in 8.82           14.0150%         0.0025%
+  500x - <1kx                   11.7291%           1 in 8.53           28.8489%         0.0052%
+  1kx - <3kx                     7.2144%          1 in 13.86           38.2788%         0.0070%
+  3kx - <5kx                     0.2089%         1 in 478.78            2.5476%         0.0005%
+  5kx - <10kx                    0.0075%       1 in 13291.31            0.1455%       2.643e-5%
+  10kx+                          0.0000%               never            0.0000%         0.0000%
+
+  Hidden Bonus - Spins Played per Round (includes retriggers; may stop at win cap)
+  Weighted mean: 10.0000 spins | Median: 10.00 | P90: 10.00 | P95: 10.00 | Max: 10.00
+  Range                      Probability           Frequency     Share of spins
+  0 spins                        0.0000%               never            0.0000%
+  1-3 spins                      0.0000%               never            0.0000%
+  4-6 spins                      0.0000%               never            0.0000%
+  7-10 spins                   100.0000%           1 in 1.00          100.0000%
+  11-15 spins                    0.0000%               never            0.0000%
+  16-20 spins                    0.0000%               never            0.0000%
+  21-30 spins                    0.0000%               never            0.0000%
+  31+ spins                      0.0000%               never            0.0000%
+
+  Reconciliation: non-bonus base-play payouts + total bonus-play payouts = 96.0000% RTP (mode total 96.0000%).
+
+====================================================================================================
+  MODE: bonusFeature (cost=100x base bet)
+  Overall RTP: 96.0000% | Target RTP: unavailable in build metadata
+  Non-Zero Hit Rate: 100.0000% (1 in 1.00 mode plays)
+  Null Hit Rate: 0.0000% (never mode plays)
+  Highest Published Payout: 10000.00x base bet | Frequency: 1 in 10525.26
+  Any Bonus Entry: 100.0000% (1 in 1.00 mode plays)
+  All probabilities use published LUT weights. A mode play includes its triggering spin and all free spins.
+  Win ranges are in base-bet multiples; RTP divides by mode cost. Frequency is conditional on the population in each section.
+
+  Entire Mode - Total Payout Distribution (all mode plays)
+  Weighted mean: 96.0000x base bet | Median: 36.90 | P90: 203.00 | P95: 396.00 | Max: 10000.00
+  Non-zero: 100.0000% (1 in 1.00) | Null (0 payouts): 0.0000% (never)
+  RTP contribution: 96.0000% of mode spend
+  Range                      Probability           Frequency    Share of payout      RTP points
+  0x                             0.0000%               never            0.0000%         0.0000%
+  >0x - <0.25x                   0.0000%               never            0.0000%         0.0000%
+  0.25x - <0.5x                  0.0000%               never            0.0000%         0.0000%
+  0.5x - <1x                     0.0000%               never            0.0000%         0.0000%
+  1x - <2x                       0.1000%        1 in 1000.00            0.0016%         0.0015%
+  2x - <5x                       8.0000%          1 in 12.50            0.2912%         0.2796%
+  5x - <10x                     12.0000%           1 in 8.33            0.9369%         0.8994%
+  10x - <25x                    21.1835%           1 in 4.72            3.6262%         3.4812%
+  25x - <50x                    18.0870%           1 in 5.53            7.0211%         6.7403%
+  50x - <100x                   17.0000%           1 in 5.88           13.2804%        12.7491%
+  100x - <250x                  14.8418%           1 in 6.74           24.2030%        23.2349%
+  250x - <500x                   6.6582%          1 in 15.02           26.0563%        25.0141%
+  500x - <1kx                    1.7000%          1 in 58.82           13.2812%        12.7499%
+  1kx - <3kx                     0.3333%         1 in 299.99            5.5619%         5.3394%
+  3kx - <5kx                     0.0567%        1 in 1765.02            2.4069%         2.3106%
+  5kx - <10kx                    0.0300%        1 in 3333.33            2.3437%         2.2500%
+  10kx+                          0.0095%       1 in 10525.26            0.9897%         0.9501%
+
+  Base Game - Payout Distribution (non-bonus plays only; includes single feature spins)
+  No observed outcomes.
+
+  Bonus Free Spins
+  Entry: 100.0000% (1 in 1.00 mode plays) | Share of bonus entries: 100.0000%
+  Retriggered rounds: 0.0000%
+  Bonus-play totals include the triggering spin and all free spins. Individual free-spin payouts exclude the triggering spin. All positive-weight outcomes are included.
+
+  Bonus - Total Bonus Play Payout Distribution (includes triggering spin; conditional on this tier)
+  Weighted mean: 96.0000x base bet | Median: 36.90 | P90: 203.00 | P95: 396.00 | Max: 10000.00
+  Non-zero: 100.0000% (1 in 1.00) | Null (0 payouts): 0.0000% (never)
+  RTP contribution: 96.0000% of mode spend
+  Range                      Probability           Frequency    Share of payout      RTP points
+  0x                             0.0000%               never            0.0000%         0.0000%
+  >0x - <0.25x                   0.0000%               never            0.0000%         0.0000%
+  0.25x - <0.5x                  0.0000%               never            0.0000%         0.0000%
+  0.5x - <1x                     0.0000%               never            0.0000%         0.0000%
+  1x - <2x                       0.1000%        1 in 1000.00            0.0016%         0.0015%
+  2x - <5x                       8.0000%          1 in 12.50            0.2912%         0.2796%
+  5x - <10x                     12.0000%           1 in 8.33            0.9369%         0.8994%
+  10x - <25x                    21.1835%           1 in 4.72            3.6262%         3.4812%
+  25x - <50x                    18.0870%           1 in 5.53            7.0211%         6.7403%
+  50x - <100x                   17.0000%           1 in 5.88           13.2804%        12.7491%
+  100x - <250x                  14.8418%           1 in 6.74           24.2030%        23.2349%
+  250x - <500x                   6.6582%          1 in 15.02           26.0563%        25.0141%
+  500x - <1kx                    1.7000%          1 in 58.82           13.2812%        12.7499%
+  1kx - <3kx                     0.3333%         1 in 299.99            5.5619%         5.3394%
+  3kx - <5kx                     0.0567%        1 in 1765.02            2.4069%         2.3106%
+  5kx - <10kx                    0.0300%        1 in 3333.33            2.3437%         2.2500%
+  10kx+                          0.0095%       1 in 10525.26            0.9897%         0.9501%
+
+  Bonus - Individual Free-Spin Payout Distribution (weighted across actual spins played)
+  Weighted mean: 9.5197x base bet | Median: 0.00 | P90: 21.00 | P95: 48.20 | Max: 10000.00
+  Non-zero: 44.6572% (1 in 2.24) | Null (0 payouts): 55.3428% (1 in 1.81)
+  RTP contribution: 95.1944% of mode spend
+  Range                      Probability           Frequency    Share of payout      RTP points
+  0x                            55.3428%           1 in 1.81            0.0000%         0.0000%
+  >0x - <0.25x                   6.6097%          1 in 15.13            0.1154%         0.1099%
+  0.25x - <0.5x                  2.1334%          1 in 46.87            0.0844%         0.0804%
+  0.5x - <1x                     4.7848%          1 in 20.90            0.3256%         0.3099%
+  1x - <2x                       4.6726%          1 in 21.40            0.6320%         0.6017%
+  2x - <5x                       5.8393%          1 in 17.13            1.9106%         1.8188%
+  5x - <10x                      4.9202%          1 in 20.32            3.6431%         3.4680%
+  10x - <25x                     6.6895%          1 in 14.95           11.1468%        10.6111%
+  25x - <50x                     4.1628%          1 in 24.02           15.5846%        14.8356%
+  50x - <100x                    2.8079%          1 in 35.61           20.5372%        19.5503%
+  100x - <250x                   1.6022%          1 in 62.42           25.1131%        23.9063%
+  250x - <500x                   0.3368%         1 in 296.91           11.9344%        11.3608%
+  500x - <1kx                    0.0786%        1 in 1272.41            5.4530%         5.1909%
+  1kx - <3kx                     0.0178%        1 in 5609.85            2.8439%         2.7072%
+  3kx - <5kx                     0.0013%       1 in 78465.88            0.4937%         0.4700%
+  5kx - <10kx                    0.0003%      1 in 370487.15            0.1809%         0.1722%
+  10kx+                        1.331e-6%        1 in 75.148M            0.0014%         0.0013%
+
+  Bonus - Spins Played per Round (includes retriggers; may stop at win cap)
+  Weighted mean: 9.9997 spins | Median: 10.00 | P90: 10.00 | P95: 10.00 | Max: 10.00
+  Range                      Probability           Frequency     Share of spins
+  0 spins                        0.0000%               never            0.0000%
+  1-3 spins                      0.0008%      1 in 121210.29            0.0002%
+  4-6 spins                      0.0030%       1 in 32888.57            0.0015%
+  7-10 spins                    99.9961%           1 in 1.00           99.9982%
+  11-15 spins                    0.0000%               never            0.0000%
+  16-20 spins                    0.0000%               never            0.0000%
+  21-30 spins                    0.0000%               never            0.0000%
+  31+ spins                      0.0000%               never            0.0000%
+
+  Super Bonus Free Spins
+  Entry: 0% (never) | No observed free-spin rounds in this mode.
+
+  Hidden Bonus Free Spins
+  Entry: 0% (never) | No observed free-spin rounds in this mode.
+
+  Reconciliation: non-bonus base-play payouts + total bonus-play payouts = 96.0000% RTP (mode total 96.0000%).
+
+====================================================================================================
+  MODE: superBonusFeature (cost=300x base bet)
+  Overall RTP: 96.0000% | Target RTP: unavailable in build metadata
+  Non-Zero Hit Rate: 100.0000% (1 in 1.00 mode plays)
+  Null Hit Rate: 0.0000% (never mode plays)
+  Highest Published Payout: 10000.00x base bet | Frequency: 1 in 3593.53
+  Any Bonus Entry: 100.0000% (1 in 1.00 mode plays)
+  All probabilities use published LUT weights. A mode play includes its triggering spin and all free spins.
+  Win ranges are in base-bet multiples; RTP divides by mode cost. Frequency is conditional on the population in each section.
+
+  Entire Mode - Total Payout Distribution (all mode plays)
+  Weighted mean: 288.0000x base bet | Median: 118.60 | P90: 563.40 | P95: 945.60 | Max: 10000.00
+  Non-zero: 100.0000% (1 in 1.00) | Null (0 payouts): 0.0000% (never)
+  RTP contribution: 96.0000% of mode spend
+  Range                      Probability           Frequency    Share of payout      RTP points
+  0x                             0.0000%               never            0.0000%         0.0000%
+  >0x - <0.25x                   0.0000%               never            0.0000%         0.0000%
+  0.25x - <0.5x                  0.0000%               never            0.0000%         0.0000%
+  0.5x - <1x                     0.0000%               never            0.0000%         0.0000%
+  1x - <2x                       0.0000%               never            0.0000%         0.0000%
+  2x - <5x                       0.0000%               never            0.0000%         0.0000%
+  5x - <10x                      0.0000%               never            0.0000%         0.0000%
+  10x - <25x                     8.3867%          1 in 11.92            0.4844%         0.4650%
+  25x - <50x                     9.1133%          1 in 10.97            1.1906%         1.1430%
+  50x - <100x                   18.0000%           1 in 5.56            4.6872%         4.4997%
+  100x - <250x                  36.4670%           1 in 2.74           17.9716%        17.2527%
+  250x - <500x                  17.2052%           1 in 5.81           20.7939%        19.9621%
+  500x - <1kx                    6.5000%          1 in 15.38           16.9270%        16.2499%
+  1kx - <3kx                     3.2025%          1 in 31.23           17.9782%        17.2590%
+  3kx - <5kx                     0.7975%         1 in 125.40           11.1884%        10.7409%
+  5kx - <10kx                    0.3000%         1 in 333.33            7.8125%         7.5000%
+  10kx+                          0.0278%        1 in 3593.53            0.9662%         0.9276%
+
+  Base Game - Payout Distribution (non-bonus plays only; includes single feature spins)
+  No observed outcomes.
+
+  Bonus Free Spins
+  Entry: 0% (never) | No observed free-spin rounds in this mode.
+
+  Super Bonus Free Spins
+  Entry: 100.0000% (1 in 1.00 mode plays) | Share of bonus entries: 100.0000%
+  Retriggered rounds: 0.0000%
+  Bonus-play totals include the triggering spin and all free spins. Individual free-spin payouts exclude the triggering spin. All positive-weight outcomes are included.
+
+  Super Bonus - Total Bonus Play Payout Distribution (includes triggering spin; conditional on this tier)
+  Weighted mean: 288.0000x base bet | Median: 118.60 | P90: 563.40 | P95: 945.60 | Max: 10000.00
+  Non-zero: 100.0000% (1 in 1.00) | Null (0 payouts): 0.0000% (never)
+  RTP contribution: 96.0000% of mode spend
+  Range                      Probability           Frequency    Share of payout      RTP points
+  0x                             0.0000%               never            0.0000%         0.0000%
+  >0x - <0.25x                   0.0000%               never            0.0000%         0.0000%
+  0.25x - <0.5x                  0.0000%               never            0.0000%         0.0000%
+  0.5x - <1x                     0.0000%               never            0.0000%         0.0000%
+  1x - <2x                       0.0000%               never            0.0000%         0.0000%
+  2x - <5x                       0.0000%               never            0.0000%         0.0000%
+  5x - <10x                      0.0000%               never            0.0000%         0.0000%
+  10x - <25x                     8.3867%          1 in 11.92            0.4844%         0.4650%
+  25x - <50x                     9.1133%          1 in 10.97            1.1906%         1.1430%
+  50x - <100x                   18.0000%           1 in 5.56            4.6872%         4.4997%
+  100x - <250x                  36.4670%           1 in 2.74           17.9716%        17.2527%
+  250x - <500x                  17.2052%           1 in 5.81           20.7939%        19.9621%
+  500x - <1kx                    6.5000%          1 in 15.38           16.9270%        16.2499%
+  1kx - <3kx                     3.2025%          1 in 31.23           17.9782%        17.2590%
+  3kx - <5kx                     0.7975%         1 in 125.40           11.1884%        10.7409%
+  5kx - <10kx                    0.3000%         1 in 333.33            7.8125%         7.5000%
+  10kx+                          0.0278%        1 in 3593.53            0.9662%         0.9276%
+
+  Super Bonus - Individual Free-Spin Payout Distribution (weighted across actual spins played)
+  Weighted mean: 28.6267x base bet | Median: 1.00 | P90: 65.30 | P95: 125.20 | Max: 10000.00
+  Non-zero: 60.1486% (1 in 1.66) | Null (0 payouts): 39.8514% (1 in 2.51)
+  RTP contribution: 95.4112% of mode spend
+  Range                      Probability           Frequency    Share of payout      RTP points
+  0x                            39.8514%           1 in 2.51            0.0000%         0.0000%
+  >0x - <0.25x                   3.7683%          1 in 26.54            0.0217%         0.0207%
+  0.25x - <0.5x                  1.5650%          1 in 63.90            0.0212%         0.0202%
+  0.5x - <1x                     3.9575%          1 in 25.27            0.0944%         0.0901%
+  1x - <2x                       5.0517%          1 in 19.80            0.2359%         0.2251%
+  2x - <5x                       7.6664%          1 in 13.04            0.8596%         0.8202%
+  5x - <10x                      6.9073%          1 in 14.48            1.7317%         1.6522%
+  10x - <25x                    10.7512%           1 in 9.30            6.2289%         5.9431%
+  25x - <50x                     7.4993%          1 in 13.33            9.3543%         8.9251%
+  50x - <100x                    6.3300%          1 in 15.80           15.5131%        14.8012%
+  100x - <250x                   4.4537%          1 in 22.45           23.4075%        22.3334%
+  250x - <500x                   1.4017%          1 in 71.34           16.8291%        16.0568%
+  500x - <1kx                    0.5914%         1 in 169.10           13.8200%        13.1858%
+  1kx - <3kx                     0.1930%         1 in 518.09           10.1730%         9.7062%
+  3kx - <5kx                     0.0104%        1 in 9601.74            1.3319%         1.2708%
+  5kx - <10kx                    0.0017%       1 in 59244.18            0.3637%         0.3470%
+  10kx+                        4.009e-5%         1 in 2.494M            0.0140%         0.0134%
+
+  Super Bonus - Spins Played per Round (includes retriggers; may stop at win cap)
+  Weighted mean: 9.9988 spins | Median: 10.00 | P90: 10.00 | P95: 10.00 | Max: 10.00
+  Range                      Probability           Frequency     Share of spins
+  0 spins                        0.0000%               never            0.0000%
+  1-3 spins                      0.0052%       1 in 19250.20            0.0013%
+  4-6 spins                      0.0113%        1 in 8830.11            0.0055%
+  7-10 spins                    99.9835%           1 in 1.00           99.9931%
+  11-15 spins                    0.0000%               never            0.0000%
+  16-20 spins                    0.0000%               never            0.0000%
+  21-30 spins                    0.0000%               never            0.0000%
+  31+ spins                      0.0000%               never            0.0000%
+
+  Hidden Bonus Free Spins
+  Entry: 0% (never) | No observed free-spin rounds in this mode.
+
+  Reconciliation: non-bonus base-play payouts + total bonus-play payouts = 96.0000% RTP (mode total 96.0000%).
+
+====================================================================================================
+  MODE: hiddenBonusFeature (cost=1000x base bet)
+  Overall RTP: 96.0000% | Target RTP: unavailable in build metadata
+  Non-Zero Hit Rate: 100.0000% (1 in 1.00 mode plays)
+  Null Hit Rate: 0.0000% (never mode plays)
+  Highest Published Payout: 10000.00x base bet | Frequency: 1 in 1093.41
+  Any Bonus Entry: 100.0000% (1 in 1.00 mode plays)
+  All probabilities use published LUT weights. A mode play includes its triggering spin and all free spins.
+  Win ranges are in base-bet multiples; RTP divides by mode cost. Frequency is conditional on the population in each section.
+
+  Entire Mode - Total Payout Distribution (all mode plays)
+  Weighted mean: 960.0000x base bet | Median: 353.00 | P90: 2512.80 | P95: 4260.10 | Max: 10000.00
+  Non-zero: 100.0000% (1 in 1.00) | Null (0 payouts): 0.0000% (never)
+  RTP contribution: 96.0000% of mode spend
+  Range                      Probability           Frequency    Share of payout      RTP points
+  0x                             0.0000%               never            0.0000%         0.0000%
+  >0x - <0.25x                   0.0000%               never            0.0000%         0.0000%
+  0.25x - <0.5x                  0.0000%               never            0.0000%         0.0000%
+  0.5x - <1x                     0.0000%               never            0.0000%         0.0000%
+  1x - <2x                       0.0000%               never            0.0000%         0.0000%
+  2x - <5x                       0.0000%               never            0.0000%         0.0000%
+  5x - <10x                      0.0000%               never            0.0000%         0.0000%
+  10x - <25x                     0.0000%               never            0.0000%         0.0000%
+  25x - <50x                     0.0000%               never            0.0000%         0.0000%
+  50x - <100x                   13.0000%           1 in 7.69            1.0156%         0.9749%
+  100x - <250x                  27.4146%           1 in 3.65            4.7110%         4.5226%
+  250x - <500x                  17.8939%           1 in 5.59            6.6022%         6.3381%
+  500x - <1kx                   17.0000%           1 in 5.88           13.2812%        12.7499%
+  1kx - <3kx                    15.8042%           1 in 6.33           27.3970%        26.3012%
+  3kx - <5kx                     6.1958%          1 in 16.14           25.7278%        24.6987%
+  5kx - <10kx                    2.6000%          1 in 38.46           20.3125%        19.5000%
+  10kx+                          0.0915%        1 in 1093.41            0.9527%         0.9146%
+
+  Base Game - Payout Distribution (non-bonus plays only; includes single feature spins)
+  No observed outcomes.
+
+  Bonus Free Spins
+  Entry: 0% (never) | No observed free-spin rounds in this mode.
+
+  Super Bonus Free Spins
+  Entry: 0% (never) | No observed free-spin rounds in this mode.
+
+  Hidden Bonus Free Spins
+  Entry: 100.0000% (1 in 1.00 mode plays) | Share of bonus entries: 100.0000%
+  Retriggered rounds: 0.0000%
+  Bonus-play totals include the triggering spin and all free spins. Individual free-spin payouts exclude the triggering spin. All positive-weight outcomes are included.
+
+  Hidden Bonus - Total Bonus Play Payout Distribution (includes triggering spin; conditional on this tier)
+  Weighted mean: 960.0000x base bet | Median: 353.00 | P90: 2512.80 | P95: 4260.10 | Max: 10000.00
+  Non-zero: 100.0000% (1 in 1.00) | Null (0 payouts): 0.0000% (never)
+  RTP contribution: 96.0000% of mode spend
+  Range                      Probability           Frequency    Share of payout      RTP points
+  0x                             0.0000%               never            0.0000%         0.0000%
+  >0x - <0.25x                   0.0000%               never            0.0000%         0.0000%
+  0.25x - <0.5x                  0.0000%               never            0.0000%         0.0000%
+  0.5x - <1x                     0.0000%               never            0.0000%         0.0000%
+  1x - <2x                       0.0000%               never            0.0000%         0.0000%
+  2x - <5x                       0.0000%               never            0.0000%         0.0000%
+  5x - <10x                      0.0000%               never            0.0000%         0.0000%
+  10x - <25x                     0.0000%               never            0.0000%         0.0000%
+  25x - <50x                     0.0000%               never            0.0000%         0.0000%
+  50x - <100x                   13.0000%           1 in 7.69            1.0156%         0.9749%
+  100x - <250x                  27.4146%           1 in 3.65            4.7110%         4.5226%
+  250x - <500x                  17.8939%           1 in 5.59            6.6022%         6.3381%
+  500x - <1kx                   17.0000%           1 in 5.88           13.2812%        12.7499%
+  1kx - <3kx                    15.8042%           1 in 6.33           27.3970%        26.3012%
+  3kx - <5kx                     6.1958%          1 in 16.14           25.7278%        24.6987%
+  5kx - <10kx                    2.6000%          1 in 38.46           20.3125%        19.5000%
+  10kx+                          0.0915%        1 in 1093.41            0.9527%         0.9146%
+
+  Hidden Bonus - Individual Free-Spin Payout Distribution (weighted across actual spins played)
+  Weighted mean: 95.8738x base bet | Median: 10.00 | P90: 252.00 | P95: 478.40 | Max: 10000.00
+  Non-zero: 70.8294% (1 in 1.41) | Null (0 payouts): 29.1706% (1 in 3.43)
+  RTP contribution: 95.8271% of mode spend
+  Range                      Probability           Frequency    Share of payout      RTP points
+  0x                            29.1706%           1 in 3.43            0.0000%         0.0000%
+  >0x - <0.25x                   1.8463%          1 in 54.16            0.0031%         0.0030%
+  0.25x - <0.5x                  0.6192%         1 in 161.49            0.0025%         0.0024%
+  0.5x - <1x                     2.0082%          1 in 49.80            0.0143%         0.0137%
+  1x - <2x                       2.7241%          1 in 36.71            0.0392%         0.0376%
+  2x - <5x                       7.0764%          1 in 14.13            0.2434%         0.2332%
+  5x - <10x                      6.2904%          1 in 15.90            0.4687%         0.4491%
+  10x - <25x                    11.2589%           1 in 8.88            1.9414%         1.8604%
+  25x - <50x                     9.6806%          1 in 10.33            3.6490%         3.4968%
+  50x - <100x                    9.5421%          1 in 10.48            7.0794%         6.7840%
+  100x - <250x                   9.7076%          1 in 10.30           16.0607%        15.3905%
+  250x - <500x                   5.3520%          1 in 18.68           19.8063%        18.9798%
+  500x - <1kx                    3.0986%          1 in 32.27           22.2459%        21.3176%
+  1kx - <3kx                     1.5202%          1 in 65.78           24.1085%        23.1025%
+  3kx - <5kx                     0.0914%        1 in 1093.50            3.4936%         3.3478%
+  5kx - <10kx                    0.0130%        1 in 7711.68            0.8183%         0.7841%
+  10kx+                          0.0002%      1 in 404606.33            0.0258%         0.0247%
+
+  Hidden Bonus - Spins Played per Round (includes retriggers; may stop at win cap)
+  Weighted mean: 9.9951 spins | Median: 10.00 | P90: 10.00 | P95: 10.00 | Max: 10.00
+  Range                      Probability           Frequency     Share of spins
+  0 spins                        0.0000%               never            0.0000%
+  1-3 spins                      0.0319%        1 in 3135.31            0.0081%
+  4-6 spins                      0.0406%        1 in 2464.97            0.0189%
+  7-10 spins                    99.9275%           1 in 1.00           99.9730%
+  11-15 spins                    0.0000%               never            0.0000%
+  16-20 spins                    0.0000%               never            0.0000%
+  21-30 spins                    0.0000%               never            0.0000%
+  31+ spins                      0.0000%               never            0.0000%
+
+  Reconciliation: non-bonus base-play payouts + total bonus-play payouts = 96.0000% RTP (mode total 96.0000%).
+
+  Analysis complete.
+

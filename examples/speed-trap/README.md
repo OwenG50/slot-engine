@@ -38,11 +38,9 @@ W2 0.24, W3 0.32; bonus W1 0.78, W2 0.60, W3 0.70. Bonus reels use higher
 weights for every car type. Reel IDs `speed_trap_base_v4` and
 `speed_trap_bonus_v12` regenerate cached strips.
 These are strip-generation weights, not published arrival shares, which also
-depend on legal-board rejection and payout optimization. Rebuilt weighted
-books have W3 at roughly 47-60% of car arrivals, W2 near 25-37%, and W1 near
-14-21% (5-8% of bought-bonus trigger-spin cars). Purchased Normal/Super/Hidden
-bonuses average 2.706/3.532/4.146 new cars, excluding trigger-spin cars carried
-into the bonus.
+depend on legal-board rejection, high-win conditioning, and payout optimization.
+High-win conditioning selects car types independently rather than applying a
+fixed W3-left/W1-right preference; see the max-win sampling rules below.
 
 | Car | Initial multipliers |
 | --- | --- |
@@ -118,11 +116,15 @@ Dedicated max-win candidates enter a real bonus with the bought tier, Hidden
 for natural modes, or Normal for FeatureSpin. FeatureSpin's 1-in-60,000 max
 probability exceeds its 1-in-312,500 Hidden entry probability, so its max pool
 must not be assigned exclusively to Hidden. Upper-tail coverage also uses real triggered bonuses.
-Bonus sampling mixes natural stops with two edge cars and intervening H1s
-on existing stops in rows without sticky cars, respecting the landing limit.
-The left edge prefers W3 and the right edge W1, falling back to other car
-types only when absent, preserving mixed-tier upper-tail coverage as strips
-change. Non-max upper-tail pools use these conditioned stops 60% of the time;
+Bonus sampling mixes natural stops with a pair of cars and H1s on the other
+reels, using existing stops in rows without sticky cars and respecting the
+landing limit. Each conditioned draw chooses uniformly among reel pairs
+0+3, 0+4, 1+4, and 1+3. Each car independently chooses uniformly among the
+W1/W2/W3 types available on its reel, then draws a real stop of that type.
+This removes the former W3-left/W1-right edge preference and includes both
+inward-crashing and outward-driving layouts. Legal-board rejection, sticky
+cars, payout filtering, and optimization still affect published shares.
+Non-max upper-tail pools use these conditioned stops 60% of the time;
 the remaining draws use normal stops. Bought-bonus tails are split into
 1000-1999.99x and 2000x+ pools so high-tail sampling still covers the low end
 of the 1000-2000x payout band.
@@ -137,6 +139,12 @@ extra base 1x. If none qualify, the line pays at 1x. Ordinary `W` symbols are
 created at moving cars' starting cells and every cell they cross; they cannot
 land naturally on base or bonus reels. Final car symbols replace trail wilds
 at their endpoints. Trail wilds are unmultiplied.
+Leading runs of 3, 4, or 5 wilds (including car wilds) pay the corresponding
+H1 award when a scatter ends the run or the entire line is wild. Each payline
+always pays its longest valid match, not its highest-paying interpretation.
+For example, `W3 W W W L2` pays five L2 symbols, not four wilds, even if the
+wild-only award would be larger. A line pays once, and only multipliers in
+the awarded positions contribute.
 Simulation results must include the dedicated exact-max criteria and coverage
 of each payout band. Existing broad simulation pools support the new shape
 targets, so probability and mean changes require only optimization.

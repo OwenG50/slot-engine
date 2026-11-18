@@ -5,8 +5,9 @@ import {
   cents,
   HEIGHT,
   LineWin,
+  PAYING_SYMBOLS,
+  PayingSymbol,
   Position,
-  SymbolId,
   WIDTH,
   isWildSymbol,
   positionKey,
@@ -23,57 +24,40 @@ export function evaluateLines(
   for (const [line, rows] of Object.entries(PAYLINES)) {
     const symbols = rows.map((row, reel) => board[reel][row])
     const firstReal = symbols.find((symbol) => !isWildSymbol(symbol))
-    if (!firstReal || firstReal === "S") {
-      if (symbols.every((symbol) => isWildSymbol(symbol))) {
-        const positions = rows.map((row, reel) => [reel, row] as Position)
-        const basePayout = PAYTABLE.H1[5]
-        const multiplier = Math.max(
-          1,
-          positions.reduce((sum, pos) => {
-            const value = multipliers.get(positionKey(pos)) ?? 1
-            return sum + (value > 1 ? value : 0)
-          }, 0),
-        )
-        wins.push({
-          line: Number(line),
-          symbol: "H1",
-          positions,
-          count: 5,
-          basePayout,
-          multiplier,
-          payout: cents(basePayout * multiplier),
-        })
-      }
-      continue
+    const symbol = PAYING_SYMBOLS.find((symbol) => symbol === firstReal)
+    const candidates: Array<{ symbol: PayingSymbol; count: number }> = []
+    if (symbol) {
+      let count = 0
+      while (
+        count < WIDTH &&
+        (symbols[count] === symbol || isWildSymbol(symbols[count]))
+      ) count++
+      candidates.push({ symbol, count })
     }
 
-    const symbol = firstReal as Exclude<SymbolId, "W" | "W1" | "W2" | "W3" | "S">
-    const positions: Position[] = []
-    for (let reel = 0; reel < WIDTH; reel++) {
-      if (symbols[reel] !== symbol && !isWildSymbol(symbols[reel])) break
-      positions.push([reel, rows[reel]])
+    let wildCount = 0
+    while (wildCount < WIDTH && isWildSymbol(symbols[wildCount])) wildCount++
+    candidates.push({ symbol: "H1", count: wildCount })
+
+    let best: LineWin | undefined
+    for (const { symbol, count } of candidates) {
+      const basePayout = PAYTABLE[symbol][count] ?? 0
+      if (!basePayout) continue
+      const positions = rows.slice(0, count).map((row, reel): Position => [reel, row])
+      const multiplier = Math.max(
+        1,
+        positions.reduce((sum, pos) => {
+          const current = board[pos[0]][pos[1]]
+          const value = multipliers.get(positionKey(pos)) ?? 1
+          return sum + (isWildSymbol(current) && value > 1 ? value : 0)
+        }, 0),
+      )
+      const payout = cents(basePayout * multiplier)
+      if (best && best.count >= count) continue
+
+      best = { line: Number(line), symbol, positions, count, basePayout, multiplier, payout }
     }
-    const basePayout = PAYTABLE[symbol][positions.length] ?? 0
-    if (!basePayout) continue
-
-    const multiplier = Math.max(
-      1,
-      positions.reduce((sum, pos) => {
-        const current = board[pos[0]][pos[1]]
-        const value = multipliers.get(positionKey(pos)) ?? 1
-        return sum + (isWildSymbol(current) && value > 1 ? value : 0)
-      }, 0),
-    )
-
-    wins.push({
-      line: Number(line),
-      symbol,
-      positions,
-      count: positions.length,
-      basePayout,
-      multiplier,
-      payout: cents(basePayout * multiplier),
-    })
+    if (best) wins.push(best)
   }
   return wins
 }

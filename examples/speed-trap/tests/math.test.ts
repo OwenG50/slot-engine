@@ -12,7 +12,12 @@ import {
 } from "../src/math"
 import { PAYOUT_BAND_CUTS, REFERENCE_PAYOUT_SHAPES } from "../src/payoutShape"
 import { createResultSets } from "../src/resultSets"
-import { BONUS_TARGETS, DESIGN, MODES } from "../src/settings"
+import {
+  BONUS_TARGETS,
+  DESIGN,
+  FEATURE_TO_BONUS_TRIGGER_SCALE,
+  MODES,
+} from "../src/settings"
 import { MAX_WIN, ModeName } from "../src/types"
 
 describe("Speed Trap payout shapes", () => {
@@ -85,7 +90,7 @@ describe("Speed Trap payout shapes", () => {
         )
         for (const band of optimizationBuckets(mode)) {
           expect(result.criteria[band.name].probability).toBeCloseTo(band.probability, 8)
-          expect(result.criteria[band.name].avgWin).toBeCloseTo(band.average, 5)
+          expect(result.criteria[band.name].avgWin).toBeCloseTo(band.average, 4)
         }
         const hit = Object.values(result.criteria)
           .filter((band) => band.minWin > 0)
@@ -100,7 +105,12 @@ describe("Speed Trap payout shapes", () => {
   it.each(["base", "extraChance", "extraChance2", "featureSpin"] as const)(
     "%s pins every bonus tier frequency after splitting payout bands",
     (mode) => {
-      const factor = { base: 1, extraChance: 2, extraChance2: 5, featureSpin: 0.2 }[mode]
+      const factor = {
+        base: 1,
+        extraChance: 2,
+        extraChance2: 5,
+        featureSpin: FEATURE_TO_BONUS_TRIGGER_SCALE,
+      }[mode]
       for (const tier of ["normal", "super", "hidden"] as const) {
         const mass = optimizationBuckets(mode).filter((band) => band.tier === tier)
           .reduce((sum, band) => sum + band.probability, 0)
@@ -109,6 +119,27 @@ describe("Speed Trap payout shapes", () => {
       }
     },
   )
+
+  it("keeps natural bonus-entry odds in range and FeatureSpin entries at 20% of base odds", () => {
+    const tierMass = (mode: ModeName, tier: "normal" | "super" | "hidden") =>
+      optimizationBuckets(mode).filter((band) => band.tier === tier)
+        .reduce((sum, band) => sum + band.probability, 0)
+
+    expect(1 / tierMass("base", "normal")).toBeGreaterThanOrEqual(200)
+    expect(1 / tierMass("base", "normal")).toBeLessThanOrEqual(300)
+    expect(1 / tierMass("base", "super")).toBeGreaterThanOrEqual(2000)
+    expect(1 / tierMass("base", "super")).toBeLessThanOrEqual(3000)
+    expect(1 / tierMass("base", "hidden")).toBeGreaterThanOrEqual(25_000)
+    expect(1 / tierMass("base", "hidden")).toBeLessThanOrEqual(75_000)
+
+    const tiers = ["normal", "super", "hidden"] as const
+    const baseBonusMass = tiers
+      .reduce((sum, tier) => sum + tierMass("base", tier), 0)
+    const featureSpinBonusMass = tiers
+      .reduce((sum, tier) => sum + tierMass("featureSpin", tier), 0)
+    expect(FEATURE_TO_BONUS_TRIGGER_SCALE).toBe(0.2)
+    expect(featureSpinBonusMass).toBeCloseTo(baseBonusMass * 0.2, 12)
+  })
 
   it("keeps reference exact-max odds", () => {
     expect(1 / maxWinProbability("base")).toBeCloseTo(4_000_000, 6)

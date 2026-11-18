@@ -451,7 +451,11 @@ for the implementation sequence.
 - `totalWin` is this spin's award, not the accumulated bonus total.
 - `wins` contains positive awarded wins only. `kind` is the matched symbol
   count, **not a payline ID**. No line ID is serialized; use `positions`.
-- `symbol` is the paying symbol, including `H1` for an all-wild five-symbol line.
+- `symbol` is the paying symbol, including `H1` for a leading run of 3, 4,
+  or 5 wilds. A scatter can end the run without cancelling its award. Each
+  payline pays its longest valid match, even if a shorter leading-wild award
+  would pay more: `W3 W W W L2` pays five L2 symbols, not four wilds.
+  A line pays once. Highlight only the supplied positions.
 - `meta.winWithoutMult` is the paytable amount; `meta.multiplier` is the line
   multiplier. The example is `1.2 * 36 = 43.2`.
 - Line multipliers use the game's additive wild rules, not multiplication of
